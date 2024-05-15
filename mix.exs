@@ -21,8 +21,7 @@ defmodule OpenAPIGenerator.MixProject do
   # Run "mix help deps" to learn about dependencies.
   defp deps do
     [
-      # {:oapi_generator, "~> 0.1"}
-      {:oapi_generator, github: "McSym28/open-api-generator", branch: "header_params"}
+      {:oapi_generator, git: "../../../open-api-generator", branch: "header_params"}
     ]
   end
 end
