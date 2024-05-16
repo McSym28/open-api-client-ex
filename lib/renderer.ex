@@ -206,7 +206,7 @@ defmodule OpenAPIGenerator.Renderer do
       ) do
     renamings = Process.get(@param_renamings_key)
 
-    {required_params, optional_params} =
+    {static_params, dynamic_params} =
       [path_params, query_params, header_params]
       |> List.flatten()
       |> Enum.split_with(fn
@@ -214,7 +214,7 @@ defmodule OpenAPIGenerator.Renderer do
         param -> is_nil(param_default(param, renamings))
       end)
 
-    operation_new = %Operation{operation | request_path_parameters: required_params}
+    operation_new = %Operation{operation | request_path_parameters: static_params}
 
     {:@, attribute_metadata,
      [
@@ -229,7 +229,7 @@ defmodule OpenAPIGenerator.Renderer do
      ]} = OpenAPI.Renderer.Operation.render_spec(state, operation_new)
 
     opts_spec =
-      optional_params
+      dynamic_params
       |> Enum.map(fn %Param{name: name, value_type: type} ->
         {String.to_atom(name), Util.to_type(state, type)}
       end)
@@ -259,7 +259,6 @@ defmodule OpenAPIGenerator.Renderer do
         state,
         %Operation{
           function_name: function_name,
-          request_body: request_body,
           request_path_parameters: path_params,
           request_query_parameters: query_params,
           request_header_parameters: header_params
@@ -267,42 +266,30 @@ defmodule OpenAPIGenerator.Renderer do
       ) do
     renamings = Process.get(@param_renamings_key)
 
-    path_params_new =
-      Enum.reject(path_params, &param_default(&1, renamings))
+    all_params =
+      [path_params, query_params, header_params]
+      |> List.flatten()
 
-    operation_new = %Operation{operation | request_path_parameters: path_params_new}
+    static_params =
+      Enum.filter(all_params, fn
+        %Param{required: false, location: location} when location != :path -> false
+        param -> is_nil(param_default(param, renamings))
+      end)
+
+    operation_new = %Operation{operation | request_path_parameters: static_params}
 
     {:def, def_metadata,
      [
-       {^function_name, arguments_metadata, arguments},
+       {^function_name, _, _} = function_header,
        [do: {do_tag, do_metadata, do_statements}]
      ]} = OpenAPI.Renderer.Operation.render_function(state, operation_new)
-
-    insert_index = -2 - if(length(request_body) == 0, do: 0, else: 1)
-
-    arguments_new =
-      [query_params, header_params]
-      |> List.flatten()
-      |> Enum.reduce(arguments, fn
-        %Param{required: false}, acc ->
-          acc
-
-        %Param{name: name} = param, acc ->
-          if param_default(param, renamings) do
-            acc
-          else
-            List.insert_at(acc, insert_index, {String.to_atom(name), [], nil})
-          end
-      end)
 
     do_statements_new =
       Enum.flat_map(do_statements, fn
         {:=, _, [{:client, _, _} | _]} = _client_statement ->
           param_assignments =
-            [path_params, query_params, header_params]
-            |> List.flatten()
+            all_params
             |> Enum.flat_map(fn
-              # %Param{required: false} -> []
               %Param{name: name} = param ->
                 case param_default(param, renamings) do
                   {m, f, a} ->
@@ -375,7 +362,7 @@ defmodule OpenAPIGenerator.Renderer do
 
     {:def, def_metadata,
      [
-       {function_name, arguments_metadata, arguments_new},
+       function_header,
        [do: {do_tag, do_metadata, do_statements_new}]
      ]}
   end
@@ -480,15 +467,16 @@ defmodule OpenAPIGenerator.Renderer do
   defp render_params_parse([], _renamings, _variable_name), do: []
 
   defp render_params_parse([%Param{location: location} | _] = params, renamings, variable_name) do
-    {required_params, optional_params} =
+    {static_params, dynamic_params} =
       params
       |> Enum.sort_by(& &1.name)
-      |> Enum.split_with(fn %Param{required: required} = param ->
-        not is_nil(param_default(param, renamings)) or required
+      |> Enum.split_with(fn
+        %Param{required: true} -> true
+        param -> not is_nil(param_default(param, renamings))
       end)
 
-    required_params =
-      Enum.map(required_params, fn %Param{name: name} ->
+    static_params =
+      Enum.map(static_params, fn %Param{name: name} ->
         case renamings && renamings[{name, location}] do
           %RenderedParam{old_name: old_name} when name != old_name ->
             {old_name, {String.to_atom(name), [], nil}}
@@ -498,9 +486,9 @@ defmodule OpenAPIGenerator.Renderer do
         end
       end)
 
-    {optional_params, {param_renamings, has_same_name}} =
-      Enum.map_reduce(optional_params, {[], false}, fn %Param{name: name},
-                                                       {param_renamings, has_same_name} ->
+    {dynamic_params, {param_renamings, has_same_name}} =
+      Enum.map_reduce(dynamic_params, {[], false}, fn %Param{name: name},
+                                                      {param_renamings, has_same_name} ->
         case renamings && renamings[{name, location}] do
           %RenderedParam{old_name: old_name} when name != old_name ->
             param_renamings_new =
@@ -520,8 +508,8 @@ defmodule OpenAPIGenerator.Renderer do
         end
       end)
 
-    optional_params =
-      if length(optional_params) > 0 do
+    dynamic_params =
+      if length(dynamic_params) > 0 do
         param_renamings =
           if has_same_name do
             param_renamings ++
@@ -543,7 +531,7 @@ defmodule OpenAPIGenerator.Renderer do
              {{:., [], [{:__aliases__, [alias: false], [:Keyword]}, :split]}, [],
               [
                 {:opts, [], nil},
-                optional_params
+                dynamic_params
               ]}
            ]}
 
@@ -564,18 +552,18 @@ defmodule OpenAPIGenerator.Renderer do
         []
       end
 
-    case {length(required_params) > 0, length(optional_params) > 0} do
+    case {length(static_params) > 0, length(dynamic_params) > 0} do
       {true, false} ->
-        [{:=, [], [{variable_name, [], nil}, required_params]}]
+        [{:=, [], [{variable_name, [], nil}, static_params]}]
 
       {false, true} ->
-        optional_params
+        dynamic_params
 
       {true, true} ->
-        optional_params ++
+        dynamic_params ++
           [
             {:=, [],
-             [{variable_name, [], nil}, {:++, [], [{variable_name, [], nil}, required_params]}]}
+             [{variable_name, [], nil}, {:++, [], [{variable_name, [], nil}, static_params]}]}
           ]
     end
   end
