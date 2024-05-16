@@ -71,7 +71,15 @@ defmodule OpenAPIGenerator.Processor do
     body_param =
       case request_body do
         %RequestBody{description: description} ->
-          [%Param{description: description, location: :query, name: "body", required: true}]
+          [
+            %Param{
+              description: description,
+              location: :query,
+              name: "body",
+              required: true,
+              value_type: :null
+            }
+          ]
 
         _ ->
           []
@@ -83,7 +91,8 @@ defmodule OpenAPIGenerator.Processor do
           "Client module for making a request. Default value is taken from `@default_client",
         location: :header,
         name: "client",
-        required: false
+        required: false,
+        value_type: :null
       }
     ]
 
