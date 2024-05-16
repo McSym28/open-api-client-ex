@@ -319,8 +319,7 @@ defmodule OpenAPIGenerator.Renderer do
                                {:->, [],
                                 [
                                   [],
-                                  {{:., [], [{:__aliases__, [alias: false], [ast_module(m)]}, f]},
-                                   [], a}
+                                  Utils.ast_function_call(m, f, a)
                                 ]}
                              ]}
                           ]}
@@ -469,16 +468,6 @@ defmodule OpenAPIGenerator.Renderer do
 
   defp param_config(state, operation, %Param{name: name, location: location} = _param) do
     param_config(state, operation, name, location)
-  end
-
-  defp ast_module(module) when is_atom(module) do
-    module_string = to_string(module)
-
-    if String.starts_with?(module_string, "Elixir.") do
-      module_string |> String.trim_leading("Elixir.") |> String.to_existing_atom()
-    else
-      module
-    end
   end
 
   defp param_default(%Param{name: name, location: location}, renamings) do
