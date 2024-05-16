@@ -199,7 +199,6 @@ defmodule OpenAPIGenerator.Renderer do
         state,
         %Operation{
           function_name: function_name,
-          request_body: request_body,
           request_path_parameters: path_params,
           request_query_parameters: query_params,
           request_header_parameters: header_params
@@ -207,9 +206,15 @@ defmodule OpenAPIGenerator.Renderer do
       ) do
     renamings = Process.get(@param_renamings_key)
 
-    path_params_new = Enum.reject(path_params, &param_default(&1, renamings))
+    {required_params, optional_params} =
+      [path_params, query_params, header_params]
+      |> List.flatten()
+      |> Enum.split_with(fn
+        %Param{required: false, location: location} when location != :path -> false
+        param -> is_nil(param_default(param, renamings))
+      end)
 
-    operation_new = %Operation{operation | request_path_parameters: path_params_new}
+    operation_new = %Operation{operation | request_path_parameters: required_params}
 
     {:@, attribute_metadata,
      [
@@ -223,23 +228,18 @@ defmodule OpenAPIGenerator.Renderer do
         ]}
      ]} = OpenAPI.Renderer.Operation.render_spec(state, operation_new)
 
-    insert_index = -2 - if(length(request_body) == 0, do: 0, else: 1)
-
-    arguments_new =
-      [query_params, header_params]
-      |> List.flatten()
-      |> Enum.reduce(arguments, fn
-        %Param{required: false}, acc ->
-          acc
-
-        %Param{value_type: type} = param, acc ->
-          if param_default(param, renamings) do
-            acc
-          else
-            spec_type = quote do: unquote(Util.to_type(state, type))
-            List.insert_at(acc, insert_index, spec_type)
-          end
+    opts_spec =
+      optional_params
+      |> Enum.map(fn %Param{name: name, value_type: type} ->
+        {String.to_atom(name), Util.to_type(state, type)}
       end)
+      |> Kernel.++([{:client, quote(do: module())}])
+      |> Enum.reverse()
+      |> Enum.reduce(fn type, expression ->
+        {:|, [], [type, expression]}
+      end)
+
+    arguments_new = List.replace_at(arguments, -1, [opts_spec])
 
     {:@, attribute_metadata,
      [
@@ -480,22 +480,15 @@ defmodule OpenAPIGenerator.Renderer do
   defp render_params_parse([], _renamings, _variable_name), do: []
 
   defp render_params_parse([%Param{location: location} | _] = params, renamings, variable_name) do
-    params_map =
+    {required_params, optional_params} =
       params
       |> Enum.sort_by(& &1.name)
-      |> Enum.group_by(
-        fn %Param{required: required} = param ->
-          not is_nil(param_default(param, renamings)) or required
-        end,
-        fn %Param{name: name} ->
-          name
-        end
-      )
+      |> Enum.split_with(fn %Param{required: required} = param ->
+        not is_nil(param_default(param, renamings)) or required
+      end)
 
     required_params =
-      params_map
-      |> Map.get(true, [])
-      |> Enum.map(fn name ->
+      Enum.map(required_params, fn %Param{name: name} ->
         case renamings && renamings[{name, location}] do
           %RenderedParam{old_name: old_name} when name != old_name ->
             {old_name, {String.to_atom(name), [], nil}}
@@ -506,9 +499,8 @@ defmodule OpenAPIGenerator.Renderer do
       end)
 
     {optional_params, {param_renamings, has_same_name}} =
-      params_map
-      |> Map.get(false, [])
-      |> Enum.map_reduce({[], false}, fn name, {param_renamings, has_same_name} ->
+      Enum.map_reduce(optional_params, {[], false}, fn %Param{name: name},
+                                                       {param_renamings, has_same_name} ->
         case renamings && renamings[{name, location}] do
           %RenderedParam{old_name: old_name} when name != old_name ->
             param_renamings_new =
