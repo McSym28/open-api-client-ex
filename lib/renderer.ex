@@ -297,7 +297,7 @@ defmodule OpenAPIGenerator.Renderer do
 
     do_statements_new =
       Enum.flat_map(do_statements, fn
-        {:=, _, [{:client, _, _} | _]} = client_statement ->
+        {:=, _, [{:client, _, _} | _]} = _client_statement ->
           param_assignments =
             [path_params, query_params, header_params]
             |> List.flatten()
@@ -309,8 +309,8 @@ defmodule OpenAPIGenerator.Renderer do
                     [
                       {:=, [],
                        [
-                         {String.to_atom(name), [], nil},
-                         {{:., [], [{:__aliases__, [alias: false], [:Keyword]}, :get_lazy]}, [],
+                         {{String.to_atom(name), [], nil}, {:opts, [], nil}},
+                         {{:., [], [{:__aliases__, [alias: false], [:Keyword]}, :pop_lazy]}, [],
                           [
                             {:opts, [], nil},
                             String.to_atom(name),
@@ -332,29 +332,40 @@ defmodule OpenAPIGenerator.Renderer do
                 end
             end)
 
+          client_statement =
+            {:=, [],
+             [
+               {{:client, [], nil}, {:opts, [], nil}},
+               {{:., [], [{:__aliases__, [alias: false], [:Keyword]}, :pop]}, [],
+                [
+                  {:opts, [], nil},
+                  :client,
+                  {:@, [], [{:default_client, [], nil}]}
+                ]}
+             ]}
+
           [client_statement | param_assignments]
 
         {:=, _, [{:query, _, _} | _]} = _query_statement ->
-          query_value = render_params_parse(query_params, renamings)
-
-          if query_value do
-            [{:=, [], [{:query, [], nil}, query_value]}]
-          else
-            []
-          end
+          render_params_parse(query_params, renamings, :query)
 
         {{:., _, [{:client, _, _}, :request]} = dot_statement, dot_metadata,
          [
            {:%{}, map_metadata, map_arguments}
          ]} = call_statement ->
-          headers_value = render_params_parse(header_params, renamings)
+          headers_parsed = render_params_parse(header_params, renamings, :headers)
 
-          if headers_value do
+          if length(headers_parsed) > 0 do
+            map_arguments_new =
+              Enum.flat_map(map_arguments, fn
+                {:opts, _} = arg -> [{:headers, {:headers, [], nil}} | [arg]]
+                arg -> [arg]
+              end)
+
             call_statement_new =
-              {dot_statement, dot_metadata,
-               [{:%{}, map_metadata, map_arguments ++ [{:headers, {:headers, [], nil}}]}]}
+              {dot_statement, dot_metadata, [{:%{}, map_metadata, map_arguments_new}]}
 
-            [{:=, [], [{:headers, [], nil}, headers_value]}, call_statement_new]
+            headers_parsed ++ [call_statement_new]
           else
             [call_statement]
           end
@@ -477,9 +488,9 @@ defmodule OpenAPIGenerator.Renderer do
     end
   end
 
-  defp render_params_parse([], _renamings), do: nil
+  defp render_params_parse([], _renamings, _variable_name), do: []
 
-  defp render_params_parse([%Param{location: location} | _] = params, renamings) do
+  defp render_params_parse([%Param{location: location} | _] = params, renamings, variable_name) do
     params_map =
       params
       |> Enum.sort_by(& &1.name)
@@ -544,24 +555,47 @@ defmodule OpenAPIGenerator.Renderer do
             param_renamings
           end
 
-        if length(param_renamings) > 0 do
-          {:|>, [],
+        split_statement =
+          {:=, [],
            [
-             quote(do: opts |> Keyword.take(unquote(optional_params))),
-             {{:., [], [{:__aliases__, [alias: false], [:Enum]}, :map]}, [],
-              [{:fn, [], param_renamings}]}
+             {{variable_name, [], nil}, {:opts, [], nil}},
+             {{:., [], [{:__aliases__, [alias: false], [:Keyword]}, :split]}, [],
+              [
+                {:opts, [], nil},
+                optional_params
+              ]}
            ]}
+
+        if length(param_renamings) > 0 do
+          [
+            split_statement,
+            {:=, [],
+             [
+               {variable_name, [], nil},
+               {{:., [], [{:__aliases__, [alias: false], [:Enum]}, :map]}, [],
+                [{variable_name, [], nil}, {:fn, [], param_renamings}]}
+             ]}
+          ]
         else
-          quote do: Keyword.take(opts, unquote(optional_params))
+          [split_statement]
         end
       else
-        nil
+        []
       end
 
-    case {length(required_params) > 0, not is_nil(optional_params)} do
-      {true, false} -> required_params
-      {false, true} -> optional_params
-      {true, true} -> {:++, [], [optional_params, required_params]}
+    case {length(required_params) > 0, length(optional_params) > 0} do
+      {true, false} ->
+        [{:=, [], [{variable_name, [], nil}, required_params]}]
+
+      {false, true} ->
+        optional_params
+
+      {true, true} ->
+        optional_params ++
+          [
+            {:=, [],
+             [{variable_name, [], nil}, {:++, [], [{variable_name, [], nil}, required_params]}]}
+          ]
     end
   end
 end
