@@ -201,7 +201,8 @@ defmodule OpenAPIGenerator.Renderer do
           function_name: function_name,
           request_path_parameters: path_params,
           request_query_parameters: query_params,
-          request_header_parameters: header_params
+          request_header_parameters: header_params,
+          responses: responses
         } = operation
       ) do
     renamings = Process.get(@param_renamings_key)
@@ -214,16 +215,28 @@ defmodule OpenAPIGenerator.Renderer do
         param -> is_nil(param_default(param, renamings))
       end)
 
-    operation_new = %Operation{operation | request_path_parameters: static_params}
+    responses_new =
+      List.keystore(
+        responses,
+        999,
+        0,
+        {999, %{"application/json" => {:const, {:client, quote(do: term())}}}}
+      )
+
+    operation_new = %Operation{
+      operation
+      | request_path_parameters: static_params,
+        responses: responses_new
+    }
 
     {:@, attribute_metadata,
      [
        {:spec, spec_metadata,
         [
-          {:"::", result_delimiter_metadata,
+          {:"::", return_type_delimiter_metadata,
            [
              {^function_name, arguments_metadata, arguments},
-             result
+             return_type
            ]}
         ]}
      ]} = OpenAPI.Renderer.Operation.render_spec(state, operation_new)
@@ -245,10 +258,10 @@ defmodule OpenAPIGenerator.Renderer do
      [
        {:spec, spec_metadata,
         [
-          {:"::", result_delimiter_metadata,
+          {:"::", return_type_delimiter_metadata,
            [
              {function_name, arguments_metadata, arguments_new},
-             result
+             return_type
            ]}
         ]}
      ]}
