@@ -88,7 +88,7 @@ defmodule OpenAPIGenerator.Processor do
     client_param = [
       %Param{
         description:
-          "Client module for making a request. Default value is taken from `@default_client",
+          "Client module for making a request. Default value is taken from `@default_client`",
         location: :header,
         name: "client",
         required: false,
