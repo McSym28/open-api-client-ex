@@ -21,6 +21,14 @@ defmodule OpenAPIGenerator.Utils do
     {{:., [], [{:__aliases__, [alias: false], [ast_module(module)]}, function]}, [], args}
   end
 
+  @spec ensure_ets_table(atom()) :: :ets.table()
+  def ensure_ets_table(name) do
+    case :ets.whereis(name) do
+      :undefined -> :ets.new(name, [:set, :public, :named_table])
+      tid -> tid
+    end
+  end
+
   defp pattern_match?(pattern, url, method) do
     case pattern do
       :all ->

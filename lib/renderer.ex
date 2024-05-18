@@ -5,9 +5,10 @@ defmodule OpenAPIGenerator.Renderer do
   alias Schema.Field
   alias Operation.Param
   alias OpenAPIGenerator.Utils
+  alias OpenAPIGenerator.Operation, as: GeneratorOperation
+  alias OpenAPIGenerator.Param, as: GeneratorParam
 
   @schema_renamings_key :schema_renamings
-  @param_renamings_key :param_renamings
   @extra_fields :oapi_generator
                 |> Application.get_all_env()
                 |> Enum.map(fn {key, options} -> {key, options[:output][:extra_fields]} end)
@@ -16,10 +17,6 @@ defmodule OpenAPIGenerator.Renderer do
 
   defmodule RenderedField do
     defstruct old_name: nil, enforce: false, enum_aliases: %{}, enum_type: nil
-  end
-
-  defmodule RenderedParam do
-    defstruct old_name: nil, config: []
   end
 
   @impl true
@@ -145,60 +142,29 @@ defmodule OpenAPIGenerator.Renderer do
 
   @impl true
   def render_operation(
-        %OpenAPI.Renderer.State{profile: profile} = state,
-        %Operation{
-          request_path: path,
-          request_method: method,
-          request_path_parameters: path_params,
-          request_query_parameters: query_params,
-          request_header_parameters: header_params
-        } = operation
+        state,
+        %Operation{request_path: request_path, request_method: request_method} = operation
       ) do
-    operation_config = Utils.operation_config(profile, path, method)
-    param_configs = Keyword.get(operation_config, :params, [])
+    case :ets.lookup(:operations, {request_path, request_method}) do
+      [{_, %GeneratorOperation{param_renamings: param_renamings}}] ->
+        request_path_new =
+          String.replace(request_path, ~r/\{([[:word:]]+)\}/, fn word ->
+            word
+            |> String.split(["{", "}"])
+            |> Enum.at(1)
+            |> then(fn name ->
+              name_new = Map.get(param_renamings, {name, :path}, name)
+              "{#{name_new}}"
+            end)
+          end)
 
-    path_new =
-      String.replace(path, ~r/\{([[:word:]]+)\}/, fn word ->
-        word
-        |> String.split(["{", "}"])
-        |> Enum.at(1)
-        |> then(fn name ->
-          {_, config} = List.keyfind(param_configs, {name, :path}, 0, {name, []})
-          name_new = rename_param(config, name)
-          "{#{name_new}}"
-        end)
-      end)
+        operation_new = %Operation{operation | request_path: request_path_new}
 
-    process_param_fun = fn %Param{name: name, location: location} = param, acc ->
-      {_, config} = List.keyfind(param_configs, {name, location}, 0, {name, []})
-      name_new = rename_param(config, name)
-      param_new = %Param{param | name: name_new}
-      acc_new = Map.put(acc, {name_new, location}, %RenderedParam{old_name: name, config: config})
-      {param_new, acc_new}
+        OpenAPI.Renderer.Operation.render(state, operation_new)
+
+      [] ->
+        OpenAPI.Renderer.Operation.render(state, operation)
     end
-
-    {path_params_new, renamings} =
-      Enum.map_reduce(path_params, %{}, process_param_fun)
-
-    {query_params_new, renamings} =
-      Enum.map_reduce(query_params, renamings, process_param_fun)
-
-    {header_params_new, renamings} =
-      Enum.map_reduce(header_params, renamings, process_param_fun)
-
-    operation_new = %Operation{
-      operation
-      | request_path: path_new,
-        request_path_parameters: path_params_new,
-        request_query_parameters: query_params_new,
-        request_header_parameters: header_params_new
-    }
-
-    Process.put(@param_renamings_key, renamings)
-    result = OpenAPI.Renderer.Operation.render(state, operation_new)
-    Process.delete(@param_renamings_key)
-
-    result
   end
 
   @impl true
@@ -206,72 +172,75 @@ defmodule OpenAPIGenerator.Renderer do
         state,
         %Operation{
           function_name: function_name,
-          request_path_parameters: path_params,
-          request_query_parameters: query_params,
-          request_header_parameters: header_params,
-          responses: responses
+          responses: responses,
+          request_path: request_path,
+          request_method: request_method
         } = operation
       ) do
-    renamings = Process.get(@param_renamings_key)
+    case :ets.lookup(:operations, {request_path, request_method}) do
+      [{_, %GeneratorOperation{params: all_params}}] ->
+        {static_params, dynamic_params} =
+          all_params
+          |> Enum.group_by(
+            fn %GeneratorParam{static: static} -> static end,
+            fn %GeneratorParam{param: param} -> param end
+          )
+          |> then(fn map -> {Map.get(map, true, []), Map.get(map, false, [])} end)
 
-    {static_params, dynamic_params} =
-      [path_params, query_params, header_params]
-      |> List.flatten()
-      |> Enum.split_with(fn
-        %Param{required: false, location: location} when location != :path -> false
-        param -> is_nil(param_default(param, renamings))
-      end)
+        responses_new =
+          List.keystore(
+            responses,
+            999,
+            0,
+            {999, %{"application/json" => {:const, {:client, quote(do: term())}}}}
+          )
 
-    responses_new =
-      List.keystore(
-        responses,
-        999,
-        0,
-        {999, %{"application/json" => {:const, {:client, quote(do: term())}}}}
-      )
+        operation_new = %Operation{
+          operation
+          | request_path_parameters: static_params,
+            responses: responses_new
+        }
 
-    operation_new = %Operation{
-      operation
-      | request_path_parameters: static_params,
-        responses: responses_new
-    }
+        {:@, attribute_metadata,
+         [
+           {:spec, spec_metadata,
+            [
+              {:"::", return_type_delimiter_metadata,
+               [
+                 {^function_name, arguments_metadata, arguments},
+                 return_type
+               ]}
+            ]}
+         ]} = OpenAPI.Renderer.Operation.render_spec(state, operation_new)
 
-    {:@, attribute_metadata,
-     [
-       {:spec, spec_metadata,
-        [
-          {:"::", return_type_delimiter_metadata,
-           [
-             {^function_name, arguments_metadata, arguments},
-             return_type
-           ]}
-        ]}
-     ]} = OpenAPI.Renderer.Operation.render_spec(state, operation_new)
+        opts_spec =
+          dynamic_params
+          |> Enum.map(fn %Param{name: name, value_type: type} ->
+            {String.to_atom(name), Util.to_type(state, type)}
+          end)
+          |> Kernel.++([{:client, quote(do: module())}])
+          |> Enum.reverse()
+          |> Enum.reduce(fn type, expression ->
+            {:|, [], [type, expression]}
+          end)
 
-    opts_spec =
-      dynamic_params
-      |> Enum.map(fn %Param{name: name, value_type: type} ->
-        {String.to_atom(name), Util.to_type(state, type)}
-      end)
-      |> Kernel.++([{:client, quote(do: module())}])
-      |> Enum.reverse()
-      |> Enum.reduce(fn type, expression ->
-        {:|, [], [type, expression]}
-      end)
+        arguments_new = List.replace_at(arguments, -1, [opts_spec])
 
-    arguments_new = List.replace_at(arguments, -1, [opts_spec])
+        {:@, attribute_metadata,
+         [
+           {:spec, spec_metadata,
+            [
+              {:"::", return_type_delimiter_metadata,
+               [
+                 {function_name, arguments_metadata, arguments_new},
+                 return_type
+               ]}
+            ]}
+         ]}
 
-    {:@, attribute_metadata,
-     [
-       {:spec, spec_metadata,
-        [
-          {:"::", return_type_delimiter_metadata,
-           [
-             {function_name, arguments_metadata, arguments_new},
-             return_type
-           ]}
-        ]}
-     ]}
+      [] ->
+        OpenAPI.Renderer.Operation.render_spec(state, operation)
+    end
   end
 
   @impl true
@@ -279,40 +248,37 @@ defmodule OpenAPIGenerator.Renderer do
         state,
         %Operation{
           function_name: function_name,
-          request_path_parameters: path_params,
-          request_query_parameters: query_params,
-          request_header_parameters: header_params
+          request_path: request_path,
+          request_method: request_method
         } = operation
       ) do
-    renamings = Process.get(@param_renamings_key)
+    case :ets.lookup(:operations, {request_path, request_method}) do
+      [{_, %GeneratorOperation{params: all_params}}] ->
+        static_params =
+          all_params
+          |> Enum.flat_map(fn %GeneratorParam{param: param, static: static} ->
+            if static do
+              [param]
+            else
+              []
+            end
+          end)
 
-    all_params =
-      [path_params, query_params, header_params]
-      |> List.flatten()
+        operation_new = %Operation{operation | request_path_parameters: static_params}
 
-    static_params =
-      Enum.filter(all_params, fn
-        %Param{required: false, location: location} when location != :path -> false
-        param -> is_nil(param_default(param, renamings))
-      end)
+        {:def, def_metadata,
+         [
+           {^function_name, _, _} = function_header,
+           [do: {do_tag, do_metadata, do_statements}]
+         ]} = OpenAPI.Renderer.Operation.render_function(state, operation_new)
 
-    operation_new = %Operation{operation | request_path_parameters: static_params}
-
-    {:def, def_metadata,
-     [
-       {^function_name, _, _} = function_header,
-       [do: {do_tag, do_metadata, do_statements}]
-     ]} = OpenAPI.Renderer.Operation.render_function(state, operation_new)
-
-    do_statements_new =
-      Enum.flat_map(do_statements, fn
-        {:=, _, [{:client, _, _} | _]} = client_statement ->
-          param_assignments =
-            all_params
-            |> Enum.flat_map(fn
-              %Param{name: name} = param ->
-                case param_default(param, renamings) do
-                  {m, f, a} ->
+        do_statements_new =
+          Enum.flat_map(do_statements, fn
+            {:=, _, [{:client, _, _} | _]} = client_statement ->
+              param_assignments =
+                all_params
+                |> Enum.flat_map(fn
+                  %GeneratorParam{default: {m, f, a}, param: %Param{name: name}} ->
                     [
                       {:=, [],
                        [
@@ -335,50 +301,63 @@ defmodule OpenAPIGenerator.Renderer do
 
                   _ ->
                     []
-                end
-            end)
+                end)
 
-          [client_statement | param_assignments]
+              [client_statement | param_assignments]
 
-        {:=, _, [{:query, _, _} | _]} = _query_statement ->
-          query_value = render_params_parse(query_params, renamings)
+            {:=, _, [{:query, _, _} | _]} = _query_statement ->
+              query_value =
+                all_params
+                |> Enum.filter(fn %GeneratorParam{param: %Param{location: location}} ->
+                  location == :query
+                end)
+                |> render_params_parse()
 
-          if query_value do
-            [{:=, [], [{:query, [], nil}, query_value]}]
-          else
-            []
-          end
+              if query_value do
+                [{:=, [], [{:query, [], nil}, query_value]}]
+              else
+                []
+              end
 
-        {{:., _, [{:client, _, _}, :request]} = dot_statement, dot_metadata,
+            {{:., _, [{:client, _, _}, :request]} = dot_statement, dot_metadata,
+             [
+               {:%{}, map_metadata, map_arguments}
+             ]} = call_statement ->
+              headers_value =
+                all_params
+                |> Enum.filter(fn %GeneratorParam{param: %Param{location: location}} ->
+                  location == :header
+                end)
+                |> render_params_parse()
+
+              if headers_value do
+                map_arguments_new =
+                  Enum.flat_map(map_arguments, fn
+                    {:opts, _} = arg -> [{:headers, {:headers, [], nil}} | [arg]]
+                    arg -> [arg]
+                  end)
+
+                call_statement_new =
+                  {dot_statement, dot_metadata, [{:%{}, map_metadata, map_arguments_new}]}
+
+                [{:=, [], [{:headers, [], nil}, headers_value]}, call_statement_new]
+              else
+                [call_statement]
+              end
+
+            statement ->
+              [statement]
+          end)
+
+        {:def, def_metadata,
          [
-           {:%{}, map_metadata, map_arguments}
-         ]} = call_statement ->
-          headers_value = render_params_parse(header_params, renamings)
+           function_header,
+           [do: {do_tag, do_metadata, do_statements_new}]
+         ]}
 
-          if headers_value do
-            map_arguments_new =
-              Enum.flat_map(map_arguments, fn
-                {:opts, _} = arg -> [{:headers, {:headers, [], nil}} | [arg]]
-                arg -> [arg]
-              end)
-
-            call_statement_new =
-              {dot_statement, dot_metadata, [{:%{}, map_metadata, map_arguments_new}]}
-
-            [{:=, [], [{:headers, [], nil}, headers_value]}, call_statement_new]
-          else
-            [call_statement]
-          end
-
-        statement ->
-          [statement]
-      end)
-
-    {:def, def_metadata,
-     [
-       function_header,
-       [do: {do_tag, do_metadata, do_statements_new}]
-     ]}
+      [] ->
+        OpenAPI.Renderer.Operation.render_function(state, operation)
+    end
   end
 
   defp process_schema(%Schema{ref: ref, fields: fields} = schema, acc, extra_fields) do
@@ -448,58 +427,45 @@ defmodule OpenAPIGenerator.Renderer do
     {enum_value, {type, acc}}
   end
 
-  defp rename_param(config, name) do
-    Keyword.get_lazy(config, :name, fn -> Naming.normalize_identifier(name) end)
-  end
+  defp render_params_parse([]), do: nil
 
-  defp param_default(%Param{name: name, location: location}, renamings) do
-    case renamings && renamings[{name, location}] do
-      %RenderedParam{config: config} when is_list(config) -> Keyword.get(config, :default)
-      _ -> nil
-    end
-  end
-
-  defp render_params_parse([], _renamings), do: nil
-
-  defp render_params_parse([%Param{location: location} | _] = params, renamings) do
+  defp render_params_parse(params) do
     {static_params, dynamic_params} =
       params
-      |> Enum.sort_by(& &1.name)
-      |> Enum.split_with(fn
-        %Param{required: true} -> true
-        param -> not is_nil(param_default(param, renamings))
+      |> Enum.group_by(fn %GeneratorParam{static: static, default: default} ->
+        static or not is_nil(default)
       end)
+      |> then(fn map -> {Map.get(map, true, []), Map.get(map, false, [])} end)
 
     static_params =
-      Enum.map(static_params, fn %Param{name: name} ->
-        case renamings && renamings[{name, location}] do
-          %RenderedParam{old_name: old_name} when name != old_name ->
-            {old_name, {String.to_atom(name), [], nil}}
-
-          _ ->
-            {String.to_atom(name), {String.to_atom(name), [], nil}}
+      Enum.map(static_params, fn %GeneratorParam{param: %Param{name: name}, old_name: old_name} ->
+        if name != old_name do
+          {old_name, {String.to_atom(name), [], nil}}
+        else
+          {String.to_atom(name), {String.to_atom(name), [], nil}}
         end
       end)
 
     {dynamic_params, {param_renamings, has_same_name}} =
-      Enum.map_reduce(dynamic_params, {[], false}, fn %Param{name: name},
+      Enum.map_reduce(dynamic_params, {[], false}, fn %GeneratorParam{
+                                                        param: %Param{name: name},
+                                                        old_name: old_name
+                                                      },
                                                       {param_renamings, has_same_name} ->
-        case renamings && renamings[{name, location}] do
-          %RenderedParam{old_name: old_name} when name != old_name ->
-            param_renamings_new =
-              [
-                {:->, [],
-                 [
-                   [{String.to_atom(name), {:value, [], nil}}],
-                   {old_name, {:value, [], nil}}
-                 ]}
-                | param_renamings
-              ]
+        if name != old_name do
+          param_renamings_new =
+            [
+              {:->, [],
+               [
+                 [{String.to_atom(name), {:value, [], nil}}],
+                 {old_name, {:value, [], nil}}
+               ]}
+              | param_renamings
+            ]
 
-            {String.to_atom(name), {param_renamings_new, has_same_name}}
-
-          _ ->
-            {String.to_atom(name), {param_renamings, true}}
+          {String.to_atom(name), {param_renamings_new, has_same_name}}
+        else
+          {String.to_atom(name), {param_renamings, true}}
         end
       end)
 

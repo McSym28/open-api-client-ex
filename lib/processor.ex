@@ -4,33 +4,42 @@ defmodule OpenAPIGenerator.Processor do
   alias OpenAPI.Spec.RequestBody
   alias OpenAPI.Processor.{Naming, Operation.Param}
   alias OpenAPIGenerator.Utils
+  alias OpenAPI.Spec.Path.Parameter, as: ParamSpec
+  alias OpenAPIGenerator.Operation, as: GeneratorOperation
+  alias OpenAPIGenerator.Param, as: GeneratorParam
 
   @impl true
-  def operation_docstring(
+  def ignore_operation?(
         %OpenAPI.Processor.State{profile: profile} = state,
         %OperationSpec{
           "$oag_path": request_path,
           "$oag_path_parameters": params_from_path,
-          parameters: params_from_operation,
-          request_body: request_body
-        } = operation_spec,
-        _query_params
+          parameters: params_from_operation
+        } = operation_spec
       ) do
-    request_method = OpenAPI.Processor.Operation.request_method(state, operation_spec)
+    if OpenAPI.Processor.Ignore.ignore_operation?(state, operation_spec) do
+      true
+    else
+      operations_table = Utils.ensure_ets_table(:operations)
 
-    operation_config = Utils.operation_config(profile, request_path, request_method)
-    param_configs = Keyword.get(operation_config, :params, [])
+      request_method = OpenAPI.Processor.Operation.request_method(state, operation_spec)
 
-    {required_params, optional_params} =
-      (params_from_path ++ params_from_operation)
-      |> Enum.flat_map(fn param_spec ->
-        {_state,
-         %Param{name: name, location: location, required: required, description: description} =
-           param} = Param.from_spec(state, param_spec)
+      operation_config = Utils.operation_config(profile, request_path, request_method)
+      param_configs = Keyword.get(operation_config, :params, [])
 
-        if location in [:path, :query, :header] do
+      {all_params, param_renamings} =
+        (params_from_path ++ params_from_operation)
+        |> Enum.reverse()
+        |> Enum.map_reduce(%{}, fn %ParamSpec{required: required} = param, param_renamings ->
+          {_state, %Param{name: name, location: location, description: description} = param} =
+            Param.from_spec(state, param)
+
           {_, config} = List.keyfind(param_configs, {name, location}, 0, {name, []})
-          name_new = Keyword.get_lazy(config, :name, fn -> Naming.normalize_identifier(name) end)
+
+          default = Keyword.get(config, :default)
+
+          name_new =
+            Keyword.get_lazy(config, :name, fn -> Naming.normalize_identifier(name) end)
 
           description_new =
             if name_new == name do
@@ -38,8 +47,6 @@ defmodule OpenAPIGenerator.Processor do
             else
               Enum.join(["[#{inspect(name)}]", description], " ")
             end
-
-          default = Keyword.get(config, :default)
 
           description_new =
             case default do
@@ -58,68 +65,120 @@ defmodule OpenAPIGenerator.Processor do
                 description_new
             end
 
-          required_new = required and is_nil(default)
-          [%Param{param | name: name_new, required: required_new, description: description_new}]
-        else
-          []
-        end
-      end)
-      |> Enum.sort_by(fn %Param{location: location} ->
-        case location do
-          :path -> 0
-          :query -> 1
-          :header -> 2
-        end
-      end)
-      |> Enum.split_with(& &1.required)
+          param_new = %Param{param | name: name_new, description: description_new}
 
-    body_param =
-      case request_body do
-        %RequestBody{description: description} ->
-          [
-            %Param{
-              description: description,
-              location: :query,
-              name: "body",
-              required: true,
-              value_type: :null
-            }
-          ]
+          param_renamings_new = Map.put(param_renamings, {name, location}, name_new)
 
-        _ ->
-          []
-      end
+          generator_param_new = %GeneratorParam{
+            param: param_new,
+            old_name: name,
+            default: default,
+            config: config,
+            static: is_nil(default) and (required or location == :path)
+          }
 
-    client_param = [
-      %Param{
-        description:
-          "Client module for making a request. Default value is taken from `@default_client`",
-        location: :header,
-        name: "client",
-        required: false,
-        value_type: :null
-      }
-    ]
+          {generator_param_new, param_renamings_new}
+        end)
 
-    required_params = required_params ++ body_param
-    optional_params = optional_params ++ client_param
+      all_params =
+        Enum.sort_by(all_params, fn %GeneratorParam{param: %Param{name: name, location: location}} ->
+          location_integer =
+            case location do
+              :path -> 0
+              :query -> 1
+              :header -> 2
+              _ -> 100
+            end
 
-    result =
-      OpenAPI.Processor.Operation.docstring(
-        state,
-        operation_spec,
-        required_params ++ optional_params
+          {location_integer, name}
+        end)
+
+      :ets.insert(
+        operations_table,
+        {{request_path, request_method},
+         %GeneratorOperation{
+           config: operation_config,
+           spec: operation_spec,
+           params: all_params,
+           param_renamings: param_renamings
+         }}
       )
 
-    if length(required_params) > 0 do
-      [%Param{name: name} | _] = optional_params
-
-      result
-      |> String.replace("## Options", "## Arguments", global: false)
-      |> String.replace("  * `#{name}`:", "\n## Options\n\n  * `#{name}`:", global: false)
-    else
-      result
+      false
     end
-    |> String.replace(~r/\s+$/, "\n")
+  end
+
+  @impl true
+  def operation_docstring(
+        state,
+        %OperationSpec{"$oag_path": request_path, request_body: request_body} = operation_spec,
+        query_params
+      ) do
+    request_method = OpenAPI.Processor.Operation.request_method(state, operation_spec)
+
+    case :ets.lookup(:operations, {request_path, request_method}) do
+      [{_, %GeneratorOperation{params: all_params}}] ->
+        {static_params, dynamic_params} =
+          all_params
+          |> Enum.group_by(
+            fn %GeneratorParam{static: static} -> static end,
+            fn %GeneratorParam{param: param} -> param end
+          )
+          |> then(fn map -> {Map.get(map, true, []), Map.get(map, false, [])} end)
+
+        body_param =
+          case request_body do
+            %RequestBody{description: description} ->
+              [
+                %Param{
+                  description: description,
+                  location: :query,
+                  name: "body",
+                  value_type: :null
+                }
+              ]
+
+            _ ->
+              []
+          end
+
+        client_param = [
+          %Param{
+            description:
+              "Client module for making a request. Default value is taken from `@default_client`",
+            location: :header,
+            name: "client",
+            value_type: :null
+          }
+        ]
+
+        static_params = static_params ++ body_param
+        dynamic_params = dynamic_params ++ client_param
+
+        result =
+          OpenAPI.Processor.Operation.docstring(
+            state,
+            operation_spec,
+            static_params ++ dynamic_params
+          )
+
+        if length(static_params) > 0 do
+          [%Param{name: name} | _] = dynamic_params
+
+          result
+          |> String.replace("## Options", "## Arguments", global: false)
+          |> String.replace("  * `#{name}`:", "\n## Options\n\n  * `#{name}`:", global: false)
+        else
+          result
+        end
+        |> String.replace(~r/\s+$/, "\n")
+
+      [] ->
+        OpenAPI.Processor.Operation.docstring(
+          state,
+          operation_spec,
+          query_params
+        )
+    end
   end
 end
