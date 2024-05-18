@@ -1,68 +1,56 @@
 defmodule OpenAPIGenerator.Renderer do
   use OpenAPI.Renderer
   alias OpenAPI.Renderer.{File, Util}
-  alias OpenAPI.Processor.{Naming, Operation, Schema}
+  alias OpenAPI.Processor.{Operation, Schema}
   alias Schema.Field
   alias Operation.Param
   alias OpenAPIGenerator.Utils
   alias OpenAPIGenerator.Operation, as: GeneratorOperation
   alias OpenAPIGenerator.Param, as: GeneratorParam
-
-  @schema_renamings_key :schema_renamings
-  @extra_fields :oapi_generator
-                |> Application.get_all_env()
-                |> Enum.map(fn {key, options} -> {key, options[:output][:extra_fields]} end)
-                |> Enum.filter(fn {_key, extra_fields} -> extra_fields end)
-                |> Map.new()
-
-  defmodule RenderedField do
-    defstruct old_name: nil, enforce: false, enum_aliases: %{}, enum_type: nil
-  end
+  alias OpenAPIGenerator.Schema, as: GeneratorSchema
+  alias OpenAPIGenerator.Field, as: GeneratorField
 
   @impl true
-  def render_schema(
-        %OpenAPI.Renderer.State{profile: profile} = state,
-        %File{module: _module, schemas: schemas} = file
-      ) do
-    extra_fields = Map.get(@extra_fields, profile, [])
+  def render_schema(state, %File{schemas: schemas} = file) do
+    schemas_new =
+      Enum.map(schemas, fn %Schema{ref: ref} = schema ->
+        case :ets.lookup(:schemas, ref) do
+          [{_, %GeneratorSchema{fields: all_fields}}] ->
+            fields_new =
+              Enum.flat_map(all_fields, fn
+                %GeneratorField{field: nil} -> []
+                %GeneratorField{field: field} -> [field]
+              end)
 
-    {schemas_new, renamings} =
-      Enum.map_reduce(schemas, %{}, &process_schema(&1, &2, extra_fields))
+            %Schema{schema | fields: fields_new}
+
+          [] ->
+            schema
+        end
+      end)
 
     file_new = %File{file | schemas: schemas_new}
-    Process.put(@schema_renamings_key, renamings)
-    result = OpenAPI.Renderer.render_schema(state, file_new)
-    Process.delete(@schema_renamings_key)
-    result
+    OpenAPI.Renderer.render_schema(state, file_new)
   end
 
   @impl true
   def render_schema_types(state, schemas) do
     schemas_new =
-      case Process.get(@schema_renamings_key) do
-        renamings when is_map(renamings) and map_size(renamings) > 0 ->
-          Enum.map(schemas, fn %Schema{ref: ref, fields: fields} = schema ->
-            with field_renamings when is_map(renamings) <- Map.get(renamings, ref) do
-              fields_new =
-                Enum.map(fields, fn field ->
-                  with %Field{name: name, type: {:enum, _} = type} <- field,
-                       %RenderedField{enum_type: enum_type} when not is_nil(enum_type) <-
-                         Map.get(field_renamings, name) do
-                    %Field{field | type: {:union, [type, enum_type]}}
-                  else
-                    _ -> field
-                  end
-                end)
+      Enum.map(schemas, fn %Schema{ref: ref} = schema ->
+        case :ets.lookup(:schemas, ref) do
+          [{_, %GeneratorSchema{fields: all_fields}}] ->
+            fields_new =
+              Enum.flat_map(all_fields, fn
+                %GeneratorField{field: nil} -> []
+                %GeneratorField{field: field, type: type} -> [%Field{field | type: type}]
+              end)
 
-              %Schema{schema | fields: fields_new}
-            else
-              _ -> schema
-            end
-          end)
+            %Schema{schema | fields: fields_new}
 
-        _ ->
-          schemas
-      end
+          [] ->
+            schema
+        end
+      end)
 
     OpenAPI.Renderer.render_schema_types(state, schemas_new)
   end
@@ -71,23 +59,27 @@ defmodule OpenAPIGenerator.Renderer do
   def render_schema_struct(state, schemas) do
     struct_result = OpenAPI.Renderer.render_schema_struct(state, schemas)
 
-    with renamings when is_map(renamings) <- Process.get(@schema_renamings_key),
-         enforced_keys when enforced_keys != [] <-
-           renamings
-           |> Enum.map(fn {_schema_ref, field_renamings} ->
-             Enum.flat_map(field_renamings, fn {name, %RenderedField{enforce: enforce}} ->
-               if(enforce, do: [String.to_atom(name)], else: [])
-             end)
-           end)
-           |> List.flatten() do
-      enforced_keys_result =
-        quote do
-          @enforce_keys unquote(enforced_keys)
-        end
+    schemas
+    |> Enum.flat_map(fn %Schema{ref: ref} = _schema ->
+      case :ets.lookup(:schemas, ref) do
+        [{_, %GeneratorSchema{fields: all_fields}}] ->
+          Enum.flat_map(all_fields, fn
+            %GeneratorField{field: %Field{name: name}, enforce: true} -> [String.to_atom(name)]
+            _ -> []
+          end)
 
-      OpenAPI.Renderer.Util.put_newlines([enforced_keys_result, struct_result])
-    else
-      _ -> struct_result
+        [] ->
+          []
+      end
+    end)
+    |> Enum.sort()
+    |> case do
+      [] ->
+        struct_result
+
+      enforced_keys ->
+        enforced_keys_result = quote do: @enforce_keys(unquote(enforced_keys))
+        OpenAPI.Renderer.Util.put_newlines([enforced_keys_result, struct_result])
     end
   end
 
@@ -95,49 +87,31 @@ defmodule OpenAPIGenerator.Renderer do
   def render_schema_field_function(state, schemas) do
     fields_result = OpenAPI.Renderer.render_schema_field_function(state, schemas)
 
-    case Process.get(@schema_renamings_key) do
-      renamings when is_map(renamings) and map_size(renamings) > 0 ->
-        Enum.map(fields_result, fn statement ->
-          with {:def, def_metadata,
-                [{:__fields__, fields_metadata, [schema_type]}, [do: field_clauses]]} <-
-                 statement,
-               schema_ref when not is_nil(schema_ref) <-
-                 Enum.find_value(schemas, fn %Schema{type_name: type_name, ref: ref} ->
-                   if(schema_type == type_name, do: ref)
-                 end),
-               field_renamings when is_map(renamings) <- Map.get(renamings, schema_ref) do
-            field_clauses_new =
-              Enum.map(field_clauses, fn {name, type} ->
-                string_name = Atom.to_string(name)
+    Enum.map(fields_result, fn statement ->
+      with {:def, def_metadata,
+            [{:__fields__, fields_metadata, [schema_type]}, [do: _field_clauses]]} <-
+             statement,
+           schema_ref when not is_nil(schema_ref) <-
+             Enum.find_value(schemas, fn %Schema{type_name: type_name, ref: ref} ->
+               if(schema_type == type_name, do: ref)
+             end),
+           [{_, %GeneratorSchema{fields: all_fields}}] <- :ets.lookup(:schemas, schema_ref) do
+        field_clauses_new =
+          all_fields
+          |> Enum.map(fn %GeneratorField{
+                           field: %Field{name: name},
+                           field_function_type: field_function_type
+                         } ->
+            {String.to_atom(name), field_function_type}
+          end)
+          |> Enum.sort_by(fn {name, _type} -> name end)
 
-                with %RenderedField{old_name: old_name, enum_aliases: enum_aliases} <-
-                       Map.get(field_renamings, string_name) do
-                  type_new =
-                    case type do
-                      {:enum, _} -> {:enum, enum_aliases}
-                      _ -> type
-                    end
-
-                  if name == old_name do
-                    {name, type_new}
-                  else
-                    {name, {old_name, type_new}}
-                  end
-                else
-                  _ -> {name, type}
-                end
-              end)
-
-            {:def, def_metadata,
-             [{:__fields__, fields_metadata, [schema_type]}, [do: field_clauses_new]]}
-          else
-            _ -> statement
-          end
-        end)
-
-      _ ->
-        fields_result
-    end
+        {:def, def_metadata,
+         [{:__fields__, fields_metadata, [schema_type]}, [do: field_clauses_new]]}
+      else
+        _ -> statement
+      end
+    end)
   end
 
   @impl true
@@ -358,73 +332,6 @@ defmodule OpenAPIGenerator.Renderer do
       [] ->
         OpenAPI.Renderer.Operation.render_function(state, operation)
     end
-  end
-
-  defp process_schema(%Schema{ref: ref, fields: fields} = schema, acc, extra_fields) do
-    {fields_new, field_renamings} = Enum.map_reduce(fields, %{}, &process_field/2)
-    schema_new = %Schema{schema | fields: fields_new}
-
-    field_renamings =
-      Enum.reduce(extra_fields, field_renamings, fn {key, _type}, acc ->
-        Map.put(acc, key, %RenderedField{old_name: key, enforce: true})
-      end)
-
-    acc_new = Map.put(acc, ref, field_renamings)
-    {schema_new, acc_new}
-  end
-
-  defp process_field(
-         %Field{name: name, type: {:enum, enum_values}, required: required, nullable: nullable} =
-           field,
-         acc
-       ) do
-    {enum_values_new, {enum_type, enum_aliases}} =
-      Enum.map_reduce(enum_values, {nil, %{}}, &process_enum_value/2)
-
-    name_new = Naming.normalize_identifier(name)
-    field_new = %Field{field | name: name_new, type: {:enum, enum_values_new}}
-
-    rendered_field = %RenderedField{
-      old_name: name,
-      enum_aliases: enum_aliases,
-      enum_type: enum_type,
-      enforce: required and not nullable
-    }
-
-    acc_new = Map.put(acc, name_new, rendered_field)
-    {field_new, acc_new}
-  end
-
-  defp process_field(%Field{name: name, required: required, nullable: nullable} = field, acc) do
-    name_new = Naming.normalize_identifier(name)
-    field_new = %Field{field | name: name_new}
-    rendered_field = %RenderedField{old_name: name, enforce: required and not nullable}
-    acc_new = Map.put(acc, name_new, rendered_field)
-    {field_new, acc_new}
-  end
-
-  defp process_enum_value(enum_value, {_type, acc}) when is_binary(enum_value) do
-    enum_atom = enum_value |> Naming.normalize_identifier() |> String.to_atom()
-    acc_new = Map.put(acc, enum_atom, enum_value)
-    {enum_atom, {{:string, :generic}, acc_new}}
-  end
-
-  defp process_enum_value(enum_value, {type, acc})
-       when is_number(enum_value) and (is_nil(type) or type in [:integer, :boolean]) do
-    {enum_value, {:number, acc}}
-  end
-
-  defp process_enum_value(enum_value, {type, acc})
-       when is_integer(enum_value) and (is_nil(type) or type in [:boolean]) do
-    {enum_value, {:integer, acc}}
-  end
-
-  defp process_enum_value(enum_value, {type, acc}) when is_boolean(enum_value) do
-    {enum_value, {type || :boolean, acc}}
-  end
-
-  defp process_enum_value(enum_value, {type, acc}) do
-    {enum_value, {type, acc}}
   end
 
   defp render_params_parse([]), do: nil

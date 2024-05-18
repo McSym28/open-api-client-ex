@@ -1,12 +1,21 @@
 defmodule OpenAPIGenerator.Processor do
   use OpenAPI.Processor
-  alias OpenAPI.Spec.Path.Operation, as: OperationSpec
-  alias OpenAPI.Spec.RequestBody
-  alias OpenAPI.Processor.{Naming, Operation.Param}
+  alias OpenAPI.Processor.{Naming, Operation.Param, Schema}
+  alias Schema.Field
   alias OpenAPIGenerator.Utils
-  alias OpenAPI.Spec.Path.Parameter, as: ParamSpec
   alias OpenAPIGenerator.Operation, as: GeneratorOperation
   alias OpenAPIGenerator.Param, as: GeneratorParam
+  alias OpenAPIGenerator.Schema, as: GeneratorSchema
+  alias OpenAPI.Spec.Path.Operation, as: OperationSpec
+  alias OpenAPI.Spec.Path.Parameter, as: ParamSpec
+  alias OpenAPIGenerator.Field, as: GeneratorField
+  alias OpenAPI.Spec.RequestBody
+
+  @extra_fields :oapi_generator
+                |> Application.get_all_env()
+                |> Enum.map(fn {key, options} -> {key, options[:output][:extra_fields]} end)
+                |> Enum.filter(fn {_key, extra_fields} -> extra_fields end)
+                |> Map.new()
 
   @impl true
   def ignore_operation?(
@@ -20,8 +29,6 @@ defmodule OpenAPIGenerator.Processor do
     if OpenAPI.Processor.Ignore.ignore_operation?(state, operation_spec) do
       true
     else
-      operations_table = Utils.ensure_ets_table(:operations)
-
       request_method = OpenAPI.Processor.Operation.request_method(state, operation_spec)
 
       operation_config = Utils.operation_config(profile, request_path, request_method)
@@ -92,6 +99,8 @@ defmodule OpenAPIGenerator.Processor do
 
           {location_integer, name}
         end)
+
+      operations_table = Utils.ensure_ets_table(:operations)
 
       :ets.insert(
         operations_table,
@@ -180,5 +189,113 @@ defmodule OpenAPIGenerator.Processor do
           query_params
         )
     end
+  end
+
+  @impl true
+  def schema_module_and_type(state, %Schema{ref: ref, fields: fields} = schema) do
+    {fields_new, field_renamings} = Enum.map_reduce(fields, %{}, &process_field/2)
+
+    fields_new =
+      fields_new ++
+        Enum.map(@extra_fields, fn {key, type} ->
+          %GeneratorField{
+            old_name: key,
+            type: type,
+            field_function_type: type,
+            enforce: true,
+            extra: true
+          }
+        end)
+
+    schemas_table = Utils.ensure_ets_table(:schemas)
+
+    :ets.insert(
+      schemas_table,
+      {ref, %GeneratorSchema{fields: fields_new, field_renamings: field_renamings}}
+    )
+
+    OpenAPI.Processor.schema_module_and_type(state, schema)
+  end
+
+  defp process_field(
+         %Field{name: name, type: {:enum, enum_values}, required: required, nullable: nullable} =
+           field,
+         acc
+       ) do
+    {enum_values_new, {enum_type, enum_aliases}} =
+      Enum.map_reduce(enum_values, {nil, %{}}, &process_enum_value/2)
+
+    name_new = Naming.normalize_identifier(name)
+    type_new = {:enum, enum_values_new}
+    field_new = %Field{field | name: name_new, type: type_new}
+
+    field_function_type =
+      if name_new != name do
+        {name, {:enum, enum_aliases}}
+      else
+        {:enum, enum_aliases}
+      end
+
+    generator_field = %GeneratorField{
+      field: field_new,
+      old_name: name,
+      enum_aliases: enum_aliases,
+      type: if(enum_type, do: {:union, [type_new, enum_type]}, else: type_new),
+      field_function_type: field_function_type,
+      enforce: required and not nullable
+    }
+
+    acc_new = Map.put(acc, name, name_new)
+    {generator_field, acc_new}
+  end
+
+  defp process_field(
+         %Field{name: name, required: required, nullable: nullable, type: type} = field,
+         acc
+       ) do
+    name_new = Naming.normalize_identifier(name)
+    field_new = %Field{field | name: name_new}
+
+    field_function_type =
+      if name_new != name do
+        {name, type}
+      else
+        type
+      end
+
+    generator_field = %GeneratorField{
+      field: field_new,
+      old_name: name,
+      type: type,
+      field_function_type: field_function_type,
+      enforce: required and not nullable
+    }
+
+    acc_new = Map.put(acc, name, name_new)
+    {generator_field, acc_new}
+  end
+
+  defp process_enum_value(enum_value, {_type, acc}) when is_binary(enum_value) do
+    enum_atom = enum_value |> Naming.normalize_identifier() |> String.to_atom()
+    acc_new = Map.put(acc, enum_atom, enum_value)
+    {enum_atom, {{:string, :generic}, acc_new}}
+  end
+
+  defp process_enum_value(enum_value, {type, acc})
+       when is_number(enum_value) and (is_nil(type) or type in [:integer, :boolean]) do
+    {enum_value, {:number, acc}}
+  end
+
+  defp process_enum_value(enum_value, {type, acc})
+       when is_integer(enum_value) and (is_nil(type) or type in [:boolean]) do
+    {enum_value, {:integer, acc}}
+  end
+
+  defp process_enum_value(enum_value, {type, acc}) when is_boolean(enum_value) do
+    {enum_value, {type || :boolean, acc}}
+  end
+
+  defp process_enum_value(enum_value, {type, acc}) do
+    {enum_value, {type, acc}}
   end
 end
