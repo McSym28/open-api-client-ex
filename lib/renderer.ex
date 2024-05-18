@@ -145,25 +145,32 @@ defmodule OpenAPIGenerator.Renderer do
 
   @impl true
   def render_operation(
-        state,
+        %OpenAPI.Renderer.State{profile: profile} = state,
         %Operation{
           request_path: path,
+          request_method: method,
           request_path_parameters: path_params,
           request_query_parameters: query_params,
           request_header_parameters: header_params
         } = operation
       ) do
+    operation_config = Utils.operation_config(profile, path, method)
+    param_configs = Keyword.get(operation_config, :params, [])
+
     path_new =
       String.replace(path, ~r/\{([[:word:]]+)\}/, fn word ->
         word
         |> String.split(["{", "}"])
         |> Enum.at(1)
-        |> then(&rename_param(state, path, &1, :path))
-        |> then(&"{#{&1}}")
+        |> then(fn name ->
+          {_, config} = List.keyfind(param_configs, {name, :path}, 0, {name, []})
+          name_new = rename_param(config, name)
+          "{#{name_new}}"
+        end)
       end)
 
     process_param_fun = fn %Param{name: name, location: location} = param, acc ->
-      config = param_config(state, operation, param)
+      {_, config} = List.keyfind(param_configs, {name, location}, 0, {name, []})
       name_new = rename_param(config, name)
       param_new = %Param{param | name: name_new}
       acc_new = Map.put(acc, {name_new, location}, %RenderedParam{old_name: name, config: config})
@@ -441,27 +448,8 @@ defmodule OpenAPIGenerator.Renderer do
     {enum_value, {type, acc}}
   end
 
-  defp rename_param(state, operation, name, location) do
-    state
-    |> param_config(operation, name, location)
-    |> rename_param(name)
-  end
-
   defp rename_param(config, name) do
     Keyword.get_lazy(config, :name, fn -> Naming.normalize_identifier(name) end)
-  end
-
-  defp param_config(
-         %OpenAPI.Renderer.State{profile: profile} = _state,
-         %Operation{request_path: path} = _operation,
-         name,
-         location
-       ) do
-    Utils.param_config(profile, path, name, location)
-  end
-
-  defp param_config(state, operation, %Param{name: name, location: location} = _param) do
-    param_config(state, operation, name, location)
   end
 
   defp param_default(%Param{name: name, location: location}, renamings) do

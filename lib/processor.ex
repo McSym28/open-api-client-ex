@@ -16,6 +16,11 @@ defmodule OpenAPIGenerator.Processor do
         } = operation_spec,
         _query_params
       ) do
+    request_method = OpenAPI.Processor.Operation.request_method(state, operation_spec)
+
+    operation_config = Utils.operation_config(profile, request_path, request_method)
+    param_configs = Keyword.get(operation_config, :params, [])
+
     {required_params, optional_params} =
       (params_from_path ++ params_from_operation)
       |> Enum.flat_map(fn param_spec ->
@@ -24,7 +29,7 @@ defmodule OpenAPIGenerator.Processor do
            param} = Param.from_spec(state, param_spec)
 
         if location in [:path, :query, :header] do
-          config = Utils.param_config(profile, request_path, name, location)
+          {_, config} = List.keyfind(param_configs, {name, location}, 0, {name, []})
           name_new = Keyword.get_lazy(config, :name, fn -> Naming.normalize_identifier(name) end)
 
           description_new =

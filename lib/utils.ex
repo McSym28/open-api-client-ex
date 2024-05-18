@@ -1,15 +1,18 @@
 defmodule OpenAPIGenerator.Utils do
-  @spec param_config(atom(), String.t() | URI.t(), String.t(), atom()) :: keyword()
-  def param_config(profile, operation_url, name, location) do
-    with profile_config when is_list(profile_config) <-
-           Application.get_env(:open_api_generator_ex, profile),
-         operations when is_list(operations) <- Keyword.get(profile_config, :operations),
-         config when is_list(config) <-
-           find_param_config(operations, operation_url, name, location) do
-      config
-    else
-      _ -> []
-    end
+  @spec operation_config(atom(), String.t() | URI.t(), OpenAPI.Processor.Operation.method()) ::
+          keyword()
+  def operation_config(profile, url, method) do
+    :open_api_generator_ex
+    |> Application.get_env(profile, [])
+    |> Keyword.get(:operations, [])
+    |> Enum.flat_map(fn {pattern, config} ->
+      if pattern_match?(pattern, url, method) do
+        [config]
+      else
+        []
+      end
+    end)
+    |> Enum.reduce([], &merge_config/2)
   end
 
   @spec ast_function_call(module(), atom(), list()) :: Macro.t()
@@ -18,26 +21,41 @@ defmodule OpenAPIGenerator.Utils do
     {{:., [], [{:__aliases__, [alias: false], [ast_module(module)]}, function]}, [], args}
   end
 
-  defp find_param_config(operations, operation_url, name, location) do
-    Enum.reduce_while(operations, nil, fn {pattern, operation_config}, _ ->
-      with true <- pattern_match?(operation_url, pattern),
-           params <- operation_config[:params],
-           {_, config} <- List.keyfind(params, {name, location}, 0) do
-        {:halt, config}
-      else
-        _ -> {:cont, nil}
-      end
-    end)
-  end
-
-  defp pattern_match?(str, pattern) do
+  defp pattern_match?(pattern, url, method) do
     case pattern do
-      :all -> true
-      %Regex{} = regex -> Regex.match?(regex, str)
-      ^str -> true
-      _ -> false
+      :all ->
+        true
+
+      {%Regex{} = regex, pattern_method}
+      when pattern_method == :all or pattern_method == method ->
+        Regex.match?(regex, url)
+
+      {^url, pattern_method} when pattern_method == :all or pattern_method == method ->
+        true
+
+      _ ->
+        false
     end
   end
+
+  defp merge_config([], list2) when is_list(list2), do: list2
+  defp merge_config(list1, []) when is_list(list1), do: list1
+
+  defp merge_config([{key1, _} | _] = list1, [{key2, _} | _] = list2)
+       when is_atom(key1) and is_atom(key2),
+       do: Keyword.merge(list1, list2, fn _, v1, v2 -> merge_config(v1, v2) end)
+
+  defp merge_config([{_, _} | _] = list1, [{_, _} | _] = list2) do
+    list1
+    |> Map.new()
+    |> merge_config(Map.new(list2))
+    |> Keyword.new()
+  end
+
+  defp merge_config(%{} = map1, %{} = map2),
+    do: Map.merge(map1, map2, fn _, v1, v2 -> merge_config(v1, v2) end)
+
+  defp merge_config(_v1, v2), do: v2
 
   defp ast_module(module) when is_atom(module) do
     module_string = to_string(module)
