@@ -4,6 +4,5 @@ defmodule OpenAPIGenerator.Field do
             enforce: false,
             enum_aliases: %{},
             type: nil,
-            extra: false,
-            field_function_type: nil
+            extra: false
 end

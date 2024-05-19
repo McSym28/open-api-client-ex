@@ -201,7 +201,6 @@ defmodule OpenAPIGenerator.Processor do
           %GeneratorField{
             old_name: key,
             type: type,
-            field_function_type: type,
             enforce: true,
             extra: true
           }
@@ -229,19 +228,11 @@ defmodule OpenAPIGenerator.Processor do
     type_new = {:enum, enum_values_new}
     field_new = %Field{field | name: name_new, type: type_new}
 
-    field_function_type =
-      if name_new != name do
-        {name, {:enum, enum_aliases}}
-      else
-        {:enum, enum_aliases}
-      end
-
     generator_field = %GeneratorField{
       field: field_new,
       old_name: name,
       enum_aliases: enum_aliases,
       type: if(enum_type, do: {:union, [type_new, enum_type]}, else: type_new),
-      field_function_type: field_function_type,
       enforce: required and not nullable
     }
 
@@ -256,18 +247,10 @@ defmodule OpenAPIGenerator.Processor do
     name_new = Naming.normalize_identifier(name)
     field_new = %Field{field | name: name_new}
 
-    field_function_type =
-      if name_new != name do
-        {name, type}
-      else
-        type
-      end
-
     generator_field = %GeneratorField{
       field: field_new,
       old_name: name,
       type: type,
-      field_function_type: field_function_type,
       enforce: required and not nullable
     }
 

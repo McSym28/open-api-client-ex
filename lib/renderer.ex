@@ -89,7 +89,7 @@ defmodule OpenAPIGenerator.Renderer do
 
     Enum.map(fields_result, fn statement ->
       with {:def, def_metadata,
-            [{:__fields__, fields_metadata, [schema_type]}, [do: _field_clauses]]} <-
+            [{:__fields__, fields_metadata, [schema_type]}, [do: field_clauses]]} <-
              statement,
            schema_ref when not is_nil(schema_ref) <-
              Enum.find_value(schemas, fn %Schema{type_name: type_name, ref: ref} ->
@@ -97,14 +97,28 @@ defmodule OpenAPIGenerator.Renderer do
              end),
            [{_, %GeneratorSchema{fields: all_fields}}] <- :ets.lookup(:schemas, schema_ref) do
         field_clauses_new =
-          all_fields
-          |> Enum.map(fn %GeneratorField{
-                           field: %Field{name: name},
-                           field_function_type: field_function_type
-                         } ->
-            {String.to_atom(name), field_function_type}
+          Enum.map(field_clauses, fn {name, type} ->
+            string_name = Atom.to_string(name)
+
+            with %GeneratorField{old_name: old_name, enum_aliases: enum_aliases} <-
+                   Enum.find(all_fields, fn %GeneratorField{field: %Field{name: name}} ->
+                     name == string_name
+                   end) do
+              type_new =
+                case type do
+                  {:enum, _} -> {:enum, enum_aliases}
+                  _ -> type
+                end
+
+              if name == old_name do
+                {name, type_new}
+              else
+                {name, {old_name, type_new}}
+              end
+            else
+              _ -> {name, type}
+            end
           end)
-          |> Enum.sort_by(fn {name, _type} -> name end)
 
         {:def, def_metadata,
          [{:__fields__, fields_metadata, [schema_type]}, [do: field_clauses_new]]}
