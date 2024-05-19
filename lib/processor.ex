@@ -6,6 +6,7 @@ defmodule OpenAPIGenerator.Processor do
   alias OpenAPI.Spec.Path.Parameter, as: ParamSpec
   alias OpenAPI.Spec.Schema, as: SchemaSpec
   alias OpenAPI.Spec.RequestBody
+  alias SchemaSpec.Example
   alias OpenAPIGenerator.Utils
   alias OpenAPIGenerator.Operation, as: GeneratorOperation
   alias OpenAPIGenerator.Param, as: GeneratorParam
@@ -39,9 +40,9 @@ defmodule OpenAPIGenerator.Processor do
       {all_params, param_renamings} =
         (params_from_path ++ params_from_operation)
         |> Enum.reverse()
-        |> Enum.map_reduce(%{}, fn %ParamSpec{required: required} = param, param_renamings ->
+        |> Enum.map_reduce(%{}, fn %ParamSpec{required: required} = param_spec, param_renamings ->
           {_state, %Param{name: name, location: location, description: description} = param} =
-            Param.from_spec(state, param)
+            Param.from_spec(state, param_spec)
 
           {_, config} = List.keyfind(param_configs, {name, location}, 0, {name, []})
 
@@ -78,13 +79,15 @@ defmodule OpenAPIGenerator.Processor do
 
           param_renamings_new = Map.put(param_renamings, {name, location}, name_new)
 
-          generator_param_new = %GeneratorParam{
-            param: param_new,
-            old_name: name,
-            default: default,
-            config: config,
-            static: is_nil(default) and (required or location == :path)
-          }
+          generator_param_new =
+            %GeneratorParam{
+              param: param_new,
+              old_name: name,
+              default: default,
+              config: config,
+              static: is_nil(default) and (required or location == :path)
+            }
+            |> append_param_example(param_spec, state)
 
           {generator_param_new, param_renamings_new}
         end)
@@ -459,5 +462,24 @@ defmodule OpenAPIGenerator.Processor do
     )
 
     field
+  end
+
+  defp append_param_example(param, %ParamSpec{example: example, examples: examples}, state) do
+    param
+    |> append_param_example(example, state)
+    |> then(fn param ->
+      Enum.reduce(examples, param, fn
+        {_key, %Example{value: example}}, param -> append_param_example(param, example, state)
+        _, param -> param
+      end)
+    end)
+  end
+
+  defp append_param_example(param, nil, _state) do
+    param
+  end
+
+  defp append_param_example(%GeneratorParam{examples: examples} = param, example, _state) do
+    %GeneratorParam{param | examples: [example | examples]}
   end
 end
