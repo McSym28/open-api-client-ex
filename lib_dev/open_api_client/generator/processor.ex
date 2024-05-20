@@ -185,7 +185,6 @@ defmodule OpenAPIClient.Generator.Processor do
         else
           result
         end
-        |> String.replace(~r/\s+$/, "\n")
 
       [] ->
         OpenAPI.Processor.Operation.docstring(
