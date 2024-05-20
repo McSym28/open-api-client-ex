@@ -15,6 +15,19 @@ defmodule OpenAPIClient.Generator.Utils do
     |> Enum.reduce([], &merge_config/2)
   end
 
+  @doc """
+  Return AST representation of a function call
+
+  ## Examples
+
+      iex> Application |> #{__MODULE__}.ast_function_call(:get_all_env, []) |> Macro.to_string()
+      "Application.get_all_env()"
+      iex> :application |> #{__MODULE__}.ast_function_call(:get_all_env, []) |> Macro.to_string()
+      ":application.get_all_env()"
+      iex> IO.Stream |> #{__MODULE__}.ast_function_call(:black, []) |> Macro.to_string()
+      "IO.Stream.black()"
+
+  """
   @spec ast_function_call(module(), atom(), list()) :: Macro.t()
   def ast_function_call(module, function, args)
       when is_atom(module) and is_atom(function) and is_list(args) do
