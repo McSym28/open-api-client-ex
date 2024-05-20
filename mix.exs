@@ -12,7 +12,8 @@ defmodule OpenAPIClient.MixProject do
     ]
   end
 
-  defp elixirc_paths(env) when env in ~w(dev test)a, do: ["lib", "lib_dev"]
+  defp elixirc_paths(:test), do: ["lib", "lib_dev", "test/support"]
+  defp elixirc_paths(:dev), do: ["lib", "lib_dev"]
   defp elixirc_paths(_), do: ["lib"]
 
   # Run "mix help compile.app" to learn about applications.

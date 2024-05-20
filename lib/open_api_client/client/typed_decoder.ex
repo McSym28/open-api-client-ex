@@ -233,7 +233,7 @@ defmodule OpenAPIClient.Client.TypedDecoder do
     end
   end
 
-  defp choose_union(_value, types) do
+  defp choose_union(_value, _types) do
     {:error, :unsupported_union}
   end
 end
