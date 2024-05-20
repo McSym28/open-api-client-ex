@@ -30,7 +30,16 @@ defmodule OpenAPIClient.Generator.Renderer do
       end)
 
     file_new = %File{file | schemas: schemas_new}
-    OpenAPI.Renderer.render_schema(state, file_new)
+
+    state
+    |> OpenAPI.Renderer.render_schema(file_new)
+    |> List.insert_at(
+      0,
+      {:@, [end_of_expression: [newlines: 2]],
+       [
+         {:behaviour, [], [{:__aliases__, [alias: false], [:OpenAPIClient, :Schema]}]}
+       ]}
+    )
   end
 
   @impl true
@@ -177,6 +186,7 @@ defmodule OpenAPIClient.Generator.Renderer do
 
     to_map_function =
       [
+        {:@, [], [{:impl, [], [true]}]},
         {:def, [],
          [
            {:to_map, [],
@@ -189,6 +199,7 @@ defmodule OpenAPIClient.Generator.Renderer do
 
     from_map_function =
       [
+        {:@, [], [{:impl, [], [true]}]},
         {:def, [],
          [
            {:from_map, [], [{:=, [], [{:%{}, [], []}, {:map, [], nil}]}]},
@@ -213,45 +224,58 @@ defmodule OpenAPIClient.Generator.Renderer do
 
     to_map_function ++
       from_map_function ++
-      Enum.map(fields_result, fn statement ->
-        with {:def, def_metadata,
-              [{:__fields__, fields_metadata, [schema_type]}, [do: field_clauses]]} <-
-               statement,
-             schema_ref when not is_nil(schema_ref) <-
-               Enum.find_value(schemas, fn %Schema{type_name: type_name, ref: ref} ->
-                 if(schema_type == type_name, do: ref)
-               end),
-             [{_, %GeneratorSchema{fields: all_fields}}] <- :ets.lookup(:schemas, schema_ref) do
-          field_clauses_new =
-            Enum.map(field_clauses, fn {name, type} ->
-              string_name = Atom.to_string(name)
+      Enum.flat_map(
+        fields_result,
+        fn
+          {:@, attribute_metadata,
+           [{:spec, spec_metadata, [{:"::", [], [spec_function_arguments, _]}]}]} ->
+            [
+              {:@, [], [{:impl, [], [true]}]},
+              {:@, attribute_metadata,
+               [
+                 {:spec, spec_metadata,
+                  [
+                    {:"::", [],
+                     [spec_function_arguments, quote(do: %{optional(String.t()) => term()})]}
+                  ]}
+               ]}
+            ]
 
-              with %GeneratorField{old_name: old_name, enum_aliases: enum_aliases} <-
-                     Enum.find(all_fields, fn %GeneratorField{field: %Field{name: name}} ->
-                       name == string_name
-                     end) do
-                type_new =
-                  case type do
-                    {:enum, _} -> {:enum, enum_aliases}
-                    _ -> type
+          expression ->
+            with {:def, def_metadata,
+                  [{:__fields__, fields_metadata, [schema_type]}, [do: field_clauses]]} <-
+                   expression,
+                 schema_ref when not is_nil(schema_ref) <-
+                   Enum.find_value(schemas, fn %Schema{type_name: type_name, ref: ref} ->
+                     if(schema_type == type_name, do: ref)
+                   end),
+                 [{_, %GeneratorSchema{fields: all_fields}}] <- :ets.lookup(:schemas, schema_ref) do
+              field_clauses_new =
+                Enum.map(field_clauses, fn {name, type} ->
+                  string_name = Atom.to_string(name)
+
+                  with %GeneratorField{old_name: old_name} <-
+                         Enum.find(all_fields, fn %GeneratorField{field: %Field{name: name}} ->
+                           name == string_name
+                         end) do
+                    {old_name, type}
+                  else
+                    _ -> {name, type}
                   end
+                end)
 
-                if name == old_name do
-                  {name, type_new}
-                else
-                  {name, {old_name, type_new}}
-                end
-              else
-                _ -> {name, type}
-              end
-            end)
-
-          {:def, def_metadata,
-           [{:__fields__, fields_metadata, [schema_type]}, [do: field_clauses_new]]}
-        else
-          _ -> statement
+              [
+                {:def, def_metadata,
+                 [
+                   {:__fields__, fields_metadata, [schema_type]},
+                   [do: {:%{}, [], field_clauses_new}]
+                 ]}
+              ]
+            else
+              _ -> [expression]
+            end
         end
-      end)
+      )
   end
 
   @impl true
@@ -383,12 +407,12 @@ defmodule OpenAPIClient.Generator.Renderer do
         {:def, def_metadata,
          [
            {^function_name, _, _} = function_header,
-           [do: {do_tag, do_metadata, do_statements}]
+           [do: {do_tag, do_metadata, do_expressions}]
          ]} = OpenAPI.Renderer.Operation.render_function(state, operation_new)
 
-        do_statements_new =
-          Enum.flat_map(do_statements, fn
-            {:=, _, [{:client, _, _} | _]} = client_statement ->
+        do_expressions_new =
+          Enum.flat_map(do_expressions, fn
+            {:=, _, [{:client, _, _} | _]} = client_expression ->
               param_assignments =
                 all_params
                 |> Enum.flat_map(fn
@@ -417,9 +441,9 @@ defmodule OpenAPIClient.Generator.Renderer do
                     []
                 end)
 
-              [client_statement | param_assignments]
+              [client_expression | param_assignments]
 
-            {:=, _, [{:query, _, _} | _]} = _query_statement ->
+            {:=, _, [{:query, _, _} | _]} = _query_expression ->
               query_value =
                 all_params
                 |> Enum.filter(fn %GeneratorParam{param: %Param{location: location}} ->
@@ -433,10 +457,10 @@ defmodule OpenAPIClient.Generator.Renderer do
                 []
               end
 
-            {{:., _, [{:client, _, _}, :request]} = dot_statement, dot_metadata,
+            {{:., _, [{:client, _, _}, :request]} = dot_expression, dot_metadata,
              [
                {:%{}, map_metadata, map_arguments}
-             ]} = call_statement ->
+             ]} = call_expression ->
               headers_value =
                 all_params
                 |> Enum.filter(fn %GeneratorParam{param: %Param{location: location}} ->
@@ -451,22 +475,22 @@ defmodule OpenAPIClient.Generator.Renderer do
                     arg -> [arg]
                   end)
 
-                call_statement_new =
-                  {dot_statement, dot_metadata, [{:%{}, map_metadata, map_arguments_new}]}
+                call_expression_new =
+                  {dot_expression, dot_metadata, [{:%{}, map_metadata, map_arguments_new}]}
 
-                [{:=, [], [{:headers, [], nil}, headers_value]}, call_statement_new]
+                [{:=, [], [{:headers, [], nil}, headers_value]}, call_expression_new]
               else
-                [call_statement]
+                [call_expression]
               end
 
-            statement ->
-              [statement]
+            expression ->
+              [expression]
           end)
 
         {:def, def_metadata,
          [
            function_header,
-           [do: {do_tag, do_metadata, do_statements_new}]
+           [do: {do_tag, do_metadata, do_expressions_new}]
          ]}
 
       [] ->
