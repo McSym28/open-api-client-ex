@@ -51,8 +51,8 @@ defmodule OpenAPIClient.Client.TypedDecoder do
 
   """
   @spec decode(term(), OpenAPIClient.Schema.type()) :: {:ok, term()} | {:error, term()}
-  def decode(response, type) do
-    do_decode(response, type)
+  def decode(value, type) do
+    do_decode(value, type)
   end
 
   defp do_decode(nil, _), do: {:ok, nil}
@@ -106,7 +106,12 @@ defmodule OpenAPIClient.Client.TypedDecoder do
   defp do_decode(value, {:string, _}) when not is_binary(value),
     do: {:error, :invalid_string}
 
-  defp do_decode(value, {:union, types}), do: do_decode(value, choose_union(value, types))
+  defp do_decode(value, {:union, types}) do
+    case choose_union(value, types) do
+      {:ok, type} -> do_decode(value, type)
+      {:error, _} = error -> error
+    end
+  end
 
   defp do_decode(value, [_type]) when not is_list(value), do: {:error, :invalid_list}
 
@@ -162,30 +167,34 @@ defmodule OpenAPIClient.Client.TypedDecoder do
   # Union Type Handlers
   #
 
-  defp choose_union(nil, [_type, :null]), do: :null
-  defp choose_union(nil, [:null, _type]), do: :null
-  defp choose_union(_value, [type, :null]), do: type
-  defp choose_union(_value, [:null, type]), do: type
+  defp choose_union(nil, [_type, :null]), do: {:ok, :null}
+  defp choose_union(nil, [:null, _type]), do: {:ok, :null}
+  defp choose_union(_value, [type, :null]), do: {:ok, type}
+  defp choose_union(_value, [:null, type]), do: {:ok, type}
 
-  defp choose_union(%{}, [:map, {:string, :generic}]), do: :map
-  defp choose_union(_value, [:map, {:string, :generic}]), do: {:string, :generic}
+  defp choose_union(%{}, [:map, {:string, :generic}]), do: {:ok, :map}
+  defp choose_union(_value, [:map, {:string, :generic}]), do: {:ok, {:string, :generic}}
 
-  defp choose_union(value, [:number, {:string, :generic}]) when is_number(value), do: :number
-  defp choose_union(_value, [:number, {:string, :generic}]), do: :string
+  defp choose_union(value, [:number, {:string, :generic}]) when is_number(value),
+    do: {:ok, :number}
 
-  defp choose_union(value, [{:string, :generic}, [string: :generic]]) do
+  defp choose_union(_value, [:number, {:string, :generic}]), do: {:ok, {:string, :generic}}
+
+  defp choose_union(value, [{:string, :generic}, [string: :generic]])
+       when is_list(value) or is_binary(value) do
     cond do
-      is_list(value) -> [string: :generic]
-      is_binary(value) -> {:string, :generic}
+      is_list(value) -> {:ok, [string: :generic]}
+      is_binary(value) -> {:ok, {:string, :generic}}
     end
   end
 
-  defp choose_union(value, [:integer, {:string, :generic}, [string: :generic], :null]) do
+  defp choose_union(value, [:integer, {:string, :generic}, [string: :generic], :null])
+       when is_nil(value) or is_integer(value) or is_binary(value) or is_list(value) do
     cond do
-      is_nil(value) -> :null
-      is_integer(value) -> :integer
-      is_binary(value) -> {:string, :generic}
-      is_list(value) -> [string: :generic]
+      is_nil(value) -> {:ok, :null}
+      is_integer(value) -> {:ok, :integer}
+      is_binary(value) -> {:ok, {:string, :generic}}
+      is_list(value) -> {:ok, [string: :generic]}
     end
   end
 
@@ -193,11 +202,12 @@ defmodule OpenAPIClient.Client.TypedDecoder do
          :map,
          {:string, :generic},
          [{:string, :generic}]
-       ]) do
+       ])
+       when is_binary(value) or is_map(value) or is_list(value) do
     cond do
-      is_binary(value) -> {:string, :generic}
-      is_map(value) -> :map
-      is_list(value) -> [{:string, :generic}]
+      is_binary(value) -> {:ok, {:string, :generic}}
+      is_map(value) -> {:ok, :map}
+      is_list(value) -> {:ok, [string: :generic]}
     end
   end
 
@@ -206,23 +216,24 @@ defmodule OpenAPIClient.Client.TypedDecoder do
          {:string, :generic},
          [:map],
          [{:string, :generic}]
-       ]) do
+       ])
+       when is_binary(value) or is_map(value) or is_list(value) do
     cond do
       is_binary(value) ->
-        {:string, :generic}
+        {:ok, {:string, :generic}}
 
       is_map(value) ->
-        :map
+        {:ok, :map}
 
       is_list(value) ->
         case value do
-          [%{} | _] -> [:map]
-          _else -> [{:string, :generic}]
+          [%{} | _] -> {:ok, [:map]}
+          _else -> {:ok, [string: :generic]}
         end
     end
   end
 
   defp choose_union(_value, types) do
-    raise "TypedDecoder: Unable to decode union type #{inspect(types)}; not implemented"
+    {:error, :unsupported_union}
   end
 end
