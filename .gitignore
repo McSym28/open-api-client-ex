@@ -20,7 +20,7 @@ erl_crash.dump
 *.ez
 
 # Ignore package tarball (built via "mix hex.build").
-open_api_generator_ex-*.tar
+open_api_client_ex-*.tar
 
 # Temporary files, for example, from tests.
 /tmp/

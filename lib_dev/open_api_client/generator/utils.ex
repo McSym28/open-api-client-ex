@@ -1,8 +1,8 @@
-defmodule OpenAPIGenerator.Utils do
+defmodule OpenAPIClient.Generator.Utils do
   @spec operation_config(atom(), String.t() | URI.t(), OpenAPI.Processor.Operation.method()) ::
           keyword()
   def operation_config(profile, url, method) do
-    :open_api_generator_ex
+    :open_api_client_ex
     |> Application.get_env(profile, [])
     |> Keyword.get(:operations, [])
     |> Enum.flat_map(fn {pattern, config} ->

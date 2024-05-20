@@ -1,4 +1,4 @@
-defmodule OpenAPIGenerator.Processor do
+defmodule OpenAPIClient.Generator.Processor do
   use OpenAPI.Processor
   alias OpenAPI.Processor.{Naming, Operation.Param, Schema}
   alias Schema.Field
@@ -7,11 +7,11 @@ defmodule OpenAPIGenerator.Processor do
   alias OpenAPI.Spec.Schema, as: SchemaSpec
   alias OpenAPI.Spec.RequestBody
   alias SchemaSpec.Example
-  alias OpenAPIGenerator.Utils
-  alias OpenAPIGenerator.Operation, as: GeneratorOperation
-  alias OpenAPIGenerator.Param, as: GeneratorParam
-  alias OpenAPIGenerator.Schema, as: GeneratorSchema
-  alias OpenAPIGenerator.Field, as: GeneratorField
+  alias OpenAPIClient.Generator.Utils
+  alias OpenAPIClient.Generator.Operation, as: GeneratorOperation
+  alias OpenAPIClient.Generator.Param, as: GeneratorParam
+  alias OpenAPIClient.Generator.Schema, as: GeneratorSchema
+  alias OpenAPIClient.Generator.Field, as: GeneratorField
   require Logger
 
   @extra_fields :oapi_generator

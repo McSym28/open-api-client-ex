@@ -1,4 +1,4 @@
-defmodule OpenAPIGenerator.Field do
+defmodule OpenAPIClient.Generator.Field do
   defstruct field: nil,
             old_name: nil,
             enforce: false,

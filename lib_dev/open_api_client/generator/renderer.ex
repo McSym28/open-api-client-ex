@@ -1,14 +1,14 @@
-defmodule OpenAPIGenerator.Renderer do
+defmodule OpenAPIClient.Generator.Renderer do
   use OpenAPI.Renderer
   alias OpenAPI.Renderer.{File, Util}
   alias OpenAPI.Processor.{Operation, Schema}
   alias Schema.Field
   alias Operation.Param
-  alias OpenAPIGenerator.Utils
-  alias OpenAPIGenerator.Operation, as: GeneratorOperation
-  alias OpenAPIGenerator.Param, as: GeneratorParam
-  alias OpenAPIGenerator.Schema, as: GeneratorSchema
-  alias OpenAPIGenerator.Field, as: GeneratorField
+  alias OpenAPIClient.Generator.Utils
+  alias OpenAPIClient.Generator.Operation, as: GeneratorOperation
+  alias OpenAPIClient.Generator.Param, as: GeneratorParam
+  alias OpenAPIClient.Generator.Schema, as: GeneratorSchema
+  alias OpenAPIClient.Generator.Field, as: GeneratorField
 
   @impl true
   def render_schema(state, %File{schemas: schemas} = file) do
