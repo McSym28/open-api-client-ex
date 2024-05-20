@@ -18,7 +18,7 @@ defmodule OpenAPIGenerator.Utils do
   @spec ast_function_call(module(), atom(), list()) :: Macro.t()
   def ast_function_call(module, function, args)
       when is_atom(module) and is_atom(function) and is_list(args) do
-    {{:., [], [{:__aliases__, [alias: false], [ast_module(module)]}, function]}, [], args}
+    {{:., [], [ast_module(module), function]}, [], args}
   end
 
   @spec ensure_ets_table(atom()) :: :ets.table()
@@ -66,12 +66,13 @@ defmodule OpenAPIGenerator.Utils do
   defp merge_config(_v1, v2), do: v2
 
   defp ast_module(module) when is_atom(module) do
-    module_string = to_string(module)
+    case Macro.classify_atom(module) do
+      :identifier ->
+        module
 
-    if String.starts_with?(module_string, "Elixir.") do
-      module_string |> String.trim_leading("Elixir.") |> String.to_existing_atom()
-    else
-      module
+      :alias ->
+        {:__aliases__, [alias: false],
+         module |> Module.split() |> Enum.map(&String.to_existing_atom/1)}
     end
   end
 end
