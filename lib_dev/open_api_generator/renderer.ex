@@ -87,45 +87,171 @@ defmodule OpenAPIGenerator.Renderer do
   def render_schema_field_function(state, schemas) do
     fields_result = OpenAPI.Renderer.render_schema_field_function(state, schemas)
 
-    Enum.map(fields_result, fn statement ->
-      with {:def, def_metadata,
-            [{:__fields__, fields_metadata, [schema_type]}, [do: field_clauses]]} <-
-             statement,
-           schema_ref when not is_nil(schema_ref) <-
-             Enum.find_value(schemas, fn %Schema{type_name: type_name, ref: ref} ->
-               if(schema_type == type_name, do: ref)
-             end),
-           [{_, %GeneratorSchema{fields: all_fields}}] <- :ets.lookup(:schemas, schema_ref) do
-        field_clauses_new =
-          Enum.map(field_clauses, fn {name, type} ->
-            string_name = Atom.to_string(name)
+    {to_map_arguments, to_map_struct_clauses, from_map_struct_clauses} =
+      schemas
+      |> Enum.reduce({[], [], []}, fn %Schema{ref: ref} = _schema, acc ->
+        case :ets.lookup(:schemas, ref) do
+          [{_, %GeneratorSchema{fields: all_fields}}] ->
+            all_fields
+            |> Enum.sort_by(fn %GeneratorField{field: %Field{name: name}} -> name end, :desc)
+            |> Enum.reduce(acc, fn
+              %GeneratorField{
+                field: %Field{name: name, type: type},
+                old_name: old_name,
+                enum_aliases: enum_aliases
+              },
+              {to_map_arguments, to_map_struct_clauses, from_map_struct_clauses} ->
+                {to_map_value, from_map_value} =
+                  if map_size(enum_aliases) == 0 do
+                    {{String.to_atom(name), [], nil}, {String.to_atom(name), [], nil}}
+                  else
+                    {to_enum_clauses, from_enum_clauses} =
+                      enum_aliases
+                      |> Enum.sort_by(fn {_enum_atom, enum_value} -> enum_value end, :desc)
+                      |> Enum.reduce({[], []}, fn {enum_atom, enum_value},
+                                                  {to_enum_clauses, from_enum_clauses} ->
+                        {
+                          [{:->, [], [[enum_atom], enum_value]} | to_enum_clauses],
+                          [{:->, [], [[enum_value], enum_atom]} | from_enum_clauses]
+                        }
+                      end)
 
-            with %GeneratorField{old_name: old_name, enum_aliases: enum_aliases} <-
-                   Enum.find(all_fields, fn %GeneratorField{field: %Field{name: name}} ->
-                     name == string_name
-                   end) do
-              type_new =
-                case type do
-                  {:enum, _} -> {:enum, enum_aliases}
-                  _ -> type
+                    to_enum_clauses =
+                      to_enum_clauses ++ [{:->, [], [[{:key, [], nil}], {:key, [], nil}]}]
+
+                    from_enum_clauses =
+                      from_enum_clauses ++ [{:->, [], [[{:key, [], nil}], {:key, [], nil}]}]
+
+                    case type do
+                      {:array, _} ->
+                        {
+                          {{:., [], [{:__aliases__, [alias: false], [:Enum]}, :map]}, [],
+                           [
+                             {String.to_atom(name), [], nil},
+                             {:fn, [], to_enum_clauses}
+                           ]},
+                          {{:., [], [{:__aliases__, [alias: false], [:Enum]}, :map]}, [],
+                           [
+                             {String.to_atom(name), [], nil},
+                             {:fn, [], from_enum_clauses}
+                           ]}
+                        }
+
+                      _ ->
+                        {
+                          {:case, [],
+                           [
+                             {String.to_atom(name), [], nil},
+                             [do: to_enum_clauses]
+                           ]},
+                          {:case, [],
+                           [
+                             {String.to_atom(name), [], nil},
+                             [do: from_enum_clauses]
+                           ]}
+                        }
+                    end
+                  end
+
+                {
+                  [{String.to_atom(name), {String.to_atom(name), [], nil}} | to_map_arguments],
+                  [{old_name, to_map_value} | to_map_struct_clauses],
+                  [
+                    {:->, [],
+                     [
+                       [{old_name, {String.to_atom(name), [], nil}}],
+                       [{String.to_atom(name), from_map_value}]
+                     ]}
+                    | from_map_struct_clauses
+                  ]
+                }
+
+              _, acc ->
+                acc
+            end)
+
+          [] ->
+            acc
+        end
+      end)
+
+    to_map_function =
+      [
+        {:def, [],
+         [
+           {:to_map, [],
+            [
+              {:%, [], [{:__MODULE__, [], nil}, {:%{}, [], to_map_arguments}]}
+            ]},
+           [do: {:%{}, [], to_map_struct_clauses}]
+         ]}
+      ]
+
+    from_map_function =
+      [
+        {:def, [],
+         [
+           {:from_map, [], [{:=, [], [{:%{}, [], []}, {:map, [], nil}]}]},
+           [
+             do:
+               {:__block__, [],
+                [
+                  {:=, [],
+                   [
+                     {:fields, [], nil},
+                     {{:., [], [{:__aliases__, [alias: false], [:Enum]}, :flat_map]}, [],
+                      [
+                        {:map, [], nil},
+                        {:fn, [], from_map_struct_clauses ++ [{:->, [], [[{:_, [], nil}], []]}]}
+                      ]}
+                   ]},
+                  {:struct, [], [{:__MODULE__, [], nil}, {:fields, [], nil}]}
+                ]}
+           ]
+         ]}
+      ]
+
+    to_map_function ++
+      from_map_function ++
+      Enum.map(fields_result, fn statement ->
+        with {:def, def_metadata,
+              [{:__fields__, fields_metadata, [schema_type]}, [do: field_clauses]]} <-
+               statement,
+             schema_ref when not is_nil(schema_ref) <-
+               Enum.find_value(schemas, fn %Schema{type_name: type_name, ref: ref} ->
+                 if(schema_type == type_name, do: ref)
+               end),
+             [{_, %GeneratorSchema{fields: all_fields}}] <- :ets.lookup(:schemas, schema_ref) do
+          field_clauses_new =
+            Enum.map(field_clauses, fn {name, type} ->
+              string_name = Atom.to_string(name)
+
+              with %GeneratorField{old_name: old_name, enum_aliases: enum_aliases} <-
+                     Enum.find(all_fields, fn %GeneratorField{field: %Field{name: name}} ->
+                       name == string_name
+                     end) do
+                type_new =
+                  case type do
+                    {:enum, _} -> {:enum, enum_aliases}
+                    _ -> type
+                  end
+
+                if name == old_name do
+                  {name, type_new}
+                else
+                  {name, {old_name, type_new}}
                 end
-
-              if name == old_name do
-                {name, type_new}
               else
-                {name, {old_name, type_new}}
+                _ -> {name, type}
               end
-            else
-              _ -> {name, type}
-            end
-          end)
+            end)
 
-        {:def, def_metadata,
-         [{:__fields__, fields_metadata, [schema_type]}, [do: field_clauses_new]]}
-      else
-        _ -> statement
-      end
-    end)
+          {:def, def_metadata,
+           [{:__fields__, fields_metadata, [schema_type]}, [do: field_clauses_new]]}
+        else
+          _ -> statement
+        end
+      end)
   end
 
   @impl true

@@ -275,6 +275,31 @@ defmodule OpenAPIGenerator.Processor do
   end
 
   defp process_field(
+         %Field{
+           name: name,
+           type: {:array, {:enum, enum_values}},
+           required: required,
+           nullable: nullable
+         } =
+           field
+       ) do
+    {enum_values_new, {enum_type, enum_aliases}} =
+      Enum.map_reduce(enum_values, {nil, %{}}, &process_enum_value/2)
+
+    name_new = Naming.normalize_identifier(name)
+    type_new = {:array, {:enum, enum_values_new}}
+    field_new = %Field{field | name: name_new, type: type_new}
+
+    %GeneratorField{
+      field: field_new,
+      old_name: name,
+      enum_aliases: enum_aliases,
+      type: if(enum_type, do: {:array, {:union, [type_new, enum_type]}}, else: type_new),
+      enforce: required and not nullable
+    }
+  end
+
+  defp process_field(
          %Field{name: name, required: required, nullable: nullable, type: type} = field
        ) do
     name_new = Naming.normalize_identifier(name)
