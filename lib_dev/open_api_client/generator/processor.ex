@@ -156,7 +156,13 @@ defmodule OpenAPIClient.Generator.Processor do
               []
           end
 
-        client_param = [
+        additional_dynamic_params = [
+          %Param{
+            description: "Request's base URL. Default value is taken from `@base_url`",
+            location: :header,
+            name: "base_url",
+            value_type: :null
+          },
           %Param{
             description:
               "Client module for making a request. Default value is taken from `@default_client`",
@@ -167,7 +173,7 @@ defmodule OpenAPIClient.Generator.Processor do
         ]
 
         static_params = static_params ++ body_param
-        dynamic_params = dynamic_params ++ client_param
+        dynamic_params = dynamic_params ++ additional_dynamic_params
 
         result =
           OpenAPI.Processor.Operation.docstring(

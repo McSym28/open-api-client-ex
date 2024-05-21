@@ -11,6 +11,25 @@ defmodule OpenAPIClient.Generator.Renderer do
   alias OpenAPIClient.Generator.Field, as: GeneratorField
 
   @impl true
+  def render_default_client(%OpenAPI.Renderer.State{profile: profile} = state, file) do
+    case OpenAPI.Renderer.render_default_client(state, file) do
+      {:@, _, [{:default_client, _, _}] = default_client_expression} ->
+        base_url =
+          :open_api_client_ex |> Application.fetch_env!(profile) |> Keyword.fetch!(:base_url)
+
+        [
+          {:@, [], default_client_expression}
+          | [
+              {:@, [end_of_expression: [newlines: 2]], [{:base_url, [], [base_url]}]}
+            ]
+        ]
+
+      result ->
+        result
+    end
+  end
+
+  @impl true
   def render_schema(state, %File{schemas: schemas} = file) do
     schemas_new =
       Enum.map(schemas, fn %Schema{ref: ref} = schema ->
@@ -409,7 +428,10 @@ defmodule OpenAPIClient.Generator.Renderer do
           |> Enum.map(fn %Param{name: name, value_type: type} ->
             {String.to_atom(name), Util.to_type(state, type)}
           end)
-          |> Kernel.++([{:client, quote(do: module())}])
+          |> Kernel.++([
+            {:base_url, quote(do: String.t() | URI.t())},
+            {:client, quote(do: module())}
+          ])
           |> Enum.reverse()
           |> Enum.reduce(fn type, expression ->
             {:|, [], [type, expression]}
@@ -494,7 +516,19 @@ defmodule OpenAPIClient.Generator.Renderer do
                     []
                 end)
 
-              [client_expression | param_assignments]
+              base_url_expression =
+                {:=, [],
+                 [
+                   {:base_url, [], nil},
+                   {:||, [],
+                    [
+                      {{:., [from_brackets: true], [Access, :get]}, [from_brackets: true],
+                       [{:opts, [], nil}, :base_url]},
+                      {:@, [], [{:base_url, [], nil}]}
+                    ]}
+                 ]}
+
+              [client_expression, base_url_expression | param_assignments]
 
             {:=, _, [{:query, _, _} | _]} = _query_expression ->
               query_value =
@@ -527,7 +561,13 @@ defmodule OpenAPIClient.Generator.Renderer do
                     {[{:request_url, value}], acc}
 
                   {:method, value}, acc ->
-                    {[{:request_method, value}], acc}
+                    {[
+                       {:request_method, value}
+                       | if(headers_value,
+                           do: [{:request_headers, {:headers, [], nil}}],
+                           else: []
+                         )
+                     ], acc}
 
                   {:body, value}, acc ->
                     {[{:request_body, value}], acc}
@@ -563,12 +603,7 @@ defmodule OpenAPIClient.Generator.Renderer do
                      )}
                 end)
 
-              operation_assigns =
-                if headers_value do
-                  operation_assigns ++ [{:request_headers, {:headers, [], nil}}]
-                else
-                  operation_assigns
-                end
+              operation_assigns = [{:request_base_url, {:base_url, [], nil}} | operation_assigns]
 
               operation =
                 Enum.reduce(
@@ -589,11 +624,14 @@ defmodule OpenAPIClient.Generator.Renderer do
                      ]}
                   end
                 )
-              [{:|>, [],
+
               [
-                operation,
-                Utils.ast_function_call(OpenAPIClient.Client, :perform, [])
-              ]}]
+                {:|>, [],
+                 [
+                   operation,
+                   Utils.ast_function_call(OpenAPIClient.Client, :perform, [])
+                 ]}
+              ]
 
             expression ->
               [expression]
