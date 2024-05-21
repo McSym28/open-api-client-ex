@@ -93,7 +93,10 @@ defmodule OpenAPIClient.Generator.Renderer do
   end
 
   @impl true
-  def render_schema_field_function(state, schemas) do
+  def render_schema_field_function(
+        %OpenAPI.Renderer.State{schemas: state_schemas} = state,
+        schemas
+      ) do
     fields_result = OpenAPI.Renderer.render_schema_field_function(state, schemas)
 
     {to_map_arguments, to_map_struct_clauses, from_map_struct_clauses} =
@@ -111,55 +114,107 @@ defmodule OpenAPIClient.Generator.Renderer do
               },
               {to_map_arguments, to_map_struct_clauses, from_map_struct_clauses} ->
                 {to_map_value, from_map_value} =
-                  if map_size(enum_aliases) == 0 do
-                    {{String.to_atom(name), [], nil}, {String.to_atom(name), [], nil}}
-                  else
-                    {to_enum_clauses, from_enum_clauses} =
-                      enum_aliases
-                      |> Enum.sort_by(fn {_enum_atom, enum_value} -> enum_value end, :desc)
-                      |> Enum.reduce({[], []}, fn {enum_atom, enum_value},
-                                                  {to_enum_clauses, from_enum_clauses} ->
-                        {
-                          [{:->, [], [[enum_atom], enum_value]} | to_enum_clauses],
-                          [{:->, [], [[enum_value], enum_atom]} | from_enum_clauses]
-                        }
-                      end)
+                  case type do
+                    child_schema_ref when is_reference(child_schema_ref) ->
+                      %Schema{module_name: child_schema_module} =
+                        Map.get(state_schemas, child_schema_ref)
 
-                    to_enum_clauses =
-                      to_enum_clauses ++ [{:->, [], [[{:key, [], nil}], {:key, [], nil}]}]
+                      {
+                        Utils.ast_function_call(child_schema_module, :to_map, [
+                          {String.to_atom(name), [], nil}
+                        ]),
+                        Utils.ast_function_call(child_schema_module, :from_map, [
+                          {String.to_atom(name), [], nil}
+                        ])
+                      }
 
-                    from_enum_clauses =
-                      from_enum_clauses ++ [{:->, [], [[{:key, [], nil}], {:key, [], nil}]}]
+                    {:array, child_schema_ref} when is_reference(child_schema_ref) ->
+                      %Schema{module_name: child_schema_module} =
+                        Map.get(state_schemas, child_schema_ref)
 
-                    case type do
-                      {:array, _} ->
-                        {
-                          {{:., [], [{:__aliases__, [alias: false], [:Enum]}, :map]}, [],
-                           [
-                             {String.to_atom(name), [], nil},
-                             {:fn, [], to_enum_clauses}
-                           ]},
-                          {{:., [], [{:__aliases__, [alias: false], [:Enum]}, :map]}, [],
-                           [
-                             {String.to_atom(name), [], nil},
-                             {:fn, [], from_enum_clauses}
-                           ]}
-                        }
+                      {to_map_function_header, _, _} =
+                        Utils.ast_function_call(child_schema_module, :to_map, [])
 
-                      _ ->
-                        {
-                          {:case, [],
-                           [
-                             {String.to_atom(name), [], nil},
-                             [do: to_enum_clauses]
-                           ]},
-                          {:case, [],
-                           [
-                             {String.to_atom(name), [], nil},
-                             [do: from_enum_clauses]
-                           ]}
-                        }
-                    end
+                      {from_map_function_header, _, _} =
+                        Utils.ast_function_call(child_schema_module, :from_map, [])
+
+                      {
+                        {{:., [], [{:__aliases__, [alias: false], [:Enum]}, :map]}, [],
+                         [
+                           {String.to_atom(name), [], nil},
+                           {:&, [],
+                            [
+                              {:/, [],
+                               [
+                                 {to_map_function_header, [no_parens: true], []},
+                                 1
+                               ]}
+                            ]}
+                         ]},
+                        {{:., [], [{:__aliases__, [alias: false], [:Enum]}, :map]}, [],
+                         [
+                           {String.to_atom(name), [], nil},
+                           {:&, [],
+                            [
+                              {:/, [],
+                               [
+                                 {from_map_function_header, [no_parens: true], []},
+                                 1
+                               ]}
+                            ]}
+                         ]}
+                      }
+
+                    _ when map_size(enum_aliases) == 0 ->
+                      {{String.to_atom(name), [], nil}, {String.to_atom(name), [], nil}}
+
+                    _ ->
+                      {to_enum_clauses, from_enum_clauses} =
+                        enum_aliases
+                        |> Enum.sort_by(fn {_enum_atom, enum_value} -> enum_value end, :desc)
+                        |> Enum.reduce({[], []}, fn {enum_atom, enum_value},
+                                                    {to_enum_clauses, from_enum_clauses} ->
+                          {
+                            [{:->, [], [[enum_atom], enum_value]} | to_enum_clauses],
+                            [{:->, [], [[enum_value], enum_atom]} | from_enum_clauses]
+                          }
+                        end)
+
+                      to_enum_clauses =
+                        to_enum_clauses ++ [{:->, [], [[{:key, [], nil}], {:key, [], nil}]}]
+
+                      from_enum_clauses =
+                        from_enum_clauses ++ [{:->, [], [[{:key, [], nil}], {:key, [], nil}]}]
+
+                      case type do
+                        {:array, _} ->
+                          {
+                            {{:., [], [{:__aliases__, [alias: false], [:Enum]}, :map]}, [],
+                             [
+                               {String.to_atom(name), [], nil},
+                               {:fn, [], to_enum_clauses}
+                             ]},
+                            {{:., [], [{:__aliases__, [alias: false], [:Enum]}, :map]}, [],
+                             [
+                               {String.to_atom(name), [], nil},
+                               {:fn, [], from_enum_clauses}
+                             ]}
+                          }
+
+                        _ ->
+                          {
+                            {:case, [],
+                             [
+                               {String.to_atom(name), [], nil},
+                               [do: to_enum_clauses]
+                             ]},
+                            {:case, [],
+                             [
+                               {String.to_atom(name), [], nil},
+                               [do: from_enum_clauses]
+                             ]}
+                          }
+                      end
                   end
 
                 {

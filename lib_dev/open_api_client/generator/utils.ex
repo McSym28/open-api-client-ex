@@ -84,8 +84,7 @@ defmodule OpenAPIClient.Generator.Utils do
         module
 
       :alias ->
-        {:__aliases__, [alias: false],
-         module |> Module.split() |> Enum.map(&String.to_existing_atom/1)}
+        {:__aliases__, [alias: false], module |> Module.split() |> Enum.map(&String.to_atom/1)}
     end
   end
 end
