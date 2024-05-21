@@ -1,4 +1,11 @@
 defmodule OpenAPIClient.Client.Steps.ResponseBodyTypedDecoder do
+  @moduledoc """
+  `Pluggable` step implementation for decoding `Operation.response_body` using types provided by the `oapi_generator` library
+
+  The response type is selected based on the `Operation.response_status_code` and `Operation.response_types`
+
+  """
+
   @behaviour Pluggable
 
   alias OpenAPIClient.Client.Operation
