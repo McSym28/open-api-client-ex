@@ -28,7 +28,8 @@ defmodule OpenAPIClient.MixProject do
     [
       {:oapi_generator, git: "../../../open-api-generator", branch: "behaviour_impl"},
       {:pluggable, "~> 1.1"},
-      {:jason, "~> 1.4", only: [:dev, :test], runtime: false}
+      {:jason, "~> 1.4", only: [:dev, :test], runtime: false},
+      {:httpoison, "~> 2.2", only: [:dev, :test], runtime: false}
     ]
   end
 end

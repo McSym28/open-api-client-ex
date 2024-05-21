@@ -1,5 +1,6 @@
 defmodule OpenAPIClient.Client.Operation do
   @type method :: :get | :put | :post | :delete | :options | :head | :patch | :trace
+  @type query_params :: %{String.t() => String.t()}
   @type headers :: %{String.t() => String.t()}
   @type request_type :: {String.t(), OpenAPIClient.Schema.type()}
   @type response_type :: {integer(), OpenAPIClient.Schema.type() | nil}
@@ -8,8 +9,10 @@ defmodule OpenAPIClient.Client.Operation do
   @type t :: %__MODULE__{
           halted: boolean(),
           assigns: map(),
+          request_base_url: String.t() | URI.t(),
           request_url: String.t() | URI.t(),
           request_method: method(),
+          request_query_params: query_params(),
           request_headers: headers(),
           request_body: term() | nil,
           request_types: [request_type()],
@@ -21,8 +24,9 @@ defmodule OpenAPIClient.Client.Operation do
         }
 
   @derive Pluggable.Token
-  @enforce_keys [:halted, :assigns, :request_url, :request_method]
+  @enforce_keys [:halted, :assigns, :request_base_url, :request_url, :request_method]
   defstruct [
+    :request_base_url,
     :request_url,
     :request_method,
     :request_body,
@@ -31,8 +35,9 @@ defmodule OpenAPIClient.Client.Operation do
     :result,
     halted: false,
     assigns: %{private: %{}},
-    request_types: [],
+    request_query_params: %{},
     request_headers: %{},
+    request_types: [],
     response_headers: %{},
     response_types: []
   ]
@@ -69,7 +74,7 @@ defmodule OpenAPIClient.Client.Operation do
 
   @spec put_private(t(), atom(), term()) :: t()
   def put_private(operation, key, value) do
-    put_in(operation, [Access.key!(:assigns), Access.key(:private, %{}), key], value)
+    put_in(operation, [Access.key!(:assigns), :private, key], value)
   end
 
   defp get_header(headers, header_name) do
