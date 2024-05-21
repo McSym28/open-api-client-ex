@@ -1,4 +1,6 @@
 defmodule OpenAPIClient.Client.TypedDecoder do
+  alias OpenAPIClient.Utils
+
   @doc """
   Manually decode a response
 
@@ -131,10 +133,7 @@ defmodule OpenAPIClient.Client.TypedDecoder do
   end
 
   defp do_decode(value, {module, type}) when is_atom(module) and is_atom(type) do
-    (module.module_info(:attributes) || [])
-    |> Keyword.get(:behaviour, [])
-    |> Enum.member?(OpenAPIClient.Schema)
-    |> if do
+    if Utils.is_module?(module) and Utils.does_implement_behaviour?(module, OpenAPIClient.Schema) do
       fields = module.__fields__(type)
 
       value

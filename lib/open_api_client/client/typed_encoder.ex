@@ -1,10 +1,9 @@
 defmodule OpenAPIClient.Client.TypedEncoder do
+  alias OpenAPIClient.Utils
+
   @spec encode(term()) :: {:ok, term()} | {:error, term()}
   def encode(%module{} = value) do
-    (module.module_info(:attributes) || [])
-    |> Keyword.get(:behaviour, [])
-    |> Enum.member?(OpenAPIClient.Schema)
-    |> if do
+    if Utils.is_module?(module) and Utils.does_implement_behaviour?(module, OpenAPIClient.Schema) do
       {:ok, module.to_map(value)}
     else
       {:ok, Map.from_struct(value)}
