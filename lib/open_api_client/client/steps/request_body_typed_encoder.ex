@@ -5,9 +5,7 @@ defmodule OpenAPIClient.Client.Steps.RequestBodyTypedEncoder do
   alias OpenAPIClient.Client.TypedEncoder
 
   @impl true
-  def init(opts) do
-    opts
-  end
+  def init(opts), do: opts
 
   @impl true
   def call(%Operation{request_body: nil} = operation, _opts), do: operation

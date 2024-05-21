@@ -8,12 +8,11 @@ defmodule OpenAPIClient.Schema do
           | :number
           | {:string, atom()}
           | :unknown
-          # | {:nullable, type}
           | {:union, [type]}
           | {module, atom}
   @type type() :: non_array_type() | [non_array_type()]
 
   @callback to_map(struct :: struct()) :: map()
   @callback from_map(map :: map()) :: struct()
-  @callback __fields__(atom()) :: %{optional(String.t()) => term()}
+  @callback __fields__(atom()) :: %{optional(String.t()) => type()}
 end

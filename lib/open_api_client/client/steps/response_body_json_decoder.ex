@@ -4,9 +4,7 @@ defmodule OpenAPIClient.Client.Steps.RequestBodyJSONDecoder do
   alias OpenAPIClient.Client.Operation
 
   @impl true
-  def init(opts) do
-    opts
-  end
+  def init(opts), do: opts
 
   @impl true
   def call(%Operation{response_body: nil} = operation, _opts), do: operation

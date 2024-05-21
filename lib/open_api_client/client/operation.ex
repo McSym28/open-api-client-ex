@@ -1,27 +1,41 @@
 defmodule OpenAPIClient.Client.Operation do
+  @type method :: :get | :put | :post | :delete | :options | :head | :patch | :trace
+  @type headers :: %{String.t() => String.t()}
+  @type request_type :: {String.t(), OpenAPIClient.Schema.type()}
+  @type response_type :: {integer(), OpenAPIClient.Schema.type() | nil}
+  @type external_headers :: [{String.t(), String.t()}] | keyword(String.t()) | headers()
+
   @type t :: %__MODULE__{
           halted: boolean(),
           assigns: map(),
-          request_body: term(),
-          request_headers: %{String.t() => String.t()},
-          response_body: term(),
-          response_headers: %{String.t() => String.t()},
-          response_type: OpenAPIClient.Schema.type() | nil,
+          request_url: String.t() | URI.t(),
+          request_method: method(),
+          request_headers: headers(),
+          request_body: term() | nil,
+          request_types: [request_type()],
+          response_body: term() | nil,
+          response_headers: headers(),
+          response_status_code: integer() | nil,
+          response_types: [response_type()],
           result: {:ok, term()} | {:error, term()} | nil
         }
 
   @derive Pluggable.Token
-  defstruct halted: false,
-            assigns: %{},
-            request_headers: %{},
-            request_body: nil,
-            response_headers: %{},
-            response_body: nil,
-            response_type: nil,
-            result: nil
-
-  @type external_headers ::
-          [{String.t(), String.t()}] | keyword(String.t()) | %{String.t() => String.t()}
+  @enforce_keys [:halted, :assigns, :request_url, :request_method]
+  defstruct [
+    :halted,
+    :assigns,
+    :request_url,
+    :request_method,
+    :request_headers,
+    :request_body,
+    :request_types,
+    :response_body,
+    :response_headers,
+    :response_status_code,
+    :response_types,
+    :result
+  ]
 
   @spec get_request_header(t(), String.t()) :: {:ok, String.t()} | :error
   def get_request_header(%__MODULE__{request_headers: headers}, header_name) do
@@ -51,6 +65,11 @@ defmodule OpenAPIClient.Client.Operation do
   @spec put_response_headers(t(), external_headers()) :: t()
   def put_response_headers(%__MODULE__{response_headers: headers} = operation, new_headers) do
     %__MODULE__{operation | response_headers: put_headers(headers, new_headers)}
+  end
+
+  @spec put_private(t(), atom(), term()) :: t()
+  def put_private(operation, key, value) do
+    put_in(operation, [Access.key!(:assigns), Access.key(:private, %{}), key], value)
   end
 
   defp get_header(headers, header_name) do
