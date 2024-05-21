@@ -458,7 +458,7 @@ defmodule OpenAPIClient.Generator.Renderer do
 
   @impl true
   def render_operation_function(
-        state,
+        %OpenAPI.Renderer.State{profile: profile} = state,
         %Operation{
           function_name: function_name,
           request_path: request_path,
@@ -556,7 +556,7 @@ defmodule OpenAPIClient.Generator.Renderer do
                 |> render_params_parse()
 
               {operation_assigns, private_assigns} =
-                Enum.flat_map_reduce(map_arguments, %{}, fn
+                Enum.flat_map_reduce(map_arguments, %{__profile__: profile}, fn
                   {:url, value}, acc ->
                     {[{:request_url, value}], acc}
 
@@ -606,24 +606,26 @@ defmodule OpenAPIClient.Generator.Renderer do
               operation_assigns = [{:request_base_url, {:base_url, [], nil}} | operation_assigns]
 
               operation =
-                Enum.reduce(
-                  private_assigns,
-                  {:%, [],
+                {:%, [],
+                 [
+                   Utils.ast_module(OpenAPIClient.Client.Operation),
+                   {:%{}, [], operation_assigns}
+                 ]}
+
+              operation =
+                if map_size(private_assigns) != 0 do
+                  {:|>, [],
                    [
-                     Utils.ast_module(OpenAPIClient.Client.Operation),
-                     {:%{}, [], operation_assigns}
-                   ]},
-                  fn {key, value}, operation ->
-                    {:|>, [],
-                     [
-                       operation,
-                       Utils.ast_function_call(OpenAPIClient.Client.Operation, :put_private, [
-                         key,
-                         value
-                       ])
-                     ]}
-                  end
-                )
+                     operation,
+                     Utils.ast_function_call(
+                       OpenAPIClient.Client.Operation,
+                       :put_private,
+                       [Map.to_list(private_assigns)]
+                     )
+                   ]}
+                else
+                  operation
+                end
 
               [
                 {:|>, [],
