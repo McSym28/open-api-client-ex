@@ -23,18 +23,18 @@ defmodule OpenAPIClient.Client.Operation do
   @derive Pluggable.Token
   @enforce_keys [:halted, :assigns, :request_url, :request_method]
   defstruct [
-    :halted,
-    :assigns,
     :request_url,
     :request_method,
-    :request_headers,
     :request_body,
-    :request_types,
     :response_body,
-    :response_headers,
     :response_status_code,
-    :response_types,
-    :result
+    :result,
+    halted: false,
+    assigns: %{private: %{}},
+    request_types: [],
+    request_headers: %{},
+    response_headers: %{},
+    response_types: []
   ]
 
   @spec get_request_header(t(), String.t()) :: {:ok, String.t()} | :error
