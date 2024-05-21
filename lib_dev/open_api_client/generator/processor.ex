@@ -1,6 +1,6 @@
 defmodule OpenAPIClient.Generator.Processor do
   use OpenAPI.Processor
-  alias OpenAPI.Processor.{Naming, Operation.Param, Schema}
+  alias OpenAPI.Processor.{Operation.Param, Schema}
   alias Schema.Field
   alias OpenAPI.Spec.Path.Operation, as: OperationSpec
   alias OpenAPI.Spec.Path.Parameter, as: ParamSpec
@@ -49,7 +49,7 @@ defmodule OpenAPIClient.Generator.Processor do
           default = Keyword.get(config, :default)
 
           name_new =
-            Keyword.get_lazy(config, :name, fn -> Naming.normalize_identifier(name) end)
+            Keyword.get_lazy(config, :name, fn -> snakesize_name(name) end)
 
           description_new =
             if name_new == name do
@@ -266,7 +266,7 @@ defmodule OpenAPIClient.Generator.Processor do
     {enum_values_new, {enum_type, enum_aliases}} =
       Enum.map_reduce(enum_values, {nil, %{}}, &process_enum_value/2)
 
-    name_new = Naming.normalize_identifier(name)
+    name_new = snakesize_name(name)
     type_new = {:enum, enum_values_new}
     field_new = %Field{field | name: name_new, type: type_new}
 
@@ -291,7 +291,7 @@ defmodule OpenAPIClient.Generator.Processor do
     {enum_values_new, {enum_type, enum_aliases}} =
       Enum.map_reduce(enum_values, {nil, %{}}, &process_enum_value/2)
 
-    name_new = Naming.normalize_identifier(name)
+    name_new = snakesize_name(name)
     type_new = {:array, {:enum, enum_values_new}}
     field_new = %Field{field | name: name_new, type: type_new}
 
@@ -307,7 +307,7 @@ defmodule OpenAPIClient.Generator.Processor do
   defp process_field(
          %Field{name: name, required: required, nullable: nullable, type: type} = field
        ) do
-    name_new = Naming.normalize_identifier(name)
+    name_new = snakesize_name(name)
     field_new = %Field{field | name: name_new}
 
     %GeneratorField{
@@ -319,7 +319,7 @@ defmodule OpenAPIClient.Generator.Processor do
   end
 
   defp process_enum_value(enum_value, {_type, acc}) when is_binary(enum_value) do
-    enum_atom = enum_value |> Naming.normalize_identifier() |> String.to_atom()
+    enum_atom = enum_value |> snakesize_name() |> String.to_atom()
     acc_new = Map.put(acc, enum_atom, enum_value)
     {enum_atom, {{:string, :generic}, acc_new}}
   end
@@ -512,4 +512,6 @@ defmodule OpenAPIClient.Generator.Processor do
   defp append_param_example(%GeneratorParam{examples: examples} = param, example, _state) do
     %GeneratorParam{param | examples: [example | examples]}
   end
+
+  defp snakesize_name(name), do: Macro.underscore(name)
 end
