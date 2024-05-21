@@ -34,6 +34,17 @@ defmodule OpenAPIClient.Generator.Utils do
     {{:., [], [ast_module(module), function]}, [], args}
   end
 
+  @spec ast_module(module()) :: Macro.t()
+  def ast_module(module) when is_atom(module) do
+    case Macro.classify_atom(module) do
+      :identifier ->
+        module
+
+      :alias ->
+        {:__aliases__, [alias: false], module |> Module.split() |> Enum.map(&String.to_atom/1)}
+    end
+  end
+
   @spec ensure_ets_table(atom()) :: :ets.table()
   def ensure_ets_table(name) do
     case :ets.whereis(name) do
@@ -77,14 +88,4 @@ defmodule OpenAPIClient.Generator.Utils do
     do: Map.merge(map1, map2, fn _, v1, v2 -> merge_config(v1, v2) end)
 
   defp merge_config(_v1, v2), do: v2
-
-  defp ast_module(module) when is_atom(module) do
-    case Macro.classify_atom(module) do
-      :identifier ->
-        module
-
-      :alias ->
-        {:__aliases__, [alias: false], module |> Module.split() |> Enum.map(&String.to_atom/1)}
-    end
-  end
 end

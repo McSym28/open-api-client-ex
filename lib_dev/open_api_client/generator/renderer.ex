@@ -132,11 +132,7 @@ defmodule OpenAPIClient.Generator.Renderer do
                       %Schema{module_name: child_schema_module} =
                         Map.get(state_schemas, child_schema_ref)
 
-                      {to_map_function_header, _, _} =
-                        Utils.ast_function_call(child_schema_module, :to_map, [])
-
-                      {from_map_function_header, _, _} =
-                        Utils.ast_function_call(child_schema_module, :from_map, [])
+                      ast_child_schema_module = Utils.ast_module(child_schema_module)
 
                       {
                         {{:., [], [{:__aliases__, [alias: false], [:Enum]}, :map]}, [],
@@ -146,7 +142,8 @@ defmodule OpenAPIClient.Generator.Renderer do
                             [
                               {:/, [],
                                [
-                                 {to_map_function_header, [no_parens: true], []},
+                                 {{:., [], [ast_child_schema_module, :to_map]}, [no_parens: true],
+                                  []},
                                  1
                                ]}
                             ]}
@@ -158,7 +155,8 @@ defmodule OpenAPIClient.Generator.Renderer do
                             [
                               {:/, [],
                                [
-                                 {from_map_function_header, [no_parens: true], []},
+                                 {{:., [], [ast_child_schema_module, :from_map]},
+                                  [no_parens: true], []},
                                  1
                                ]}
                             ]}
@@ -507,15 +505,15 @@ defmodule OpenAPIClient.Generator.Renderer do
                 |> render_params_parse()
 
               if query_value do
-                [{:=, [], [{:query, [], nil}, query_value]}]
+                [{:=, [], [{:query_params, [], nil}, query_value]}]
               else
                 []
               end
 
-            {{:., _, [{:client, _, _}, :request]} = dot_expression, dot_metadata,
+            {{:., _, [{:client, _, _}, :request]} = _dot_expression, _dot_metadata,
              [
-               {:%{}, map_metadata, map_arguments}
-             ]} = call_expression ->
+               {:%{}, _map_metadata, map_arguments}
+             ]} = _call_expression ->
               headers_value =
                 all_params
                 |> Enum.filter(fn %GeneratorParam{param: %Param{location: location}} ->
@@ -523,20 +521,79 @@ defmodule OpenAPIClient.Generator.Renderer do
                 end)
                 |> render_params_parse()
 
-              if headers_value do
-                map_arguments_new =
-                  Enum.flat_map(map_arguments, fn
-                    {:opts, _} = arg -> [{:headers, {:headers, [], nil}} | [arg]]
-                    arg -> [arg]
-                  end)
+              {operation_assigns, private_assigns} =
+                Enum.flat_map_reduce(map_arguments, %{}, fn
+                  {:url, value}, acc ->
+                    {[{:request_url, value}], acc}
 
-                call_expression_new =
-                  {dot_expression, dot_metadata, [{:%{}, map_metadata, map_arguments_new}]}
+                  {:method, value}, acc ->
+                    {[{:request_method, value}], acc}
 
-                [{:=, [], [{:headers, [], nil}, headers_value]}, call_expression_new]
-              else
-                [call_expression]
-              end
+                  {:body, value}, acc ->
+                    {[{:request_body, value}], acc}
+
+                  {:query, _}, acc ->
+                    {[{:request_query_params, {:query_params, [], nil}}], acc}
+
+                  {:request, value}, acc ->
+                    {[{:request_types, value}], acc}
+
+                  {:response, value}, acc ->
+                    {[{:response_types, value}], acc}
+
+                  {:opts, value}, acc ->
+                    {[], Map.put(acc, :__opts__, value)}
+
+                  {:args, args}, acc ->
+                    {[],
+                     Map.update(acc, :__info__, {:{}, [], [nil, nil, args]}, fn {:{}, [],
+                                                                                 [m, f, _a]} ->
+                       {:{}, [], [m, f, args]}
+                     end)}
+
+                  {:call, {_module, function}}, acc ->
+                    {[],
+                     Map.update(
+                       acc,
+                       :__info__,
+                       {:{}, [], [{:__MODULE__, [], nil}, function, nil]},
+                       fn {:{}, [], [_m, _f, a]} ->
+                         {:{}, [], [{:__MODULE__, [], nil}, function, a]}
+                       end
+                     )}
+                end)
+
+              operation_assigns =
+                if headers_value do
+                  operation_assigns ++ [{:request_headers, {:headers, [], nil}}]
+                else
+                  operation_assigns
+                end
+
+              operation =
+                Enum.reduce(
+                  private_assigns,
+                  {:%, [],
+                   [
+                     Utils.ast_module(OpenAPIClient.Client.Operation),
+                     {:%{}, [], operation_assigns}
+                   ]},
+                  fn {key, value}, operation ->
+                    {:|>, [],
+                     [
+                       operation,
+                       Utils.ast_function_call(OpenAPIClient.Client.Operation, :put_private, [
+                         key,
+                         value
+                       ])
+                     ]}
+                  end
+                )
+              [{:|>, [],
+              [
+                operation,
+                Utils.ast_function_call(OpenAPIClient.Client, :perform, [])
+              ]}]
 
             expression ->
               [expression]
@@ -565,70 +622,67 @@ defmodule OpenAPIClient.Generator.Renderer do
 
     static_params =
       Enum.map(static_params, fn %GeneratorParam{param: %Param{name: name}, old_name: old_name} ->
-        if name != old_name do
-          {old_name, {String.to_atom(name), [], nil}}
-        else
-          {String.to_atom(name), {String.to_atom(name), [], nil}}
-        end
+        {old_name, {String.to_atom(name), [], nil}}
       end)
 
-    {dynamic_params, {param_renamings, has_same_name}} =
-      Enum.map_reduce(dynamic_params, {[], false}, fn %GeneratorParam{
-                                                        param: %Param{name: name},
-                                                        old_name: old_name
-                                                      },
-                                                      {param_renamings, has_same_name} ->
-        if name != old_name do
-          param_renamings_new =
-            [
-              {:->, [],
-               [
-                 [{String.to_atom(name), {:value, [], nil}}],
-                 {old_name, {:value, [], nil}}
-               ]}
-              | param_renamings
-            ]
+    {dynamic_params, param_renamings} =
+      Enum.map_reduce(dynamic_params, [], fn %GeneratorParam{
+                                               param: %Param{name: name},
+                                               old_name: old_name
+                                             },
+                                             param_renamings ->
+        param_renamings_new =
+          [
+            {:->, [],
+             [
+               [{String.to_atom(name), {:value, [], nil}}],
+               {old_name, {:value, [], nil}}
+             ]}
+            | param_renamings
+          ]
 
-          {String.to_atom(name), {param_renamings_new, has_same_name}}
-        else
-          {String.to_atom(name), {param_renamings, true}}
-        end
+        {String.to_atom(name), param_renamings_new}
       end)
 
     dynamic_params =
       if length(dynamic_params) > 0 do
-        param_renamings =
-          if has_same_name do
-            param_renamings ++
-              [
-                {:->, [],
-                 [
-                   [{{:key, [], nil}, {:value, [], nil}}],
-                   {{:key, [], nil}, {:value, [], nil}}
-                 ]}
-              ]
+        dynamic_params = quote(do: opts |> Keyword.take(unquote(dynamic_params)))
+
+        dynamic_params =
+          if length(param_renamings) > 0 do
+            {:|>, [],
+             [
+               dynamic_params,
+               {{:., [], [{:__aliases__, [alias: false], [:Enum]}, :map]}, [],
+                [{:fn, [], param_renamings}]}
+             ]}
           else
-            param_renamings
+            dynamic_params
           end
 
-        if length(param_renamings) > 0 do
-          {:|>, [],
-           [
-             quote(do: opts |> Keyword.take(unquote(dynamic_params))),
-             {{:., [], [{:__aliases__, [alias: false], [:Enum]}, :map]}, [],
-              [{:fn, [], param_renamings}]}
-           ]}
-        else
-          quote do: Keyword.take(opts, unquote(dynamic_params))
-        end
+        {:|>, [],
+         [
+           dynamic_params,
+           {{:., [], [{:__aliases__, [alias: false], [:Map]}, :new]}, [], []}
+         ]}
       else
         nil
       end
 
     case {length(static_params) > 0, not is_nil(dynamic_params)} do
-      {true, false} -> static_params
-      {false, true} -> dynamic_params
-      {true, true} -> {:++, [], [dynamic_params, static_params]}
+      {true, false} ->
+        {:%{}, [], static_params}
+
+      {false, true} ->
+        dynamic_params
+
+      {true, true} ->
+        {:|>, [],
+         [
+           dynamic_params,
+           {{:., [], [{:__aliases__, [alias: false], [:Map]}, :merge]}, [],
+            [{:%{}, [], static_params}]}
+         ]}
     end
   end
 end
