@@ -4,6 +4,7 @@ if Code.ensure_loaded?(HTTPoison) do
     `Pluggable` step implementation for making a HTTP request through `HTTPoison`
 
     Accepts the following `opts`:
+    * `:httpoison` - `HTTPoison` module. Used for tests
     * `:headers` - Default `HTTPoison.request/5` `:headers`
     * `:query_params` - Default `HTTPoison.request/5` query params (passed through `[:options, :params]`)
     * `:options` - Default `HTTPoison.request/5` `:options`
@@ -15,7 +16,8 @@ if Code.ensure_loaded?(HTTPoison) do
     alias OpenAPIClient.Client.Operation
 
     @type option ::
-            {:headers, %{String.t() => String.t()} | [{String.t(), String.t()}]}
+            {:httpoison, module()}
+            | {:headers, %{String.t() => String.t()} | [{String.t(), String.t()}]}
             | {:query_params, %{String.t() => String.t()} | [{String.t(), String.t()}]}
             | {:options, keyword()}
     @type options :: [option()]
@@ -37,6 +39,8 @@ if Code.ensure_loaded?(HTTPoison) do
           } = operation,
           opts
         ) do
+      httpoison = opts[:httpoison] || HTTPoison
+
       url = base_url |> URI.merge(url) |> URI.to_string()
       body = body || ""
 
@@ -59,7 +63,7 @@ if Code.ensure_loaded?(HTTPoison) do
         |> Keyword.get(:options, [])
         |> Keyword.update(:params, params, &Keyword.merge(&1, params))
 
-      case HTTPoison.request(method, url, body, headers, options) do
+      case httpoison.request(method, url, body, headers, options) do
         {:ok,
          %HTTPoison.Response{body: body, headers: headers, status_code: status_code} = _response} ->
           %Operation{operation | response_body: body, response_status_code: status_code}

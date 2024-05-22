@@ -1,4 +1,4 @@
 defmodule OpenAPIClient.Generator.UtilsTest do
-  use ExUnit.Case
+  use ExUnit.Case, async: true
   doctest OpenAPIClient.Generator.Utils
 end

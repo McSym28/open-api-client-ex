@@ -1,4 +1,4 @@
-defmodule OpenAPIClient.Client.Steps.RequestBodyJSONDecoder do
+defmodule OpenAPIClient.Client.Steps.ResponseBodyJSONDecoder do
   @moduledoc """
   `Pluggable` step implementation for JSON-decoding `Operation.response_body`
 

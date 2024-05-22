@@ -132,7 +132,8 @@ defmodule OpenAPIClient.Client.TypedDecoder do
     end
   end
 
-  defp do_decode(value, {module, type}) when is_atom(module) and is_atom(type) do
+  defp do_decode(value, {module, type})
+       when is_atom(module) and is_atom(type) and is_map(value) do
     if Utils.is_module?(module) and Utils.does_implement_behaviour?(module, OpenAPIClient.Schema) do
       fields = module.__fields__(type)
 

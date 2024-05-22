@@ -1,5 +1,5 @@
 defmodule OpenAPIClient.Client.TypedEncoderTest do
-  use ExUnit.Case
+  use ExUnit.Case, async: true
   alias OpenAPIClient.Client.TypedEncoder
   alias OpenAPIClient.TestSchema
 
