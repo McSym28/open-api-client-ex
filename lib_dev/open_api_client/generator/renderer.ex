@@ -13,11 +13,12 @@ defmodule OpenAPIClient.Generator.Renderer do
   @impl true
   def render_default_client(%OpenAPI.Renderer.State{profile: profile} = state, file) do
     case OpenAPI.Renderer.render_default_client(state, file) do
-      {:@, default_client_metadata, [{:default_client, _, _}] = _default_client_expression} ->
+      {:@, _, [{:default_client, _, _}] = _default_client_expression} ->
         base_url =
           :open_api_client_ex |> Application.fetch_env!(profile) |> Keyword.fetch!(:base_url)
 
-        {:@, default_client_metadata, [{:base_url, [], [base_url]}]}
+        quote(do: @base_url(unquote(base_url)))
+        |> Macro.update_meta(&Keyword.put(&1, :end_of_expression, newlines: 2))
 
       result ->
         result
@@ -53,10 +54,10 @@ defmodule OpenAPIClient.Generator.Renderer do
 
       list ->
         [
-          {:@, [end_of_expression: [newlines: 2]],
-           [
-             {:behaviour, [], [{:__aliases__, [alias: false], [:OpenAPIClient, :Schema]}]}
-           ]}
+          quote(do: @behaviour(OpenAPIClient.Schema))
+          |> Macro.update_meta(&Keyword.put(&1, :end_of_expression, newlines: 2)),
+          quote(do: require(OpenAPIClient.Schema))
+          |> Macro.update_meta(&Keyword.put(&1, :end_of_expression, newlines: 2))
           | list
         ]
     end
@@ -187,50 +188,44 @@ defmodule OpenAPIClient.Generator.Renderer do
                       {{String.to_atom(name), [], nil}, {String.to_atom(name), [], nil}}
 
                     _ ->
-                      {to_enum_clauses, from_enum_clauses} =
-                        enum_aliases
-                        |> Enum.sort_by(fn {_enum_atom, enum_value} -> enum_value end, :desc)
-                        |> Enum.reduce({[], []}, fn {enum_atom, enum_value},
-                                                    {to_enum_clauses, from_enum_clauses} ->
-                          {
-                            [{:->, [], [[enum_atom], enum_value]} | to_enum_clauses],
-                            [{:->, [], [[enum_value], enum_atom]} | from_enum_clauses]
-                          }
-                        end)
+                      enum_renamings =
+                        Enum.sort_by(enum_aliases, fn {_enum_atom, enum_value} -> enum_value end)
 
-                      to_enum_clauses =
-                        to_enum_clauses ++ [{:->, [], [[{:key, [], nil}], {:key, [], nil}]}]
+                      enum_renamings = enum_renamings ++ [:not_strict]
 
-                      from_enum_clauses =
-                        from_enum_clauses ++ [{:->, [], [[{:key, [], nil}], {:key, [], nil}]}]
+                      variable = name |> String.to_atom() |> Macro.var(nil)
 
                       case type do
                         {:array, _} ->
                           {
-                            {{:., [], [{:__aliases__, [alias: false], [:Enum]}, :map]}, [],
-                             [
-                               {String.to_atom(name), [], nil},
-                               {:fn, [], to_enum_clauses}
-                             ]},
-                            {{:., [], [{:__aliases__, [alias: false], [:Enum]}, :map]}, [],
-                             [
-                               {String.to_atom(name), [], nil},
-                               {:fn, [], from_enum_clauses}
-                             ]}
+                            quote do
+                              unquote(variable)
+                              |> Enum.map(fn value ->
+                                OpenAPIClient.Schema.enum_to_map(value, unquote(enum_renamings))
+                              end)
+                            end,
+                            quote do
+                              unquote(variable)
+                              |> Enum.map(fn value ->
+                                OpenAPIClient.Schema.enum_from_map(value, unquote(enum_renamings))
+                              end)
+                            end
                           }
 
                         _ ->
                           {
-                            {:case, [],
-                             [
-                               {String.to_atom(name), [], nil},
-                               [do: to_enum_clauses]
-                             ]},
-                            {:case, [],
-                             [
-                               {String.to_atom(name), [], nil},
-                               [do: from_enum_clauses]
-                             ]}
+                            quote do
+                              OpenAPIClient.Schema.enum_to_map(
+                                unquote(variable),
+                                unquote(enum_renamings)
+                              )
+                            end,
+                            quote do
+                              OpenAPIClient.Schema.enum_from_map(
+                                unquote(variable),
+                                unquote(enum_renamings)
+                              )
+                            end
                           }
                       end
                   end

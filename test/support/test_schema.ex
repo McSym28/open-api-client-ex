@@ -5,6 +5,8 @@ defmodule OpenAPIClient.TestSchema do
 
   @behaviour OpenAPIClient.Schema
 
+  require OpenAPIClient.Schema
+
   @type t :: %__MODULE__{
           boolean: boolean,
           date_time: DateTime.t(),
@@ -30,11 +32,11 @@ defmodule OpenAPIClient.TestSchema do
       "Boolean" => boolean,
       "DateTime" => date_time,
       "Enum" =>
-        case enum do
-          :enum_1 -> "ENUM_1"
-          :enum_2 -> "ENUM_2"
-          key -> key
-        end,
+        OpenAPIClient.Schema.enum_to_map(enum, [
+          {:enum_1, "ENUM_1"},
+          {:enum_2, "ENUM_2"},
+          :not_strict
+        ]),
       "Integer" => integer,
       "Number" => number,
       "String" => string
@@ -54,11 +56,11 @@ defmodule OpenAPIClient.TestSchema do
         {"Enum", enum} ->
           [
             enum:
-              case enum do
-                "ENUM_1" -> :enum_1
-                "ENUM_2" -> :enum_2
-                key -> key
-              end
+              OpenAPIClient.Schema.enum_from_map(enum, [
+                {:enum_1, "ENUM_1"},
+                {:enum_2, "ENUM_2"},
+                :not_strict
+              ])
           ]
 
         {"Integer", integer} ->
