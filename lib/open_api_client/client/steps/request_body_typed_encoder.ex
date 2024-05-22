@@ -5,8 +5,7 @@ defmodule OpenAPIClient.Client.Steps.RequestBodyTypedEncoder do
 
   @behaviour Pluggable
 
-  alias OpenAPIClient.Client.Operation
-  alias OpenAPIClient.Client.TypedEncoder
+  alias OpenAPIClient.Client.{Error, Operation, TypedEncoder}
 
   @type options :: []
 
@@ -23,9 +22,11 @@ defmodule OpenAPIClient.Client.Steps.RequestBodyTypedEncoder do
       {:ok, encoded_body} ->
         %Operation{operation | request_body: encoded_body}
 
-      {:error, message} ->
-        %Operation{operation | result: {:error, {:request_body_typed_encoder, message}}}
-        |> Pluggable.Token.halt()
+      {:error, %Error{} = error} ->
+        Operation.set_result(
+          operation,
+          {:error, %Error{error | operation: operation, step: __MODULE__}}
+        )
     end
   end
 end

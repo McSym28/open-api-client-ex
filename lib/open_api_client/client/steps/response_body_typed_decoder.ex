@@ -8,8 +8,7 @@ defmodule OpenAPIClient.Client.Steps.ResponseBodyTypedDecoder do
 
   @behaviour Pluggable
 
-  alias OpenAPIClient.Client.Operation
-  alias OpenAPIClient.Client.TypedDecoder
+  alias OpenAPIClient.Client.{Error, Operation, TypedDecoder}
 
   @impl true
   def init(opts), do: opts
@@ -24,9 +23,11 @@ defmodule OpenAPIClient.Client.Steps.ResponseBodyTypedDecoder do
       {:ok, decoded_body} ->
         %Operation{operation | response_body: decoded_body}
 
-      {:error, message} ->
-        %Operation{operation | result: {:error, {:response_body_typed_decoder, message}}}
-        |> Pluggable.Token.halt()
+      {:error, %Error{} = error} ->
+        Operation.set_result(
+          operation,
+          {:error, %Error{error | operation: operation, step: __MODULE__}}
+        )
     end
   end
 

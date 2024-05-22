@@ -18,7 +18,7 @@ defmodule OpenAPIClient.Operations do
   """
   @spec test([
           {:base_url, String.t() | URI.t()} | {:client_pipeline, OpenAPIClient.Client.pipeline()}
-        ]) :: {:ok, OpenAPIClient.TestSchema.t()} | {:error, {:client, term()}}
+        ]) :: {:ok, OpenAPIClient.TestSchema.t()} | {:error, OpenAPIClient.Client.Error.t()}
   def test opts \\ [] do
     client_pipeline =
       Keyword.get_lazy(opts, :client_pipeline, fn ->

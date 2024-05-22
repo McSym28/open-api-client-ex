@@ -11,7 +11,7 @@ defmodule OpenAPIClient.Client.Steps.RequestBodyJSONEncoder do
 
   @behaviour Pluggable
 
-  alias OpenAPIClient.Client.Operation
+  alias OpenAPIClient.Client.{Error, Operation}
 
   @type option :: {:json_library, module()}
   @type options :: [option()]
@@ -37,16 +37,30 @@ defmodule OpenAPIClient.Client.Steps.RequestBodyJSONEncoder do
             {:ok, encoded_body} ->
               %Operation{operation | request_body: encoded_body}
 
-            {:error, message} ->
-              %Operation{operation | result: {:error, {:request_body_json_encoder, message}}}
-              |> Pluggable.Token.halt()
+            {:error, error} ->
+              Operation.set_result(
+                operation,
+                {:error,
+                 Error.new(
+                   message: "Error while JSON-encoding request body",
+                   operation: operation,
+                   source: error,
+                   reason: :request_body_json_encode_failed,
+                   step: __MODULE__
+                 )}
+              )
           end
         else
-          %Operation{
-            operation
-            | result: {:error, {:request_body_json_encoder, :json_library_not_set}}
-          }
-          |> Pluggable.Token.halt()
+          Operation.set_result(
+            operation,
+            {:error,
+             Error.new(
+               message: "JSON library not set",
+               operation: operation,
+               reason: :json_library_not_set,
+               step: __MODULE__
+             )}
+          )
         end
 
       _ ->

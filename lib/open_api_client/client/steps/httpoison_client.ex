@@ -13,7 +13,7 @@ if Code.ensure_loaded?(HTTPoison) do
 
     @behaviour Pluggable
 
-    alias OpenAPIClient.Client.Operation
+    alias OpenAPIClient.Client.{Error, Operation}
 
     @type option ::
             {:httpoison, module()}
@@ -70,8 +70,17 @@ if Code.ensure_loaded?(HTTPoison) do
           |> Operation.put_response_headers(headers)
 
         {:error, %HTTPoison.Error{} = error} ->
-          %Operation{operation | result: {:error, {:http_poison_client, error}}}
-          |> Pluggable.Token.halt()
+          Operation.set_result(
+            operation,
+            {:error,
+             Error.new(
+               message: "Error during HTTP request",
+               operation: operation,
+               reason: :http_response_failed,
+               source: error,
+               step: __MODULE__
+             )}
+          )
       end
     end
   end

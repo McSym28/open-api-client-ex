@@ -11,7 +11,7 @@ defmodule OpenAPIClient.Client.Steps.ResponseBodyJSONDecoder do
 
   @behaviour Pluggable
 
-  alias OpenAPIClient.Client.Operation
+  alias OpenAPIClient.Client.{Error, Operation}
 
   @type option :: {:json_library, module()}
   @type options :: [option()]
@@ -37,16 +37,30 @@ defmodule OpenAPIClient.Client.Steps.ResponseBodyJSONDecoder do
             {:ok, decoded_body} ->
               %Operation{operation | response_body: decoded_body}
 
-            {:error, message} ->
-              %Operation{operation | result: {:error, {:response_body_json_decoder, message}}}
-              |> Pluggable.Token.halt()
+            {:error, error} ->
+              Operation.set_result(
+                operation,
+                {:error,
+                 Error.new(
+                   message: "Error while JSON-decoding response body",
+                   operation: operation,
+                   source: error,
+                   reason: :response_body_json_decode_failed,
+                   step: __MODULE__
+                 )}
+              )
           end
         else
-          %Operation{
-            operation
-            | result: {:error, {:response_body_json_decoder, :json_library_not_set}}
-          }
-          |> Pluggable.Token.halt()
+          Operation.set_result(
+            operation,
+            {:error,
+             Error.new(
+               message: "JSON library not set",
+               operation: operation,
+               reason: :json_library_not_set,
+               step: __MODULE__
+             )}
+          )
         end
 
       _ ->

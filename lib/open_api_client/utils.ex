@@ -7,8 +7,6 @@ defmodule OpenAPIClient.Utils do
 
   @spec does_implement_behaviour?(module(), atom()) :: boolean()
   def does_implement_behaviour?(module, behaviour) when is_atom(behaviour) do
-    Code.ensure_loaded(module)
-
     (module.module_info(:attributes) || [])
     |> Keyword.get(:behaviour, [])
     |> Enum.member?(behaviour)

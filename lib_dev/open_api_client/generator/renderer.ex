@@ -403,7 +403,7 @@ defmodule OpenAPIClient.Generator.Renderer do
             responses,
             999,
             0,
-            {999, %{"application/json" => {:const, {:client, quote(do: term())}}}}
+            {999, %{"application/json" => {:const, quote(do: OpenAPIClient.Client.Error.t())}}}
           )
 
         operation_new = %Operation{

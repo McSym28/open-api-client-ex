@@ -5,6 +5,7 @@ defmodule OpenAPIClient.Client.Operation do
   @type request_type :: {String.t(), OpenAPIClient.Schema.type()}
   @type response_type :: {integer(), OpenAPIClient.Schema.type() | nil}
   @type external_headers :: [{String.t(), String.t()}] | keyword(String.t()) | headers()
+  @type result :: {:ok, term()} | {:error, term()}
 
   @type t :: %__MODULE__{
           halted: boolean(),
@@ -20,7 +21,7 @@ defmodule OpenAPIClient.Client.Operation do
           response_headers: headers(),
           response_status_code: integer() | nil,
           response_types: [response_type()],
-          result: {:ok, term()} | {:error, term()} | nil
+          result: result() | nil
         }
 
   @derive Pluggable.Token
@@ -41,6 +42,12 @@ defmodule OpenAPIClient.Client.Operation do
     response_headers: %{},
     response_types: []
   ]
+
+  @spec set_result(t(), result()) :: t()
+  def set_result(operation, result) do
+    %__MODULE__{operation | result: result}
+    |> Pluggable.Token.halt()
+  end
 
   @spec get_request_header(t(), String.t()) :: {:ok, String.t()} | :error
   def get_request_header(%__MODULE__{request_headers: headers}, header_name) do
