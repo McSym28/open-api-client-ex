@@ -52,13 +52,19 @@ defmodule OpenAPIClient.Generator.Renderer do
 
     state
     |> OpenAPI.Renderer.render_schema(file_new)
-    |> List.insert_at(
-      0,
-      {:@, [end_of_expression: [newlines: 2]],
-       [
-         {:behaviour, [], [{:__aliases__, [alias: false], [:OpenAPIClient, :Schema]}]}
-       ]}
-    )
+    |> case do
+      [] ->
+        []
+
+      list ->
+        [
+          {:@, [end_of_expression: [newlines: 2]],
+           [
+             {:behaviour, [], [{:__aliases__, [alias: false], [:OpenAPIClient, :Schema]}]}
+           ]}
+          | list
+        ]
+    end
   end
 
   @impl true
