@@ -269,7 +269,7 @@ defmodule OpenAPIClient.Client.TypedDecoder do
         {:error, _} = error -> error
       end
     else
-      decode(value, nil, path)
+      decode(value, :unknown, path)
     end
   end
 
