@@ -61,7 +61,11 @@ defmodule OpenAPIClient.Generator.Processor do
           description_new =
             case default do
               {m, f, a} ->
-                function_call_string = Utils.ast_function_call(m, f, a) |> Macro.to_string()
+                function_call_string =
+                  quote do
+                    unquote(m).unquote(f)(unquote_splicing(a))
+                  end
+                  |> Macro.to_string()
 
                 Enum.join(
                   [
@@ -164,7 +168,11 @@ defmodule OpenAPIClient.Generator.Processor do
           |> Keyword.get(:client_pipeline)
           |> case do
             {m, f, a} ->
-              function_call_string = Utils.ast_function_call(m, f, a) |> Macro.to_string()
+              function_call_string =
+                quote do
+                  unquote(m).unquote(f)(unquote_splicing(a))
+                end
+                |> Macro.to_string()
 
               Enum.join(
                 [

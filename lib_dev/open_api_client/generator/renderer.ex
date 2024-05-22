@@ -4,7 +4,6 @@ defmodule OpenAPIClient.Generator.Renderer do
   alias OpenAPI.Processor.{Operation, Schema}
   alias Schema.Field
   alias Operation.Param
-  alias OpenAPIClient.Generator.Utils
   alias OpenAPIClient.Generator.Operation, as: GeneratorOperation
   alias OpenAPIClient.Generator.Param, as: GeneratorParam
   alias OpenAPIClient.Generator.Schema, as: GeneratorSchema
@@ -140,52 +139,35 @@ defmodule OpenAPIClient.Generator.Renderer do
                       %Schema{module_name: child_schema_module} =
                         Map.get(state_schemas, child_schema_ref)
 
+                      variable = name |> String.to_atom() |> Macro.var(nil)
+
                       {
-                        Utils.ast_function_call(child_schema_module, :to_map, [
-                          {String.to_atom(name), [], nil}
-                        ]),
-                        Utils.ast_function_call(child_schema_module, :from_map, [
-                          {String.to_atom(name), [], nil}
-                        ])
+                        quote do
+                          unquote(child_schema_module).to_map(unquote(variable))
+                        end,
+                        quote do
+                          unquote(child_schema_module).from_map(unquote(variable))
+                        end
                       }
 
                     {:array, child_schema_ref} when is_reference(child_schema_ref) ->
                       %Schema{module_name: child_schema_module} =
                         Map.get(state_schemas, child_schema_ref)
 
-                      ast_child_schema_module = Utils.ast_module(child_schema_module)
+                      variable = name |> String.to_atom() |> Macro.var(nil)
 
                       {
-                        {{:., [], [{:__aliases__, [alias: false], [:Enum]}, :map]}, [],
-                         [
-                           {String.to_atom(name), [], nil},
-                           {:&, [],
-                            [
-                              {:/, [],
-                               [
-                                 {{:., [], [ast_child_schema_module, :to_map]}, [no_parens: true],
-                                  []},
-                                 1
-                               ]}
-                            ]}
-                         ]},
-                        {{:., [], [{:__aliases__, [alias: false], [:Enum]}, :map]}, [],
-                         [
-                           {String.to_atom(name), [], nil},
-                           {:&, [],
-                            [
-                              {:/, [],
-                               [
-                                 {{:., [], [ast_child_schema_module, :from_map]},
-                                  [no_parens: true], []},
-                                 1
-                               ]}
-                            ]}
-                         ]}
+                        quote do
+                          Enum.map(unquote(variable), &unquote(child_schema_module).to_map/1)
+                        end,
+                        quote do
+                          Enum.map(unquote(variable), &unquote(child_schema_module).from_map/1)
+                        end
                       }
 
                     _ when map_size(enum_aliases) == 0 ->
-                      {{String.to_atom(name), [], nil}, {String.to_atom(name), [], nil}}
+                      variable = name |> String.to_atom() |> Macro.var(nil)
+                      {variable, variable}
 
                     _ ->
                       enum_renamings =
@@ -230,14 +212,17 @@ defmodule OpenAPIClient.Generator.Renderer do
                       end
                   end
 
+                atom = String.to_atom(name)
+                variable = Macro.var(atom, nil)
+
                 {
-                  [{String.to_atom(name), {String.to_atom(name), [], nil}} | to_map_arguments],
+                  [{atom, variable} | to_map_arguments],
                   [{old_name, to_map_value} | to_map_struct_clauses],
                   [
                     {:->, [],
                      [
-                       [{old_name, {String.to_atom(name), [], nil}}],
-                       [{String.to_atom(name), from_map_value}]
+                       [{old_name, variable}],
+                       [{atom, from_map_value}]
                      ]}
                     | from_map_struct_clauses
                   ]
@@ -550,7 +535,7 @@ defmodule OpenAPIClient.Generator.Renderer do
                     {[
                        {:request_method, value}
                        | if(headers_value,
-                           do: [{:request_headers, {:headers, [], nil}}],
+                           do: [{:request_headers, Macro.var(:headers, nil)}],
                            else: []
                          )
                      ], acc}
@@ -559,7 +544,7 @@ defmodule OpenAPIClient.Generator.Renderer do
                     {[{:request_body, value}], acc}
 
                   {:query, _}, acc ->
-                    {[{:request_query_params, {:query_params, [], nil}}], acc}
+                    {[{:request_query_params, Macro.var(:query_params, nil)}], acc}
 
                   {:request, value}, acc ->
                     {[{:request_types, value}], acc}
@@ -572,24 +557,30 @@ defmodule OpenAPIClient.Generator.Renderer do
 
                   {:args, args}, acc ->
                     {[],
-                     Map.update(acc, :__info__, {:{}, [], [nil, nil, args]}, fn {:{}, [],
-                                                                                 [m, f, _a]} ->
-                       {:{}, [], [m, f, args]}
-                     end)}
+                     Map.update(
+                       acc,
+                       :__info__,
+                       quote(do: {nil, nil, unquote(args)}),
+                       fn {:{}, [], [m, f, _a]} ->
+                         quote do: {unquote(m), unquote(f), unquote(args)}
+                       end
+                     )}
 
                   {:call, {_module, function}}, acc ->
                     {[],
                      Map.update(
                        acc,
                        :__info__,
-                       {:{}, [], [{:__MODULE__, [], nil}, function, nil]},
+                       quote(do: {__MODULE__, unquote(function), nil}),
                        fn {:{}, [], [_m, _f, a]} ->
-                         {:{}, [], [{:__MODULE__, [], nil}, function, a]}
+                         quote do: {__MODULE__, unquote(function), unquote(a)}
                        end
                      )}
                 end)
 
-              operation_assigns = [{:request_base_url, {:base_url, [], nil}} | operation_assigns]
+              operation_assigns = [
+                {:request_base_url, Macro.var(:base_url, nil)} | operation_assigns
+              ]
 
               operation =
                 quote do
@@ -642,7 +633,7 @@ defmodule OpenAPIClient.Generator.Renderer do
 
     static_params =
       Enum.map(static_params, fn %GeneratorParam{param: %Param{name: name}, old_name: old_name} ->
-        {old_name, {String.to_atom(name), [], nil}}
+        {old_name, name |> String.to_atom() |> Macro.var(nil)}
       end)
 
     {dynamic_params, param_renamings} =
@@ -655,8 +646,8 @@ defmodule OpenAPIClient.Generator.Renderer do
           [
             {:->, [],
              [
-               [{String.to_atom(name), {:value, [], nil}}],
-               {old_name, {:value, [], nil}}
+               [{String.to_atom(name), Macro.var(:value, nil)}],
+               {old_name, Macro.var(:value, nil)}
              ]}
             | param_renamings
           ]
