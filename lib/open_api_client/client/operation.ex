@@ -24,7 +24,7 @@ defmodule OpenAPIClient.Client.Operation do
         }
 
   @derive Pluggable.Token
-  @enforce_keys [:halted, :assigns, :request_base_url, :request_url, :request_method]
+  @enforce_keys [:request_base_url, :request_url, :request_method]
   defstruct [
     :request_base_url,
     :request_url,
