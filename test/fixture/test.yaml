@@ -1,0 +1,45 @@
+openapi: "3.1.0"
+info:
+  title: Test Spec
+  version: 1
+paths:
+  "/test":
+    get:
+      description: "Test endpoint"
+      operationId: test
+      summary: "Test endpoint"
+      responses:
+        "200":
+          description: "Success"
+          content:
+            "application/json":
+              schema:
+                "$ref": "#/components/schemas/TestSchema"
+components:
+  schemas:
+    TestSchema:
+      type: object
+      properties:
+        Boolean:
+          type: boolean
+        Integer:
+          type: integer
+        Number:
+          type: number
+        String:
+          type: string
+        DateTime:
+          type: string
+          format: date-time
+        Enum:
+          type: string
+          enum: 
+            - "ENUM_1"
+            - "ENUM_2"
+      required:
+        - Boolean
+        - Integer
+        - Number
+        - String
+        - DateTime
+        - Enum

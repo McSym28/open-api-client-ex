@@ -1,67 +1,95 @@
 defmodule OpenAPIClient.TestSchema do
+  @moduledoc """
+  Provides struct and type for a TestSchema
+  """
+
   @behaviour OpenAPIClient.Schema
 
-  defstruct [:boolean, :integer, :number, :string, :datetime, :enum]
+  @type t :: %__MODULE__{
+          boolean: boolean,
+          date_time: DateTime.t(),
+          enum: :enum_1 | :enum_2 | String.t(),
+          integer: integer,
+          number: number,
+          string: String.t()
+        }
 
-  @field_renamings %{
-    boolean: "Boolean",
-    integer: "Integer",
-    number: "Number",
-    string: "String",
-    datetime: "DateTime",
-    enum: "Enum"
-  }
-
-  @enum_field_renamings %{
-    enum1: "ENUM_1",
-    enum2: "ENUM_2"
-  }
+  @enforce_keys [:boolean, :date_time, :enum, :integer, :number, :string]
+  defstruct [:boolean, :date_time, :enum, :integer, :number, :string]
 
   @impl true
-  def to_map(struct) do
-    struct
-    |> Map.from_struct()
-    |> Map.new(fn
-      {:enum = key, value} -> {@field_renamings[key], @enum_field_renamings[value] || value}
-      {key, value} -> {@field_renamings[key], value}
-    end)
+  def to_map(%__MODULE__{
+        boolean: boolean,
+        date_time: date_time,
+        enum: enum,
+        integer: integer,
+        number: number,
+        string: string
+      }) do
+    %{
+      "Boolean" => boolean,
+      "DateTime" => date_time,
+      "Enum" =>
+        case enum do
+          :enum_1 -> "ENUM_1"
+          :enum_2 -> "ENUM_2"
+          key -> key
+        end,
+      "Integer" => integer,
+      "Number" => number,
+      "String" => string
+    }
   end
 
   @impl true
-  def from_map(map) do
+  def from_map(%{} = map) do
     fields =
-      map
-      |> Enum.flat_map(fn {key, value} ->
-        case Enum.find(@field_renamings, fn {_new_name, old_name} -> old_name == key end) do
-          {:enum = new_name, _old_name} ->
-            [
-              {new_name,
-               Enum.find_value(@enum_field_renamings, fn
-                 {enum_atom, ^value} -> enum_atom
-                 _ -> nil
-               end) || value}
-            ]
+      Enum.flat_map(map, fn
+        {"Boolean", boolean} ->
+          [boolean: boolean]
 
-          {new_name, _old_name} ->
-            [{new_name, value}]
+        {"DateTime", date_time} ->
+          [date_time: date_time]
 
-          _ ->
-            []
-        end
+        {"Enum", enum} ->
+          [
+            enum:
+              case enum do
+                "ENUM_1" -> :enum_1
+                "ENUM_2" -> :enum_2
+                key -> key
+              end
+          ]
+
+        {"Integer", integer} ->
+          [integer: integer]
+
+        {"Number", number} ->
+          [number: number]
+
+        {"String", string} ->
+          [string: string]
+
+        _ ->
+          []
       end)
 
     struct(__MODULE__, fields)
   end
 
+  @doc false
   @impl true
+  @spec __fields__(atom) :: %{optional(String.t()) => term()}
+  def __fields__(type \\ :t)
+
   def __fields__(:t) do
     %{
       "Boolean" => :boolean,
+      "DateTime" => {:string, :date_time},
+      "Enum" => {:enum, [:enum_1, :enum_2]},
       "Integer" => :integer,
       "Number" => :number,
-      "String" => {:string, :generic},
-      "DateTime" => {:string, :date_time},
-      "Enum" => {:enum, "ENUM_1", "ENUM_2"}
+      "String" => {:string, :generic}
     }
   end
 end

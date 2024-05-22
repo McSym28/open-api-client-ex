@@ -13,8 +13,8 @@ defmodule OpenAPIClient.Client.TypedDecoderTest do
                 integer: 1,
                 number: 1.0,
                 string: "string",
-                datetime: ~U[2024-01-02T01:23:45Z],
-                enum: :enum1
+                date_time: ~U[2024-01-02T01:23:45Z],
+                enum: :enum_1
               }} ==
                TypedDecoder.decode(
                  %{
@@ -38,15 +38,15 @@ defmodule OpenAPIClient.Client.TypedDecoderTest do
                   integer: 1,
                   number: 1.0,
                   string: "string",
-                  datetime: ~U[2024-01-02T01:23:45Z],
-                  enum: :enum1
+                  date_time: ~U[2024-01-02T01:23:45Z],
+                  enum: :enum_1
                 },
                 %TestSchema{
                   boolean: true,
                   integer: 2,
                   number: 2.0,
                   string: "another_string",
-                  datetime: ~U[2025-02-03T12:34:56Z],
+                  date_time: ~U[2025-02-03T12:34:56Z],
                   enum: "ENUM_3"
                 }
               ]} ==
