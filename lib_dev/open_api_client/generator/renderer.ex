@@ -253,97 +253,87 @@ defmodule OpenAPIClient.Generator.Renderer do
       end)
 
     to_map_function =
-      [
-        {:@, [], [{:impl, [], [true]}]},
-        {:def, [],
-         [
-           {:to_map, [],
-            [
-              {:%, [], [{:__MODULE__, [], nil}, {:%{}, [], to_map_arguments}]}
-            ]},
-           [do: {:%{}, [], to_map_struct_clauses}]
-         ]}
-      ]
+      quote do
+        @impl true
+        def to_map(%__MODULE__{unquote_splicing(to_map_arguments)}) do
+          %{unquote_splicing(to_map_struct_clauses)}
+        end
+      end
+      |> elem(2)
+
+    from_map_struct_clauses =
+      from_map_struct_clauses ++
+        quote do
+          _ -> []
+        end
 
     from_map_function =
-      [
-        {:@, [], [{:impl, [], [true]}]},
-        {:def, [],
-         [
-           {:from_map, [], [{:=, [], [{:%{}, [], []}, {:map, [], nil}]}]},
-           [
-             do:
-               {:__block__, [],
-                [
-                  {:=, [],
-                   [
-                     {:fields, [], nil},
-                     {{:., [], [{:__aliases__, [alias: false], [:Enum]}, :flat_map]}, [],
-                      [
-                        {:map, [], nil},
-                        {:fn, [], from_map_struct_clauses ++ [{:->, [], [[{:_, [], nil}], []]}]}
-                      ]}
-                   ]},
-                  {:struct, [], [{:__MODULE__, [], nil}, {:fields, [], nil}]}
-                ]}
-           ]
-         ]}
-      ]
+      quote do
+        @impl true
+        def from_map(%{} = map) do
+          fields = Enum.flat_map(map, unquote({:fn, [], from_map_struct_clauses}))
+          struct(__MODULE__, fields)
+        end
+      end
+      |> elem(2)
 
-    to_map_function ++
-      from_map_function ++
-      Enum.flat_map(
-        fields_result,
-        fn
-          {:@, attribute_metadata,
-           [{:spec, spec_metadata, [{:"::", [], [spec_function_arguments, _]}]}]} ->
-            [
-              {:@, [], [{:impl, [], [true]}]},
-              {:@, attribute_metadata,
-               [
-                 {:spec, spec_metadata,
-                  [
-                    {:"::", [],
-                     [spec_function_arguments, quote(do: %{optional(String.t()) => term()})]}
-                  ]}
-               ]}
-            ]
-
-          expression ->
-            with {:def, def_metadata,
-                  [{:__fields__, fields_metadata, [schema_type]}, [do: field_clauses]]} <-
-                   expression,
-                 schema_ref when not is_nil(schema_ref) <-
-                   Enum.find_value(schemas, fn %Schema{type_name: type_name, ref: ref} ->
-                     if(schema_type == type_name, do: ref)
-                   end),
-                 [{_, %GeneratorSchema{fields: all_fields}}] <- :ets.lookup(:schemas, schema_ref) do
-              field_clauses_new =
-                Enum.map(field_clauses, fn {name, type} ->
-                  string_name = Atom.to_string(name)
-
-                  with %GeneratorField{old_name: old_name} <-
-                         Enum.find(all_fields, fn %GeneratorField{field: %Field{name: name}} ->
-                           name == string_name
-                         end) do
-                    {old_name, type}
-                  else
-                    _ -> {name, type}
-                  end
-                end)
-
+    [
+      to_map_function,
+      from_map_function
+      | Enum.flat_map(
+          fields_result,
+          fn
+            {:@, attribute_metadata,
+             [{:spec, spec_metadata, [{:"::", [], [spec_function_arguments, _]}]}]} ->
               [
-                {:def, def_metadata,
+                {:@, [], [{:impl, [], [true]}]},
+                {:@, attribute_metadata,
                  [
-                   {:__fields__, fields_metadata, [schema_type]},
-                   [do: {:%{}, [], field_clauses_new}]
+                   {:spec, spec_metadata,
+                    [
+                      {:"::", [],
+                       [spec_function_arguments, quote(do: %{optional(String.t()) => term()})]}
+                    ]}
                  ]}
               ]
-            else
-              _ -> [expression]
-            end
-        end
-      )
+
+            expression ->
+              with {:def, def_metadata,
+                    [{:__fields__, fields_metadata, [schema_type]}, [do: field_clauses]]} <-
+                     expression,
+                   schema_ref when not is_nil(schema_ref) <-
+                     Enum.find_value(schemas, fn %Schema{type_name: type_name, ref: ref} ->
+                       if(schema_type == type_name, do: ref)
+                     end),
+                   [{_, %GeneratorSchema{fields: all_fields}}] <-
+                     :ets.lookup(:schemas, schema_ref) do
+                field_clauses_new =
+                  Enum.map(field_clauses, fn {name, type} ->
+                    string_name = Atom.to_string(name)
+
+                    with %GeneratorField{old_name: old_name} <-
+                           Enum.find(all_fields, fn %GeneratorField{field: %Field{name: name}} ->
+                             name == string_name
+                           end) do
+                      {old_name, type}
+                    else
+                      _ -> {name, type}
+                    end
+                  end)
+
+                [
+                  {:def, def_metadata,
+                   [
+                     {:__fields__, fields_metadata, [schema_type]},
+                     [do: {:%{}, [], field_clauses_new}]
+                   ]}
+                ]
+              else
+                _ -> [expression]
+              end
+          end
+        )
+    ]
   end
 
   @impl true
@@ -488,24 +478,17 @@ defmodule OpenAPIClient.Generator.Renderer do
                 all_params
                 |> Enum.flat_map(fn
                   %GeneratorParam{default: {m, f, a}, param: %Param{name: name}} ->
+                    atom = String.to_atom(name)
+                    variable = Macro.var(atom, nil)
+
                     [
-                      {:=, [],
-                       [
-                         {String.to_atom(name), [], nil},
-                         {{:., [], [{:__aliases__, [alias: false], [:Keyword]}, :get_lazy]}, [],
-                          [
-                            {:opts, [], nil},
-                            String.to_atom(name),
-                            {:fn, [],
-                             [
-                               {:->, [],
-                                [
-                                  [],
-                                  Utils.ast_function_call(m, f, a)
-                                ]}
-                             ]}
-                          ]}
-                       ]}
+                      quote(
+                        do:
+                          unquote(variable) =
+                            Keyword.get_lazy(opts, unquote(atom), fn ->
+                              unquote(m).unquote(f)(unquote_splicing(a))
+                            end)
+                      )
                     ]
 
                   _ ->
@@ -518,43 +501,18 @@ defmodule OpenAPIClient.Generator.Renderer do
                 |> Keyword.get(:client_pipeline)
                 |> case do
                   {m, f, a} ->
-                    {{:., [], [{:__aliases__, [alias: false], [:Keyword]}, :get_lazy]}, [],
-                     [
-                       {:opts, [], nil},
-                       :client_pipeline,
-                       {:fn, [],
-                        [
-                          {:->, [],
-                           [
-                             [],
-                             Utils.ast_function_call(m, f, a)
-                           ]}
-                        ]}
-                     ]}
+                    quote do:
+                            client_pipeline =
+                              Keyword.get_lazy(opts, :client_pipeline, fn ->
+                                unquote(m).unquote(f)(unquote_splicing(a))
+                              end)
 
                   _ ->
-                    {{:., [from_brackets: true], [Access, :get]}, [from_brackets: true],
-                     [{:opts, [], nil}, :client_pipeline]}
+                    quote do: client_pipeline = opts[:client_pipeline]
                 end
 
-              client_pipeline_expression =
-                {:=, [],
-                 [
-                   {:client_pipeline, [], nil},
-                   client_pipeline_expression
-                 ]}
-
               base_url_expression =
-                {:=, [],
-                 [
-                   {:base_url, [], nil},
-                   {:||, [],
-                    [
-                      {{:., [from_brackets: true], [Access, :get]}, [from_brackets: true],
-                       [{:opts, [], nil}, :base_url]},
-                      {:@, [], [{:base_url, [], nil}]}
-                    ]}
-                 ]}
+                quote do: base_url = opts[:base_url] || @base_url
 
               [client_pipeline_expression, base_url_expression | param_assignments]
 
@@ -567,7 +525,7 @@ defmodule OpenAPIClient.Generator.Renderer do
                 |> render_params_parse()
 
               if query_value do
-                [{:=, [], [{:query_params, [], nil}, query_value]}]
+                [quote(do: query_params = unquote(query_value))]
               else
                 []
               end
@@ -634,35 +592,27 @@ defmodule OpenAPIClient.Generator.Renderer do
               operation_assigns = [{:request_base_url, {:base_url, [], nil}} | operation_assigns]
 
               operation =
-                {:%, [],
-                 [
-                   Utils.ast_module(OpenAPIClient.Client.Operation),
-                   {:%{}, [], operation_assigns}
-                 ]}
+                quote do
+                  %OpenAPIClient.Client.Operation{unquote_splicing(operation_assigns)}
+                end
 
               operation =
                 if map_size(private_assigns) != 0 do
-                  {:|>, [],
-                   [
-                     operation,
-                     Utils.ast_function_call(
-                       OpenAPIClient.Client.Operation,
-                       :put_private,
-                       [Map.to_list(private_assigns)]
-                     )
-                   ]}
+                  quote do
+                    unquote(operation)
+                    |> OpenAPIClient.Client.Operation.put_private(
+                      unquote(Map.to_list(private_assigns))
+                    )
+                  end
                 else
                   operation
                 end
 
               [
-                {:|>, [],
-                 [
-                   operation,
-                   Utils.ast_function_call(OpenAPIClient.Client, :perform, [
-                     {:client_pipeline, [], nil}
-                   ])
-                 ]}
+                quote do
+                  unquote(operation)
+                  |> OpenAPIClient.Client.perform(unquote(Macro.var(:client_pipeline, nil)))
+                end
               ]
 
             expression ->
@@ -720,39 +670,34 @@ defmodule OpenAPIClient.Generator.Renderer do
 
         dynamic_params =
           if length(param_renamings) > 0 do
-            {:|>, [],
-             [
-               dynamic_params,
-               {{:., [], [{:__aliases__, [alias: false], [:Enum]}, :map]}, [],
-                [{:fn, [], param_renamings}]}
-             ]}
+            quote do
+              unquote(dynamic_params)
+              |> Enum.map(unquote({:fn, [], param_renamings}))
+            end
           else
             dynamic_params
           end
 
-        {:|>, [],
-         [
-           dynamic_params,
-           {{:., [], [{:__aliases__, [alias: false], [:Map]}, :new]}, [], []}
-         ]}
+        quote do
+          unquote(dynamic_params)
+          |> Map.new()
+        end
       else
         nil
       end
 
     case {length(static_params) > 0, not is_nil(dynamic_params)} do
       {true, false} ->
-        {:%{}, [], static_params}
+        quote do: %{unquote_splicing(static_params)}
 
       {false, true} ->
         dynamic_params
 
       {true, true} ->
-        {:|>, [],
-         [
-           dynamic_params,
-           {{:., [], [{:__aliases__, [alias: false], [:Map]}, :merge]}, [],
-            [{:%{}, [], static_params}]}
-         ]}
+        quote do
+          unquote(dynamic_params)
+          |> Map.merge(%{unquote_splicing(static_params)})
+        end
     end
   end
 end
