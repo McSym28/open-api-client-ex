@@ -3,8 +3,9 @@ defmodule OpenAPIClient.Client do
   alias OpenAPIClient.Utils
 
   @type step :: module() | {module(), term()} | {module(), atom(), [term()]}
+  @type pipeline :: step() | [step(), ...]
 
-  @spec perform(Operation.t(), step() | [step(), ...]) :: {:ok, term()} | {:error, term()}
+  @spec perform(Operation.t(), pipeline()) :: {:ok, term()} | {:error, term()}
   def perform(operation, pipeline) do
     pipeline
     |> normalize_pipeline()

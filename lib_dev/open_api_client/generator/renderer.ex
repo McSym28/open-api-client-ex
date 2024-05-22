@@ -13,16 +13,11 @@ defmodule OpenAPIClient.Generator.Renderer do
   @impl true
   def render_default_client(%OpenAPI.Renderer.State{profile: profile} = state, file) do
     case OpenAPI.Renderer.render_default_client(state, file) do
-      {:@, _, [{:default_client, _, _}] = default_client_expression} ->
+      {:@, default_client_metadata, [{:default_client, _, _}] = _default_client_expression} ->
         base_url =
           :open_api_client_ex |> Application.fetch_env!(profile) |> Keyword.fetch!(:base_url)
 
-        [
-          {:@, [], default_client_expression}
-          | [
-              {:@, [end_of_expression: [newlines: 2]], [{:base_url, [], [base_url]}]}
-            ]
-        ]
+        {:@, default_client_metadata, [{:base_url, [], [base_url]}]}
 
       result ->
         result
@@ -436,7 +431,7 @@ defmodule OpenAPIClient.Generator.Renderer do
           end)
           |> Kernel.++([
             {:base_url, quote(do: String.t() | URI.t())},
-            {:client, quote(do: module())}
+            {:client_pipeline, quote(do: OpenAPIClient.Client.pipeline())}
           ])
           |> Enum.reverse()
           |> Enum.reduce(fn type, expression ->
@@ -493,7 +488,7 @@ defmodule OpenAPIClient.Generator.Renderer do
 
         do_expressions_new =
           Enum.flat_map(do_expressions, fn
-            {:=, _, [{:client, _, _} | _]} = client_expression ->
+            {:=, _, [{:client, _, _} | _]} = _client_expression ->
               param_assignments =
                 all_params
                 |> Enum.flat_map(fn
@@ -522,6 +517,38 @@ defmodule OpenAPIClient.Generator.Renderer do
                     []
                 end)
 
+              client_pipeline_expression =
+                :open_api_client_ex
+                |> Application.get_env(profile, [])
+                |> Keyword.get(:client_pipeline)
+                |> case do
+                  {m, f, a} ->
+                    {{:., [], [{:__aliases__, [alias: false], [:Keyword]}, :get_lazy]}, [],
+                     [
+                       {:opts, [], nil},
+                       :client_pipeline,
+                       {:fn, [],
+                        [
+                          {:->, [],
+                           [
+                             [],
+                             Utils.ast_function_call(m, f, a)
+                           ]}
+                        ]}
+                     ]}
+
+                  _ ->
+                    {{:., [from_brackets: true], [Access, :get]}, [from_brackets: true],
+                     [{:opts, [], nil}, :client_pipeline]}
+                end
+
+              client_pipeline_expression =
+                {:=, [],
+                 [
+                   {:client_pipeline, [], nil},
+                   client_pipeline_expression
+                 ]}
+
               base_url_expression =
                 {:=, [],
                  [
@@ -534,7 +561,7 @@ defmodule OpenAPIClient.Generator.Renderer do
                     ]}
                  ]}
 
-              [client_expression, base_url_expression | param_assignments]
+              [client_pipeline_expression, base_url_expression | param_assignments]
 
             {:=, _, [{:query, _, _} | _]} = _query_expression ->
               query_value =
@@ -637,7 +664,9 @@ defmodule OpenAPIClient.Generator.Renderer do
                 {:|>, [],
                  [
                    operation,
-                   Utils.ast_function_call(OpenAPIClient.Client, :perform, [])
+                   Utils.ast_function_call(OpenAPIClient.Client, :perform, [
+                     {:client_pipeline, [], nil}
+                   ])
                  ]}
               ]
 

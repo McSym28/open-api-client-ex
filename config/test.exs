@@ -15,6 +15,8 @@ config :oapi_generator,
 
 config :open_api_client_ex,
   json_library: Jason,
+  client_pipeline: TestPipeline,
   default: [
-    base_url: "https://example.com"
+    base_url: "https://example.com",
+    client_pipeline: {Application, :get_env, [:open_api_client_ex, :client_pipeline]}
   ]

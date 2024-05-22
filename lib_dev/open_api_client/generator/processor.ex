@@ -124,7 +124,7 @@ defmodule OpenAPIClient.Generator.Processor do
 
   @impl true
   def operation_docstring(
-        state,
+        %OpenAPI.Processor.State{profile: profile} = state,
         %OperationSpec{"$oag_path": request_path, request_body: request_body} = operation_spec,
         query_params
       ) do
@@ -156,6 +156,28 @@ defmodule OpenAPIClient.Generator.Processor do
               []
           end
 
+        client_pipeline_description = "Client pipeline for making a request"
+
+        client_pipeline_description =
+          :open_api_client_ex
+          |> Application.get_env(profile, [])
+          |> Keyword.get(:client_pipeline)
+          |> case do
+            {m, f, a} ->
+              function_call_string = Utils.ast_function_call(m, f, a) |> Macro.to_string()
+
+              Enum.join(
+                [
+                  client_pipeline_description,
+                  "Default value obtained through a call to `#{function_call_string}`"
+                ],
+                ". "
+              )
+
+            _ ->
+              client_pipeline_description
+          end
+
         additional_dynamic_params = [
           %Param{
             description: "Request's base URL. Default value is taken from `@base_url`",
@@ -164,10 +186,9 @@ defmodule OpenAPIClient.Generator.Processor do
             value_type: :null
           },
           %Param{
-            description:
-              "Client module for making a request. Default value is taken from `@default_client`",
+            description: client_pipeline_description,
             location: :header,
-            name: "client",
+            name: "client_pipeline",
             value_type: :null
           }
         ]
