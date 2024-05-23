@@ -134,7 +134,7 @@ defmodule OpenAPIClient.Generator.Renderer do
       ) do
     fields_result = OpenAPI.Renderer.render_schema_field_function(state, schemas)
 
-    {to_map_arguments, to_map_struct_clauses, from_map_struct_clauses} =
+    {_to_map_arguments, _to_map_struct_clauses, from_map_struct_clauses} =
       schemas
       |> Enum.reduce({[], [], []}, fn %Schema{ref: ref} = _schema, acc ->
         case :ets.lookup(:schemas, ref) do
@@ -252,11 +252,18 @@ defmodule OpenAPIClient.Generator.Renderer do
         end
       end)
 
+    struct_type =
+      Enum.find_value(schemas, fn
+        %Schema{output_format: :struct, type_name: type} -> type
+        _ -> nil
+      end)
+
     to_map_function =
       quote do
         @impl true
-        def to_map(%__MODULE__{unquote_splicing(to_map_arguments)}) do
-          %{unquote_splicing(to_map_struct_clauses)}
+        @spec to_map(unquote(struct_type)()) :: map()
+        def to_map(schema) do
+          OpenAPIClient.Schema.to_map(schema, __MODULE__, @fields)
         end
       end
       |> elem(2)
