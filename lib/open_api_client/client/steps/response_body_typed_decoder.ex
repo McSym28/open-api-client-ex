@@ -4,22 +4,35 @@ defmodule OpenAPIClient.Client.Steps.ResponseBodyTypedDecoder do
 
   The response type is selected based on the `Operation.response_status_code` and `Operation.response_types`
 
+  Accepts the following `opts`:
+  * `:typed_decoder` - Module that implements `OpenAPIClient.Client.TypedDecoder` behaviour. Default value obtained through a call to `Application.get_env(:open_api_client_ex, :typed_encoder, OpenAPIClient.Client.TypedDecoder)`
+
   """
 
   @behaviour Pluggable
 
   alias OpenAPIClient.Client.{Error, Operation, TypedDecoder}
 
+  @type option :: [{:typed_decoder, module()}]
+  @type options :: [option()]
+
   @impl true
+  @spec init(options()) :: options()
   def init(opts), do: opts
 
   @impl true
+  @spec call(Operation.t(), options()) :: Operation.t()
   def call(%Operation{response_body: nil} = operation, _opts), do: operation
 
-  def call(%Operation{response_body: body} = operation, _opts) do
+  def call(%Operation{response_body: body} = operation, opts) do
+    typed_decoder =
+      Keyword.get_lazy(opts, :typed_decoder, fn ->
+        Application.get_env(:open_api_client_ex, :typed_decoder, TypedDecoder)
+      end)
+
     response_type = get_response_type(operation)
 
-    case TypedDecoder.decode(body, response_type) do
+    case typed_decoder.decode(body, response_type) do
       {:ok, decoded_body} ->
         %Operation{operation | response_body: decoded_body}
 

@@ -2,6 +2,32 @@ defmodule OpenAPIClient.Client.TypedDecoder do
   alias OpenAPIClient.Utils
   alias OpenAPIClient.Client.Error
 
+  @type result :: {:ok, term()} | {:error, Error.t()}
+  @type path :: list(String.t() | nonempty_list(integer()))
+
+  @callback decode(value :: term(), type :: OpenAPIClient.Schema.type()) :: result()
+  @callback decode(
+              value :: term(),
+              type :: OpenAPIClient.Schema.type(),
+              path :: path(),
+              calling_module :: module()
+            ) ::
+              result()
+
+  @doc false
+  defmacro __using__(_opts) do
+    quote do
+      @behaviour OpenAPIClient.Client.TypedDecoder
+
+      @impl OpenAPIClient.Client.TypedDecoder
+      def decode(value, type) do
+        decode(value, type, [], __MODULE__)
+      end
+    end
+  end
+
+  @behaviour __MODULE__
+
   @doc """
   Manually decode a response
 
@@ -56,20 +82,20 @@ defmodule OpenAPIClient.Client.TypedDecoder do
       {:ok, "1"}
 
   """
-  @spec decode(term(), OpenAPIClient.Schema.type()) :: {:ok, term()} | {:error, Error.t()}
+  @impl __MODULE__
   def decode(value, type) do
-    decode(value, type, [])
+    decode(value, type, [], __MODULE__)
   end
 
-  @spec decode(term(), OpenAPIClient.Schema.type(), list()) :: {:ok, term()} | {:error, Error.t()}
-  defp decode(nil, _, _), do: {:ok, nil}
-  defp decode("", :null, _), do: {:ok, nil}
+  @impl __MODULE__
+  def decode(nil, _, _, _), do: {:ok, nil}
+  def decode("", :null, _, _), do: {:ok, nil}
 
-  defp decode(value, :boolean, _) when is_boolean(value), do: {:ok, value}
-  defp decode("true", :boolean, _), do: {:ok, true}
-  defp decode("false", :boolean, _), do: {:ok, false}
+  def decode(value, :boolean, _, _) when is_boolean(value), do: {:ok, value}
+  def decode("true", :boolean, _, _), do: {:ok, true}
+  def decode("false", :boolean, _, _), do: {:ok, false}
 
-  defp decode(_value, :boolean, path),
+  def decode(_value, :boolean, path, _),
     do:
       {:error,
        Error.new(
@@ -78,9 +104,9 @@ defmodule OpenAPIClient.Client.TypedDecoder do
          source: path
        )}
 
-  defp decode(value, :integer, _) when is_integer(value), do: {:ok, value}
+  def decode(value, :integer, _, _) when is_integer(value), do: {:ok, value}
 
-  defp decode(value, :integer, path) when is_binary(value) do
+  def decode(value, :integer, path, _) when is_binary(value) do
     case Integer.parse(value) do
       {decoded_value, ""} ->
         {:ok, decoded_value}
@@ -95,7 +121,7 @@ defmodule OpenAPIClient.Client.TypedDecoder do
     end
   end
 
-  defp decode(_value, :integer, path),
+  def decode(_value, :integer, path, _),
     do:
       {:error,
        Error.new(
@@ -104,9 +130,9 @@ defmodule OpenAPIClient.Client.TypedDecoder do
          source: path
        )}
 
-  defp decode(value, :number, _) when is_number(value), do: {:ok, value}
+  def decode(value, :number, _, _) when is_number(value), do: {:ok, value}
 
-  defp decode(value, :number, path) when is_binary(value) do
+  def decode(value, :number, path, _) when is_binary(value) do
     case Float.parse(value) do
       {decoded_value, ""} ->
         {:ok, decoded_value}
@@ -121,7 +147,7 @@ defmodule OpenAPIClient.Client.TypedDecoder do
     end
   end
 
-  defp decode(_value, :number, path),
+  def decode(_value, :number, path, _),
     do:
       {:error,
        Error.new(
@@ -130,23 +156,23 @@ defmodule OpenAPIClient.Client.TypedDecoder do
          source: path
        )}
 
-  defp decode(%Date{} = value, {:string, :date}, _), do: {:ok, value}
-  defp decode(%DateTime{} = value, {:string, :date}, _), do: {:ok, DateTime.to_date(value)}
-  defp decode(%DateTime{} = value, {:string, :date_time}, _), do: {:ok, value}
-  defp decode(%Time{} = value, {:string, :time}, _), do: {:ok, value}
-  defp decode(%DateTime{} = value, {:string, :time}, _), do: {:ok, DateTime.to_time(value)}
+  def decode(%Date{} = value, {:string, :date}, _, _), do: {:ok, value}
+  def decode(%DateTime{} = value, {:string, :date}, _, _), do: {:ok, DateTime.to_date(value)}
+  def decode(%DateTime{} = value, {:string, :date_time}, _, _), do: {:ok, value}
+  def decode(%Time{} = value, {:string, :time}, _, _), do: {:ok, value}
+  def decode(%DateTime{} = value, {:string, :time}, _, _), do: {:ok, DateTime.to_time(value)}
 
-  defp decode(value, {:string, string_format}, path)
-       when not is_binary(value) and string_format in [:date, :date_time, :time],
-       do:
-         {:error,
-          Error.new(
-            message: "Invalid format for date/time value",
-            reason: :invalid_datetime_string,
-            source: path
-          )}
+  def decode(value, {:string, string_format}, path, _)
+      when not is_binary(value) and string_format in [:date, :date_time, :time],
+      do:
+        {:error,
+         Error.new(
+           message: "Invalid format for date/time value",
+           reason: :invalid_datetime_string,
+           source: path
+         )}
 
-  defp decode(value, {:string, :date}, path) do
+  def decode(value, {:string, :date}, path, _) do
     case Date.from_iso8601(value) do
       {:ok, decoded_value} ->
         {:ok, decoded_value}
@@ -167,7 +193,7 @@ defmodule OpenAPIClient.Client.TypedDecoder do
     end
   end
 
-  defp decode(value, {:string, :date_time}, path) do
+  def decode(value, {:string, :date_time}, path, _) do
     case DateTime.from_iso8601(value) do
       {:ok, datetime, _offset} ->
         {:ok, datetime}
@@ -182,7 +208,7 @@ defmodule OpenAPIClient.Client.TypedDecoder do
     end
   end
 
-  defp decode(value, {:string, :time}, path) do
+  def decode(value, {:string, :time}, path, _) do
     case Time.from_iso8601(value) do
       {:ok, decoded_value} ->
         {:ok, decoded_value}
@@ -203,10 +229,11 @@ defmodule OpenAPIClient.Client.TypedDecoder do
     end
   end
 
-  defp decode(value, {:string, _} = type, path) when is_number(value) or is_atom(value),
-    do: decode(to_string(value), type, path)
+  def decode(value, {:string, _} = type, path, calling_module)
+      when is_number(value) or is_atom(value),
+      do: calling_module.decode(to_string(value), type, path, calling_module)
 
-  defp decode(value, {:string, _}, path) when not is_binary(value),
+  def decode(value, {:string, _}, path, _) when not is_binary(value),
     do:
       {:error,
        Error.new(
@@ -215,14 +242,14 @@ defmodule OpenAPIClient.Client.TypedDecoder do
          source: path
        )}
 
-  defp decode(value, {:union, types}, path) do
+  def decode(value, {:union, types}, path, calling_module) do
     case choose_union(value, types) do
-      {:ok, type} -> decode(value, type)
+      {:ok, type} -> calling_module.decode(value, type)
       {:error, error} -> {:error, %Error{error | source: path}}
     end
   end
 
-  defp decode(value, [_type], path) when not is_list(value),
+  def decode(value, [_type], path, _) when not is_list(value),
     do:
       {:error,
        Error.new(
@@ -231,11 +258,11 @@ defmodule OpenAPIClient.Client.TypedDecoder do
          source: path
        )}
 
-  defp decode(value, [type], path) do
+  def decode(value, [type], path, calling_module) do
     value
     |> Enum.with_index()
     |> Enum.reduce_while({:ok, []}, fn {item_value, index}, {:ok, acc} ->
-      case decode(item_value, type, [[index] | path]) do
+      case calling_module.decode(item_value, type, [[index] | path], calling_module) do
         {:ok, decoded_value} -> {:cont, {:ok, [decoded_value | acc]}}
         {:error, _} = error -> {:halt, error}
       end
@@ -246,8 +273,8 @@ defmodule OpenAPIClient.Client.TypedDecoder do
     end
   end
 
-  defp decode(value, {module, type}, path)
-       when is_atom(module) and is_atom(type) and is_map(value) do
+  def decode(value, {module, type}, path, calling_module)
+      when is_atom(module) and is_atom(type) and is_map(value) do
     if Utils.is_module?(module) and Utils.does_implement_behaviour?(module, OpenAPIClient.Schema) do
       fields = module.__fields__(type)
 
@@ -255,7 +282,7 @@ defmodule OpenAPIClient.Client.TypedDecoder do
       |> Enum.reduce_while({:ok, %{}}, fn {name, field_value}, {:ok, acc} ->
         case Map.fetch(fields, name) do
           {:ok, field_type} ->
-            case decode(field_value, field_type, [name | path]) do
+            case calling_module.decode(field_value, field_type, [name | path], calling_module) do
               {:ok, decoded_value} -> {:cont, {:ok, Map.put(acc, name, decoded_value)}}
               {:error, _} = error -> {:halt, error}
             end
@@ -269,11 +296,11 @@ defmodule OpenAPIClient.Client.TypedDecoder do
         {:error, _} = error -> error
       end
     else
-      decode(value, :unknown, path)
+      calling_module.decode(value, :unknown, path, calling_module)
     end
   end
 
-  defp decode(value, :map, path) when not is_map(value),
+  def decode(value, :map, path, _) when not is_map(value),
     do:
       {:error,
        Error.new(
@@ -282,7 +309,7 @@ defmodule OpenAPIClient.Client.TypedDecoder do
          source: path
        )}
 
-  defp decode(value, _type, _), do: {:ok, value}
+  def decode(value, _type, _, _), do: {:ok, value}
 
   #
   # Union Type Handlers

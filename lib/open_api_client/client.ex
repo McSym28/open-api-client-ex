@@ -3,7 +3,7 @@ defmodule OpenAPIClient.Client do
   alias OpenAPIClient.Utils
 
   @type step :: module() | {module(), term()} | {module(), atom(), [term()]}
-  @type pipeline :: step() | [step(), ...]
+  @type pipeline :: step() | nonempty_list(step())
 
   @spec perform(Operation.t(), pipeline()) :: {:ok, term()} | {:error, term()}
   def perform(operation, pipeline) do
