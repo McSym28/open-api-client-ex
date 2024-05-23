@@ -129,128 +129,10 @@ defmodule OpenAPIClient.Generator.Renderer do
 
   @impl true
   def render_schema_field_function(
-        %OpenAPI.Renderer.State{schemas: state_schemas} = state,
+        %OpenAPI.Renderer.State{schemas: _state_schemas} = state,
         schemas
       ) do
     fields_result = OpenAPI.Renderer.render_schema_field_function(state, schemas)
-
-    {_to_map_arguments, _to_map_struct_clauses, from_map_struct_clauses} =
-      schemas
-      |> Enum.reduce({[], [], []}, fn %Schema{ref: ref} = _schema, acc ->
-        case :ets.lookup(:schemas, ref) do
-          [{_, %GeneratorSchema{fields: all_fields}}] ->
-            all_fields
-            |> Enum.sort_by(fn %GeneratorField{field: %Field{name: name}} -> name end, :desc)
-            |> Enum.reduce(acc, fn
-              %GeneratorField{
-                field: %Field{name: name, type: type},
-                old_name: old_name,
-                enum_aliases: enum_aliases
-              },
-              {to_map_arguments, to_map_struct_clauses, from_map_struct_clauses} ->
-                {to_map_value, from_map_value} =
-                  case type do
-                    child_schema_ref when is_reference(child_schema_ref) ->
-                      %Schema{module_name: child_schema_module} =
-                        Map.get(state_schemas, child_schema_ref)
-
-                      variable = name |> String.to_atom() |> Macro.var(nil)
-
-                      {
-                        quote do
-                          unquote(child_schema_module).to_map(unquote(variable))
-                        end,
-                        quote do
-                          unquote(child_schema_module).from_map(unquote(variable))
-                        end
-                      }
-
-                    {:array, child_schema_ref} when is_reference(child_schema_ref) ->
-                      %Schema{module_name: child_schema_module} =
-                        Map.get(state_schemas, child_schema_ref)
-
-                      variable = name |> String.to_atom() |> Macro.var(nil)
-
-                      {
-                        quote do
-                          Enum.map(unquote(variable), &unquote(child_schema_module).to_map/1)
-                        end,
-                        quote do
-                          Enum.map(unquote(variable), &unquote(child_schema_module).from_map/1)
-                        end
-                      }
-
-                    _ when map_size(enum_aliases) == 0 ->
-                      variable = name |> String.to_atom() |> Macro.var(nil)
-                      {variable, variable}
-
-                    _ ->
-                      enum_renamings =
-                        Enum.sort_by(enum_aliases, fn {_enum_atom, enum_value} -> enum_value end)
-
-                      enum_renamings = enum_renamings ++ [:not_strict]
-
-                      variable = name |> String.to_atom() |> Macro.var(nil)
-
-                      case type do
-                        {:array, _} ->
-                          {
-                            quote do
-                              unquote(variable)
-                              |> Enum.map(fn value ->
-                                OpenAPIClient.Schema.enum_to_map(value, unquote(enum_renamings))
-                              end)
-                            end,
-                            quote do
-                              unquote(variable)
-                              |> Enum.map(fn value ->
-                                OpenAPIClient.Schema.enum_from_map(value, unquote(enum_renamings))
-                              end)
-                            end
-                          }
-
-                        _ ->
-                          {
-                            quote do
-                              OpenAPIClient.Schema.enum_to_map(
-                                unquote(variable),
-                                unquote(enum_renamings)
-                              )
-                            end,
-                            quote do
-                              OpenAPIClient.Schema.enum_from_map(
-                                unquote(variable),
-                                unquote(enum_renamings)
-                              )
-                            end
-                          }
-                      end
-                  end
-
-                atom = String.to_atom(name)
-                variable = Macro.var(atom, nil)
-
-                {
-                  [{atom, variable} | to_map_arguments],
-                  [{old_name, to_map_value} | to_map_struct_clauses],
-                  [
-                    {:->, [],
-                     [
-                       [{old_name, variable}],
-                       [{atom, from_map_value}]
-                     ]}
-                    | from_map_struct_clauses
-                  ]
-                }
-
-              _, acc ->
-                acc
-            end)
-
-          [] ->
-            acc
-        end
-      end)
 
     struct_type =
       Enum.find_value(schemas, fn
@@ -268,18 +150,12 @@ defmodule OpenAPIClient.Generator.Renderer do
       end
       |> elem(2)
 
-    from_map_struct_clauses =
-      from_map_struct_clauses ++
-        quote do
-          _ -> []
-        end
-
     from_map_function =
       quote do
         @impl true
+        @spec from_map(map()) :: unquote(struct_type)()
         def from_map(%{} = map) do
-          fields = Enum.flat_map(map, unquote({:fn, [], from_map_struct_clauses}))
-          struct(__MODULE__, fields)
+          OpenAPIClient.Schema.from_map(map, __MODULE__, @fields)
         end
       end
       |> elem(2)
@@ -299,7 +175,10 @@ defmodule OpenAPIClient.Generator.Renderer do
                    {:spec, spec_metadata,
                     [
                       {:"::", [],
-                       [spec_function_arguments, quote(do: %{optional(String.t()) => term()})]}
+                       [
+                         spec_function_arguments,
+                         quote(do: %{optional(String.t()) => OpenAPIClient.Schema.type()})
+                       ]}
                     ]}
                  ]}
               ]

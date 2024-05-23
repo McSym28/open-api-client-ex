@@ -35,44 +35,14 @@ defmodule OpenAPIClient.TestSchema do
   end
 
   @impl true
+  @spec from_map(map()) :: t()
   def from_map(%{} = map) do
-    fields =
-      Enum.flat_map(map, fn
-        {"Boolean", boolean} ->
-          [boolean: boolean]
-
-        {"DateTime", date_time} ->
-          [date_time: date_time]
-
-        {"Enum", enum} ->
-          [
-            enum:
-              OpenAPIClient.Schema.enum_from_map(enum, [
-                {:enum_1, "ENUM_1"},
-                {:enum_2, "ENUM_2"},
-                :not_strict
-              ])
-          ]
-
-        {"Integer", integer} ->
-          [integer: integer]
-
-        {"Number", number} ->
-          [number: number]
-
-        {"String", string} ->
-          [string: string]
-
-        _ ->
-          []
-      end)
-
-    struct(__MODULE__, fields)
+    OpenAPIClient.Schema.from_map(map, __MODULE__, @fields)
   end
 
   @doc false
   @impl true
-  @spec __fields__(atom) :: %{optional(String.t()) => term()}
+  @spec __fields__(atom) :: %{optional(String.t()) => OpenAPIClient.Schema.type()}
   def __fields__(type \\ :t)
 
   def __fields__(:t) do
