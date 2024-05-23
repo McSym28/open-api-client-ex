@@ -17,7 +17,7 @@ defmodule OpenAPIClient.Generator.Renderer do
           :open_api_client_ex |> Application.fetch_env!(profile) |> Keyword.fetch!(:base_url)
 
         quote(do: @base_url(unquote(base_url)))
-        |> Macro.update_meta(&Keyword.put(&1, :end_of_expression, newlines: 2))
+        |> Util.put_newlines()
 
       result ->
         result
@@ -54,9 +54,9 @@ defmodule OpenAPIClient.Generator.Renderer do
       list ->
         [
           quote(do: @behaviour(OpenAPIClient.Schema))
-          |> Macro.update_meta(&Keyword.put(&1, :end_of_expression, newlines: 2)),
+          |> Util.put_newlines(),
           quote(do: require(OpenAPIClient.Schema))
-          |> Macro.update_meta(&Keyword.put(&1, :end_of_expression, newlines: 2))
+          |> Util.put_newlines()
           | list
         ]
     end
@@ -88,28 +88,43 @@ defmodule OpenAPIClient.Generator.Renderer do
   def render_schema_struct(state, schemas) do
     struct_result = OpenAPI.Renderer.render_schema_struct(state, schemas)
 
-    schemas
-    |> Enum.flat_map(fn %Schema{ref: ref} = _schema ->
-      case :ets.lookup(:schemas, ref) do
-        [{_, %GeneratorSchema{fields: all_fields}}] ->
-          Enum.flat_map(all_fields, fn
-            %GeneratorField{field: %Field{name: name}, enforce: true} -> [String.to_atom(name)]
-            _ -> []
-          end)
+    {fields, enforced_keys} =
+      schemas
+      |> Enum.flat_map_reduce([], fn %Schema{ref: ref} = _schema, enforced_keys ->
+        case :ets.lookup(:schemas, ref) do
+          [{_, %GeneratorSchema{fields: all_fields}}] ->
+            Enum.flat_map_reduce(all_fields, enforced_keys, fn
+              %GeneratorField{field: %Field{name: name}, old_name: old_name, enforce: true} =
+                  field,
+              enforced_keys ->
+                {[{String.to_atom(name), {old_name, field_to_type(field)}}],
+                 [String.to_atom(name) | enforced_keys]}
 
-        [] ->
-          []
+              %GeneratorField{field: %Field{name: name}, old_name: old_name} = field,
+              enforced_keys ->
+                {[{String.to_atom(name), {old_name, field_to_type(field)}}], enforced_keys}
+
+              _, enforced_keys ->
+                {[], enforced_keys}
+            end)
+
+          [] ->
+            {[], enforced_keys}
+        end
+      end)
+
+    fields_expression =
+      if length(fields) > 0 do
+        quote(do: @fields(%{unquote_splicing(Enum.sort_by(fields, fn {name, _} -> name end))}))
+        |> Util.put_newlines()
       end
-    end)
-    |> Enum.sort()
-    |> case do
-      [] ->
-        struct_result
 
-      enforced_keys ->
-        enforced_keys_result = quote do: @enforce_keys(unquote(enforced_keys))
-        OpenAPI.Renderer.Util.put_newlines([enforced_keys_result, struct_result])
-    end
+    enforced_keys_expression =
+      if length(enforced_keys) > 0 do
+        quote do: @enforce_keys(unquote(Enum.sort(enforced_keys)))
+      end
+
+    OpenAPI.Renderer.Util.clean_list([fields_expression, enforced_keys_expression, struct_result])
   end
 
   @impl true
@@ -282,40 +297,27 @@ defmodule OpenAPIClient.Generator.Renderer do
                  ]}
               ]
 
-            expression ->
-              with {:def, def_metadata,
-                    [{:__fields__, fields_metadata, [schema_type]}, [do: field_clauses]]} <-
-                     expression,
-                   schema_ref when not is_nil(schema_ref) <-
-                     Enum.find_value(schemas, fn %Schema{type_name: type_name, ref: ref} ->
-                       if(schema_type == type_name, do: ref)
-                     end),
-                   [{_, %GeneratorSchema{fields: all_fields}}] <-
-                     :ets.lookup(:schemas, schema_ref) do
-                field_clauses_new =
-                  Enum.map(field_clauses, fn {name, type} ->
-                    string_name = Atom.to_string(name)
+            {:def, def_metadata, [fun_header, [do: fields_clauses]]} ->
+              fields = Enum.map(fields_clauses, fn {name, _type} -> name end)
 
-                    with %GeneratorField{old_name: old_name} <-
-                           Enum.find(all_fields, fn %GeneratorField{field: %Field{name: name}} ->
-                             name == string_name
-                           end) do
-                      {old_name, type}
-                    else
-                      _ -> {name, type}
-                    end
-                  end)
-
-                [
-                  {:def, def_metadata,
+              [
+                {:def, def_metadata,
+                 [
+                   fun_header,
                    [
-                     {:__fields__, fields_metadata, [schema_type]},
-                     [do: {:%{}, [], field_clauses_new}]
-                   ]}
-                ]
-              else
-                _ -> [expression]
-              end
+                     do:
+                       quote do
+                         @fields
+                         |> Map.take(unquote(fields))
+                         |> Map.values()
+                         |> Map.new()
+                       end
+                   ]
+                 ]}
+              ]
+
+            expression ->
+              [expression]
           end
         )
     ]
@@ -691,4 +693,15 @@ defmodule OpenAPIClient.Generator.Renderer do
         end
     end
   end
+
+  defp field_to_type(%GeneratorField{field: %Field{type: {:enum, _}}, enum_aliases: enum_aliases}),
+    do: {:enum, Map.to_list(enum_aliases) ++ [:not_strict]}
+
+  defp field_to_type(
+         %GeneratorField{field: %Field{type: {:array, {:enum, _} = enum}} = inner_field} = field
+       ),
+       do:
+         {:array, field_to_type(%GeneratorField{field | field: %Field{inner_field | type: enum}})}
+
+  defp field_to_type(%GeneratorField{field: %Field{type: type}}), do: type
 end

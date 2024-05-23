@@ -16,6 +16,15 @@ defmodule OpenAPIClient.TestSchema do
           string: String.t()
         }
 
+  @fields %{
+    boolean: {"Boolean", :boolean},
+    date_time: {"DateTime", {:string, :date_time}},
+    enum: {"Enum", {:enum, [{:enum_1, "ENUM_1"}, {:enum_2, "ENUM_2"}, :not_strict]}},
+    integer: {"Integer", :integer},
+    number: {"Number", :number},
+    string: {"String", {:string, :generic}}
+  }
+
   @enforce_keys [:boolean, :date_time, :enum, :integer, :number, :string]
   defstruct [:boolean, :date_time, :enum, :integer, :number, :string]
 
@@ -85,13 +94,9 @@ defmodule OpenAPIClient.TestSchema do
   def __fields__(type \\ :t)
 
   def __fields__(:t) do
-    %{
-      "Boolean" => :boolean,
-      "DateTime" => {:string, :date_time},
-      "Enum" => {:enum, [:enum_1, :enum_2]},
-      "Integer" => :integer,
-      "Number" => :number,
-      "String" => {:string, :generic}
-    }
+    @fields
+    |> Map.take([:boolean, :date_time, :enum, :integer, :number, :string])
+    |> Map.values()
+    |> Map.new()
   end
 end
