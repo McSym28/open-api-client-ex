@@ -156,9 +156,9 @@ defmodule OpenAPIClient.Generator.Renderer do
 
         to_map_function =
           quote do
-            def to_map(schema) do
+            def to_map(map_or_schema, unquote(type)) do
               OpenAPIClient.Schema.to_map(
-                schema,
+                map_or_schema,
                 unquote(fields_attribute_name),
                 unquote(struct)
               )
@@ -182,7 +182,7 @@ defmodule OpenAPIClient.Generator.Renderer do
       if length(to_map_expressions) > 0 do
         quote do
           @impl true
-          @spec to_map(unquote(types)) :: map()
+          @spec to_map(unquote(types), types()) :: map()
           unquote(to_map_expressions)
         end
         |> elem(2)

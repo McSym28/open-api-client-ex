@@ -28,7 +28,9 @@ defmodule OpenAPIClient.Client.Steps.RequestBodyTypedEncoder do
         Application.get_env(:open_api_client_ex, :typed_encoder, TypedEncoder)
       end)
 
-    case typed_encoder.encode(request_body) do
+    type = get_type(operation)
+
+    case typed_encoder.encode(request_body, type) do
       {:ok, encoded_body} ->
         %Operation{operation | request_body: encoded_body}
 
@@ -37,6 +39,15 @@ defmodule OpenAPIClient.Client.Steps.RequestBodyTypedEncoder do
           operation,
           {:error, %Error{error | operation: operation, step: __MODULE__}}
         )
+    end
+  end
+
+  defp get_type(%Operation{request_types: types} = operation) do
+    with {:ok, content_type} <- Operation.get_request_header(operation, "Content-Type"),
+         {_, type} <- List.keyfind(types, content_type, 0) do
+      type
+    else
+      _ -> :unknown
     end
   end
 end

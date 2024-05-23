@@ -13,39 +13,9 @@ defmodule OpenAPIClient.Schema do
           | {module(), atom()}
   @type type() :: non_array_type() | [non_array_type()]
 
-  @callback to_map(struct :: struct() | map()) :: map()
+  @callback to_map(struct :: struct() | map(), atom()) :: map()
   @callback from_map(map :: map(), atom()) :: struct() | map()
   @callback __fields__(atom()) :: %{optional(String.t()) => type()}
-
-  defp enum_clauses(clauses, to_map) do
-    Enum.map(clauses, fn
-      {key, value} when to_map -> quote(do: (unquote(key) -> unquote(value))) |> hd()
-      {key, value} -> quote(do: (unquote(value) -> unquote(key))) |> hd()
-      :not_strict -> quote(do: (value -> value)) |> hd()
-    end)
-  end
-
-  defp map_type(variable, {:enum, clauses}, to_map) do
-    if to_map do
-      quote do
-        case unquote(variable) do
-          unquote(enum_clauses(clauses, to_map))
-        end
-      end
-    else
-      variable
-    end
-  end
-
-  defp map_type(variable, [enum: clauses], to_map) do
-    if to_map do
-      quote do
-        Enum.map(unquote(variable), unquote({:fn, [], enum_clauses(clauses, to_map)}))
-      end
-    else
-      variable
-    end
-  end
 
   defp map_type(variable, {module, _type}, to_map) when is_atom(module) do
     if Macro.classify_atom(module) == :alias do

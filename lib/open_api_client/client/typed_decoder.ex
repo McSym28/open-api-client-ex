@@ -99,7 +99,7 @@ defmodule OpenAPIClient.Client.TypedDecoder do
     do:
       {:error,
        Error.new(
-         message: "Error while parsing boolean",
+         message: "Error while decoding boolean",
          reason: :invalid_boolean,
          source: path
        )}
@@ -114,7 +114,7 @@ defmodule OpenAPIClient.Client.TypedDecoder do
       _ ->
         {:error,
          Error.new(
-           message: "Error while parsing integer from string",
+           message: "Error while decoding integer from string",
            reason: :invalid_integer,
            source: path
          )}
@@ -125,7 +125,7 @@ defmodule OpenAPIClient.Client.TypedDecoder do
     do:
       {:error,
        Error.new(
-         message: "Error while parsing integer",
+         message: "Error while decoding integer",
          reason: :invalid_integer,
          source: path
        )}
@@ -140,7 +140,7 @@ defmodule OpenAPIClient.Client.TypedDecoder do
       _ ->
         {:error,
          Error.new(
-           message: "Error while parsing number from string",
+           message: "Error while decoding number from string",
            reason: :invalid_number,
            source: path
          )}
@@ -151,7 +151,7 @@ defmodule OpenAPIClient.Client.TypedDecoder do
     do:
       {:error,
        Error.new(
-         message: "Error while parsing number",
+         message: "Error while decoding number",
          reason: :invalid_number,
          source: path
        )}
@@ -185,7 +185,7 @@ defmodule OpenAPIClient.Client.TypedDecoder do
           {:error, _} ->
             {:error,
              Error.new(
-               message: "Error while parsing date value from string",
+               message: "Error while decoding date value from string",
                reason: reason,
                source: path
              )}
@@ -201,7 +201,7 @@ defmodule OpenAPIClient.Client.TypedDecoder do
       {:error, reason} ->
         {:error,
          Error.new(
-           message: "Error while parsing date-time value from string",
+           message: "Error while decoding date-time value from string",
            reason: reason,
            source: path
          )}
@@ -221,7 +221,7 @@ defmodule OpenAPIClient.Client.TypedDecoder do
           {:error, _} ->
             {:error,
              Error.new(
-               message: "Error while parsing time value from string",
+               message: "Error while decoding time value from string",
                reason: reason,
                source: path
              )}
@@ -237,7 +237,7 @@ defmodule OpenAPIClient.Client.TypedDecoder do
     do:
       {:error,
        Error.new(
-         message: "Error while parsing string",
+         message: "Error while decoding string",
          reason: :invalid_string,
          source: path
        )}
@@ -253,7 +253,7 @@ defmodule OpenAPIClient.Client.TypedDecoder do
     do:
       {:error,
        Error.new(
-         message: "Error while parsing list",
+         message: "Error while decoding list",
          reason: :invalid_list,
          source: path
        )}
@@ -288,7 +288,7 @@ defmodule OpenAPIClient.Client.TypedDecoder do
       nil ->
         {:error,
          Error.new(
-           message: "Error while parsing enum",
+           message: "Error while decoding enum",
            reason: :invalid_enum,
            source: path
          )}
@@ -326,7 +326,7 @@ defmodule OpenAPIClient.Client.TypedDecoder do
     do:
       {:error,
        Error.new(
-         message: "Error while parsing map",
+         message: "Error while decoding map",
          reason: :invalid_map,
          source: path
        )}
@@ -406,7 +406,7 @@ defmodule OpenAPIClient.Client.TypedDecoder do
   defp choose_union(_value, _types) do
     {:error,
      Error.new(
-       message: "Error while parsing union type",
+       message: "Error while decoding union type",
        reason: :unsupported_union
      )}
   end

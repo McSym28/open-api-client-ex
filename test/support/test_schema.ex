@@ -30,9 +30,9 @@ defmodule OpenAPIClient.TestSchema do
   defstruct [:boolean, :date_time, :enum, :integer, :number, :string]
 
   @impl true
-  @spec to_map(t()) :: map()
-  def to_map(schema) do
-    OpenAPIClient.Schema.to_map(schema, @t_fields, __MODULE__)
+  @spec to_map(t(), types()) :: map()
+  def to_map(map_or_schema, :t) do
+    OpenAPIClient.Schema.to_map(map_or_schema, @t_fields, __MODULE__)
   end
 
   @impl true
