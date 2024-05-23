@@ -9,7 +9,7 @@ defmodule OpenAPIClient.Schema do
           | {:string, atom()}
           | :unknown
           | {:union, [type()]}
-          | {:enum, [{atom(), String.t()} | :not_strict]}
+          | {:enum, [integer() | number() | boolean() | {atom(), String.t()} | :not_strict]}
           | {module(), atom()}
   @type type() :: non_array_type() | [non_array_type()]
 
@@ -26,16 +26,24 @@ defmodule OpenAPIClient.Schema do
   end
 
   defp map_type(variable, {:enum, clauses}, to_map) do
-    quote do
-      case unquote(variable) do
-        unquote(enum_clauses(clauses, to_map))
+    if to_map do
+      quote do
+        case unquote(variable) do
+          unquote(enum_clauses(clauses, to_map))
+        end
       end
+    else
+      variable
     end
   end
 
   defp map_type(variable, [enum: clauses], to_map) do
-    quote do
-      Enum.map(unquote(variable), unquote({:fn, [], enum_clauses(clauses, to_map)}))
+    if to_map do
+      quote do
+        Enum.map(unquote(variable), unquote({:fn, [], enum_clauses(clauses, to_map)}))
+      end
+    else
+      variable
     end
   end
 

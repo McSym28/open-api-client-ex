@@ -273,6 +273,28 @@ defmodule OpenAPIClient.Client.TypedDecoder do
     end
   end
 
+  def decode(value, {:enum, enum_options}, path, _calling_module) do
+    enum_options
+    |> Enum.find_value(fn
+      ^value -> {:ok, value}
+      {new_value, ^value} -> {:ok, new_value}
+      :not_strict -> {:ok, value}
+      _ -> nil
+    end)
+    |> case do
+      {:ok, new_value} ->
+        {:ok, new_value}
+
+      nil ->
+        {:error,
+         Error.new(
+           message: "Error while parsing enum",
+           reason: :invalid_enum,
+           source: path
+         )}
+    end
+  end
+
   def decode(value, {module, type}, path, calling_module)
       when is_atom(module) and is_atom(type) and is_map(value) do
     if Utils.is_module?(module) and Utils.does_implement_behaviour?(module, OpenAPIClient.Schema) do
