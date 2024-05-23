@@ -14,7 +14,7 @@ defmodule OpenAPIClient.Schema do
   @type type() :: non_array_type() | [non_array_type()]
 
   @callback to_map(struct :: struct() | map()) :: map()
-  @callback from_map(map :: map()) :: struct() | map()
+  @callback from_map(map :: map(), atom()) :: struct() | map()
   @callback __fields__(atom()) :: %{optional(String.t()) => type()}
 
   defp enum_clauses(clauses, to_map) do
@@ -65,8 +65,8 @@ defmodule OpenAPIClient.Schema do
 
   defp map_type(variable, _type, _to_map), do: variable
 
-  defmacro to_map(value, struct, fields) do
-    {struct_pairs, map_pairs} =
+  defmacro to_map(value, fields, struct) do
+    clauses =
       fields
       |> Macro.expand(__CALLER__)
       |> elem(2)
@@ -78,15 +78,36 @@ defmodule OpenAPIClient.Schema do
           {old_name, map_type(variable, type, true)}
         }
       end)
-      |> Enum.unzip()
 
-    quote do
-      %unquote(struct){unquote_splicing(struct_pairs)} = unquote(value)
-      %{unquote_splicing(map_pairs)}
+    if struct do
+      {struct_pairs, map_pairs} = Enum.unzip(clauses)
+
+      quote do
+        %unquote(struct){unquote_splicing(struct_pairs)} = unquote(value)
+        %{unquote_splicing(map_pairs)}
+      end
+    else
+      clauses =
+        clauses
+        |> Enum.map(fn {{name, variable}, {old_name, new_value}} ->
+          quote(
+            do:
+              ({unquote(old_name), unquote(variable)} ->
+                 [{unquote(name), unquote(new_value)}])
+          )
+          |> hd()
+        end)
+        |> Kernel.++(quote(do: (_ -> [])))
+
+      quote do
+        unquote(value)
+        |> Enum.flat_map(unquote({:fn, [], clauses}))
+        |> Map.new()
+      end
     end
   end
 
-  defmacro from_map(value, struct, fields) do
+  defmacro from_map(value, fields, struct) do
     clauses =
       fields
       |> Macro.expand(__CALLER__)
@@ -103,9 +124,18 @@ defmodule OpenAPIClient.Schema do
       end)
       |> Kernel.++(quote(do: (_ -> [])))
 
-    quote do
-      fields = Enum.flat_map(unquote(value), unquote({:fn, [], clauses}))
-      struct(unquote(struct), fields)
+    if struct do
+      quote do
+        unquote(value)
+        |> Enum.flat_map(unquote({:fn, [], clauses}))
+        |> then(&struct(unquote(struct), &1))
+      end
+    else
+      quote do
+        unquote(value)
+        |> Enum.flat_map(unquote({:fn, [], clauses}))
+        |> Map.new()
+      end
     end
   end
 end

@@ -292,7 +292,7 @@ defmodule OpenAPIClient.Client.TypedDecoder do
         end
       end)
       |> case do
-        {:ok, decoded_value} -> {:ok, module.from_map(decoded_value)}
+        {:ok, decoded_value} -> {:ok, module.from_map(decoded_value, type)}
         {:error, _} = error -> error
       end
     else

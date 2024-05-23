@@ -15,8 +15,9 @@ defmodule OpenAPIClient.TestSchema do
           number: number,
           string: String.t()
         }
+  @type types :: :t
 
-  @fields %{
+  @t_fields %{
     boolean: {"Boolean", :boolean},
     date_time: {"DateTime", {:string, :date_time}},
     enum: {"Enum", {:enum, [{:enum_1, "ENUM_1"}, {:enum_2, "ENUM_2"}, :not_strict]}},
@@ -31,24 +32,21 @@ defmodule OpenAPIClient.TestSchema do
   @impl true
   @spec to_map(t()) :: map()
   def to_map(schema) do
-    OpenAPIClient.Schema.to_map(schema, __MODULE__, @fields)
+    OpenAPIClient.Schema.to_map(schema, @t_fields, __MODULE__)
   end
 
   @impl true
-  @spec from_map(map()) :: t()
-  def from_map(%{} = map) do
-    OpenAPIClient.Schema.from_map(map, __MODULE__, @fields)
+  @spec from_map(map(), types()) :: t()
+  def from_map(%{} = map, :t) do
+    OpenAPIClient.Schema.from_map(map, @t_fields, __MODULE__)
   end
 
   @doc false
   @impl true
-  @spec __fields__(atom) :: %{optional(String.t()) => OpenAPIClient.Schema.type()}
+  @spec __fields__(types()) :: %{optional(String.t()) => OpenAPIClient.Schema.type()}
   def __fields__(type \\ :t)
 
   def __fields__(:t) do
-    @fields
-    |> Map.take([:boolean, :date_time, :enum, :integer, :number, :string])
-    |> Map.values()
-    |> Map.new()
+    @t_fields |> Map.values() |> Map.new()
   end
 end
