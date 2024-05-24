@@ -16,8 +16,7 @@ defmodule OpenAPIClient.Generator.Renderer do
         base_url =
           :open_api_client_ex |> Application.fetch_env!(profile) |> Keyword.fetch!(:base_url)
 
-        quote(do: @base_url(unquote(base_url)))
-        |> Util.put_newlines()
+        Util.put_newlines(quote(do: @base_url(unquote(base_url))))
 
       result ->
         result
@@ -44,14 +43,8 @@ defmodule OpenAPIClient.Generator.Renderer do
     state
     |> OpenAPI.Renderer.render_schema(file_new)
     |> case do
-      [] ->
-        []
-
-      list ->
-        [
-          quote(do: @behaviour(OpenAPIClient.Schema))
-          |> Util.put_newlines() | list
-        ]
+      [] -> []
+      list -> [Util.put_newlines(quote(do: @behaviour(OpenAPIClient.Schema))) | list]
     end
   end
 
