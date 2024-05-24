@@ -298,14 +298,19 @@ defmodule OpenAPIClient.Client.TypedDecoder do
   def decode(value, {module, type}, path, calling_module)
       when is_atom(module) and is_atom(type) and is_map(value) do
     if Utils.is_module?(module) and Utils.does_implement_behaviour?(module, OpenAPIClient.Schema) do
-      fields = module.__fields__(type)
+      fields =
+        type
+        |> module.__fields__()
+        |> Map.new(fn {new_name, {old_name, type}} -> {old_name, {new_name, type}} end)
+
+      is_struct = function_exported?(module, :__struct__, 0)
 
       value
-      |> Enum.reduce_while({:ok, %{}}, fn {name, field_value}, {:ok, acc} ->
-        case Map.fetch(fields, name) do
-          {:ok, field_type} ->
-            case calling_module.decode(field_value, field_type, [name | path], calling_module) do
-              {:ok, decoded_value} -> {:cont, {:ok, Map.put(acc, name, decoded_value)}}
+      |> Enum.reduce_while({:ok, %{}}, fn {old_name, field_value}, {:ok, acc} ->
+        case Map.fetch(fields, old_name) do
+          {:ok, {new_name, field_type}} ->
+            case calling_module.decode(field_value, field_type, [old_name | path], calling_module) do
+              {:ok, decoded_value} -> {:cont, {:ok, Map.put(acc, new_name, decoded_value)}}
               {:error, _} = error -> {:halt, error}
             end
 
@@ -314,7 +319,8 @@ defmodule OpenAPIClient.Client.TypedDecoder do
         end
       end)
       |> case do
-        {:ok, decoded_value} -> {:ok, module.from_map(decoded_value, type)}
+        {:ok, decoded_value} when is_struct -> {:ok, struct(module, decoded_value)}
+        {:ok, decoded_value} -> {:ok, decoded_value}
         {:error, _} = error -> error
       end
     else

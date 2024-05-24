@@ -141,17 +141,24 @@ defmodule OpenAPIClient.Client.TypedEncoder do
   end
 
   def encode(value, {module, type}, path, calling_module)
+      when is_atom(module) and is_atom(type) and is_struct(value) do
+    calling_module.encode(Map.from_struct(value), {module, type}, path, calling_module)
+  end
+
+  def encode(value, {module, type}, path, calling_module)
       when is_atom(module) and is_atom(type) and is_map(value) do
     if Utils.is_module?(module) and Utils.does_implement_behaviour?(module, OpenAPIClient.Schema) do
-      fields = module.__fields__(type)
+      fields =
+        type
+        |> module.__fields__()
+        |> Map.new()
 
       value
-      |> module.to_map(type)
-      |> Enum.reduce_while({:ok, %{}}, fn {name, field_value}, {:ok, acc} ->
-        case Map.fetch(fields, name) do
-          {:ok, field_type} ->
-            case calling_module.encode(field_value, field_type, [name | path], calling_module) do
-              {:ok, encoded_value} -> {:cont, {:ok, Map.put(acc, name, encoded_value)}}
+      |> Enum.reduce_while({:ok, %{}}, fn {new_name, field_value}, {:ok, acc} ->
+        case Map.fetch(fields, new_name) do
+          {:ok, {old_name, field_type}} ->
+            case calling_module.encode(field_value, field_type, [new_name | path], calling_module) do
+              {:ok, encoded_value} -> {:cont, {:ok, Map.put(acc, old_name, encoded_value)}}
               {:error, _} = error -> {:halt, error}
             end
 

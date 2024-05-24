@@ -93,159 +93,89 @@ defmodule OpenAPIClient.Generator.Renderer do
   def render_schema_struct(state, schemas) do
     struct_result = OpenAPI.Renderer.render_schema_struct(state, schemas)
 
-    {fields_expressions, enforced_keys_expression} =
-      schemas
-      |> Enum.map(fn %Schema{ref: ref, output_format: output_format, type_name: type} = _schema ->
-        [{_, %GeneratorSchema{fields: all_fields}}] = :ets.lookup(:schemas, ref)
-        is_struct = output_format == :struct
+    enforced_keys_expression =
+      Enum.reduce_while(schemas, nil, fn
+        %Schema{ref: ref, output_format: :struct}, _acc ->
+          [{_, %GeneratorSchema{fields: all_fields}}] = :ets.lookup(:schemas, ref)
 
-        {fields_new, enforced_keys} =
-          Enum.flat_map_reduce(all_fields, [], fn
-            %GeneratorField{field: %Field{name: name}, old_name: old_name, enforce: true} =
-                field,
-            enforced_keys
-            when is_struct ->
-              {[{String.to_atom(name), {old_name, field_to_type(field)}}],
-               [String.to_atom(name) | enforced_keys]}
+          enforced_keys =
+            Enum.flat_map(all_fields, fn
+              %GeneratorField{field: %Field{name: name}, enforce: true} -> [String.to_atom(name)]
+              _ -> []
+            end)
 
-            %GeneratorField{field: %Field{name: name}, old_name: old_name} = field,
-            enforced_keys ->
-              {[{String.to_atom(name), {old_name, field_to_type(field)}}], enforced_keys}
+          enforced_keys_expression =
+            if length(enforced_keys) > 0 do
+              quote do: @enforce_keys(unquote(Enum.sort(enforced_keys)))
+            end
 
-            _, enforced_keys ->
-              {[], enforced_keys}
-          end)
+          {:halt, enforced_keys_expression}
 
-        fields_expression =
-          {:@, [],
-           [
-             {String.to_atom("#{type}_fields"), [],
-              [{:%{}, [], Enum.sort_by(fields_new, fn {name, _} -> name end)}]}
-           ]}
-          |> Util.put_newlines()
-
-        enforced_keys_expression =
-          if is_struct and length(enforced_keys) > 0 do
-            quote do: @enforce_keys(unquote(Enum.sort(enforced_keys)))
-          end
-
-        {fields_expression, enforced_keys_expression}
+        _schema, acc ->
+          {:cont, acc}
       end)
-      |> Enum.unzip()
 
     Util.clean_list([
-      Util.put_newlines(fields_expressions),
       enforced_keys_expression,
       struct_result
     ])
   end
 
   @impl true
-  def render_schema_field_function(
-        %OpenAPI.Renderer.State{schemas: _state_schemas} = state,
-        schemas
-      ) do
-    fields_result = OpenAPI.Renderer.render_schema_field_function(state, schemas)
-
-    {expressions, types} =
-      schemas
-      |> Enum.map_reduce([], fn %Schema{output_format: output_format, type_name: type} = _schema,
-                                types ->
-        fields_attribute_name = {:@, [], [{String.to_atom("#{type}_fields"), [], nil}]}
-        struct = if output_format == :struct, do: Macro.var(:__MODULE__, nil), else: nil
-
-        to_map_function =
-          quote do
-            def to_map(map_or_schema, unquote(type)) do
-              OpenAPIClient.Schema.to_map(
-                map_or_schema,
-                unquote(fields_attribute_name),
-                unquote(struct)
-              )
-            end
-          end
-
-        from_map_function =
-          quote do
-            def from_map(%{} = map, unquote(type)) do
-              OpenAPIClient.Schema.from_map(map, unquote(fields_attribute_name), unquote(struct))
-            end
-          end
-
-        {{to_map_function, from_map_function}, [{:const, quote(do: unquote(type)())} | types]}
-      end)
-
-    types = Util.to_type(state, {:union, types})
-    {to_map_expressions, from_map_expressions} = Enum.unzip(expressions)
-
-    to_map_expressions =
-      if length(to_map_expressions) > 0 do
-        quote do
-          @impl true
-          @spec to_map(unquote(types), types()) :: map()
-          unquote(to_map_expressions)
-        end
-        |> elem(2)
-      end
-
-    from_map_expressions =
-      if length(from_map_expressions) > 0 do
-        quote do
-          @impl true
-          @spec from_map(map(), types()) :: unquote(types)
-          unquote(from_map_expressions)
-        end
-        |> elem(2)
-      end
-
-    [
-      to_map_expressions,
-      from_map_expressions,
-      Enum.flat_map(
-        fields_result,
-        fn
-          {:@, _attribute_metadata,
-           [{:spec, spec_metadata, [{:"::", [], [{:__fields__, _, _}, _]}]}]} ->
-            [
-              {:@, [], [{:impl, [], [true]}]},
-              {:@, [],
-               [
-                 {:spec, spec_metadata,
-                  [
-                    {:"::", [],
-                     [
-                       {:__fields__, [], [quote(do: types())]},
-                       quote(do: %{optional(String.t()) => OpenAPIClient.Schema.type()})
-                     ]}
-                  ]}
-               ]}
-            ]
-
-          {:def, def_metadata,
-           [{:__fields__, _fields_metadata, [type]} = fun_header, [do: _fields_clauses]]} ->
-            fields_attribute_name = {:@, [], [{String.to_atom("#{type}_fields"), [], nil}]}
-
-            [
-              {:def, def_metadata,
-               [
-                 fun_header,
+  def render_schema_field_function(state, schemas) do
+    state
+    |> OpenAPI.Renderer.render_schema_field_function(schemas)
+    |> Enum.flat_map(fn
+      {:@, _attribute_metadata, [{:spec, spec_metadata, [{:"::", [], [{:__fields__, _, _}, _]}]}]} ->
+        [
+          {:@, [], [{:impl, [], [true]}]},
+          {:@, [],
+           [
+             {:spec, spec_metadata,
+              [
+                {:"::", [],
                  [
-                   do:
-                     quote do
-                       unquote(fields_attribute_name)
-                       |> Map.values()
-                       |> Map.new()
-                     end
-                 ]
-               ]}
-            ]
+                   {:__fields__, [], [quote(do: types())]},
+                   quote(do: keyword(OpenAPIClient.Schema.schema_type()))
+                 ]}
+              ]}
+           ]}
+        ]
 
-          expression ->
-            [expression]
-        end
-      )
-    ]
-    |> Util.clean_list()
+      {:def, def_metadata,
+       [{:__fields__, _fields_metadata, [type]} = fun_header, [do: _fields_clauses]]} ->
+        %Schema{ref: ref} =
+          Enum.find(schemas, fn %Schema{type_name: schema_type} -> schema_type == type end)
+
+        [{_, %GeneratorSchema{fields: all_fields}}] = :ets.lookup(:schemas, ref)
+
+        fields_new =
+          all_fields
+          |> Enum.flat_map(fn
+            %GeneratorField{field: %Field{name: name}, old_name: old_name} = field ->
+              [{String.to_atom(name), {old_name, field_to_type(field)}}]
+
+            _ ->
+              []
+          end)
+          |> Enum.sort_by(fn {name, _} -> name end)
+
+        [
+          {:def, def_metadata,
+           [
+             fun_header,
+             [
+               do:
+                 quote do
+                   unquote(fields_new)
+                 end
+             ]
+           ]}
+        ]
+
+      expression ->
+        [expression]
+    end)
   end
 
   @impl true
