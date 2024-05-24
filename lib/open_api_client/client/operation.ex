@@ -3,7 +3,7 @@ defmodule OpenAPIClient.Client.Operation do
   @type query_params :: %{String.t() => String.t()}
   @type headers :: %{String.t() => String.t()}
   @type request_type :: {String.t(), OpenAPIClient.Schema.type()}
-  @type response_type :: {integer(), OpenAPIClient.Schema.type() | nil}
+  @type response_type :: {integer() | String.t() | :default, OpenAPIClient.Schema.type() | nil}
   @type external_headers :: [{String.t(), String.t()}] | keyword(String.t()) | headers()
   @type result :: {:ok, term()} | {:error, term()}
 

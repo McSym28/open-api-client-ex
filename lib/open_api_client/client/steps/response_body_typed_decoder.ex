@@ -45,9 +45,24 @@ defmodule OpenAPIClient.Client.Steps.ResponseBodyTypedDecoder do
   end
 
   defp get_type(%Operation{response_types: types, response_status_code: status_code}) do
-    case List.keyfind(types, status_code, 0) do
-      {_, type} -> type
-      _ -> :unknown
-    end
+    types
+    |> Enum.reduce_while(
+      {:unknown, :unknown},
+      fn
+        {^status_code, type}, _current ->
+          {:halt, {:exact, type}}
+
+        {<<digit::utf8, "XX">>, type}, _current
+        when (digit - ?0) * 100 <= status_code and (digit - ?0 + 1) * 100 > status_code ->
+          {:cont, {:range, type}}
+
+        {:default, type}, {:unknown, _} ->
+          {:cont, {:default, type}}
+
+        _, current ->
+          current
+      end
+    )
+    |> elem(1)
   end
 end
