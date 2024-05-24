@@ -10,7 +10,7 @@ defmodule OpenAPIClient.Client.TypedEncoder do
               value :: term(),
               type :: OpenAPIClient.Schema.type(),
               path :: path(),
-              calling_module :: module()
+              caller_module :: module()
             ) :: result()
 
   @doc false
@@ -103,11 +103,11 @@ defmodule OpenAPIClient.Client.TypedEncoder do
          source: path
        )}
 
-  def encode(value, [type], path, calling_module) when is_list(value) do
+  def encode(value, [type], path, caller_module) when is_list(value) do
     value
     |> Enum.with_index()
     |> Enum.reduce_while({:ok, []}, fn {item_value, index}, {:ok, acc} ->
-      case calling_module.encode(item_value, type, [[index] | path], calling_module) do
+      case caller_module.encode(item_value, type, [[index] | path], caller_module) do
         {:ok, encoded_value} -> {:cont, {:ok, [encoded_value | acc]}}
         {:error, _} = error -> {:halt, error}
       end
@@ -118,7 +118,7 @@ defmodule OpenAPIClient.Client.TypedEncoder do
     end
   end
 
-  def encode(value, {:enum, enum_options}, path, _calling_module) do
+  def encode(value, {:enum, enum_options}, path, _) do
     enum_options
     |> Enum.find_value(fn
       ^value -> {:ok, value}
@@ -140,12 +140,12 @@ defmodule OpenAPIClient.Client.TypedEncoder do
     end
   end
 
-  def encode(value, {module, type}, path, calling_module)
+  def encode(value, {module, type}, path, caller_module)
       when is_atom(module) and is_atom(type) and is_struct(value) do
-    calling_module.encode(Map.from_struct(value), {module, type}, path, calling_module)
+    caller_module.encode(Map.from_struct(value), {module, type}, path, caller_module)
   end
 
-  def encode(value, {module, type}, path, calling_module)
+  def encode(value, {module, type}, path, caller_module)
       when is_atom(module) and is_atom(type) and is_map(value) do
     if Utils.is_module?(module) and Utils.does_implement_behaviour?(module, OpenAPIClient.Schema) do
       fields =
@@ -157,7 +157,7 @@ defmodule OpenAPIClient.Client.TypedEncoder do
       |> Enum.reduce_while({:ok, %{}}, fn {new_name, field_value}, {:ok, acc} ->
         case Map.fetch(fields, new_name) do
           {:ok, {old_name, field_type}} ->
-            case calling_module.encode(field_value, field_type, [new_name | path], calling_module) do
+            case caller_module.encode(field_value, field_type, [new_name | path], caller_module) do
               {:ok, encoded_value} -> {:cont, {:ok, Map.put(acc, old_name, encoded_value)}}
               {:error, _} = error -> {:halt, error}
             end
@@ -167,7 +167,7 @@ defmodule OpenAPIClient.Client.TypedEncoder do
         end
       end)
     else
-      calling_module.encode(value, :unknown, path, calling_module)
+      caller_module.encode(value, :unknown, path, caller_module)
     end
   end
 
@@ -180,8 +180,8 @@ defmodule OpenAPIClient.Client.TypedEncoder do
          source: path
        )}
 
-  def encode(value, _type, path, calling_module) when is_struct(value) do
-    calling_module.encode(value, :unknown, path, calling_module)
+  def encode(value, _type, path, caller_module) when is_struct(value) do
+    caller_module.encode(value, :unknown, path, caller_module)
   end
 
   def encode(value, _, _, _) do

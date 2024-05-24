@@ -10,7 +10,7 @@ defmodule OpenAPIClient.Client.TypedDecoder do
               value :: term(),
               type :: OpenAPIClient.Schema.type(),
               path :: path(),
-              calling_module :: module()
+              caller_module :: module()
             ) ::
               result()
 
@@ -229,9 +229,9 @@ defmodule OpenAPIClient.Client.TypedDecoder do
     end
   end
 
-  def decode(value, {:string, _} = type, path, calling_module)
+  def decode(value, {:string, _} = type, path, caller_module)
       when is_number(value) or is_atom(value),
-      do: calling_module.decode(to_string(value), type, path, calling_module)
+      do: caller_module.decode(to_string(value), type, path, caller_module)
 
   def decode(value, {:string, _}, path, _) when not is_binary(value),
     do:
@@ -242,9 +242,9 @@ defmodule OpenAPIClient.Client.TypedDecoder do
          source: path
        )}
 
-  def decode(value, {:union, types}, path, calling_module) do
+  def decode(value, {:union, types}, path, caller_module) do
     case choose_union(value, types) do
-      {:ok, type} -> calling_module.decode(value, type)
+      {:ok, type} -> caller_module.decode(value, type)
       {:error, error} -> {:error, %Error{error | source: path}}
     end
   end
@@ -258,11 +258,11 @@ defmodule OpenAPIClient.Client.TypedDecoder do
          source: path
        )}
 
-  def decode(value, [type], path, calling_module) do
+  def decode(value, [type], path, caller_module) do
     value
     |> Enum.with_index()
     |> Enum.reduce_while({:ok, []}, fn {item_value, index}, {:ok, acc} ->
-      case calling_module.decode(item_value, type, [[index] | path], calling_module) do
+      case caller_module.decode(item_value, type, [[index] | path], caller_module) do
         {:ok, decoded_value} -> {:cont, {:ok, [decoded_value | acc]}}
         {:error, _} = error -> {:halt, error}
       end
@@ -273,7 +273,7 @@ defmodule OpenAPIClient.Client.TypedDecoder do
     end
   end
 
-  def decode(value, {:enum, enum_options}, path, _calling_module) do
+  def decode(value, {:enum, enum_options}, path, _) do
     enum_options
     |> Enum.find_value(fn
       ^value -> {:ok, value}
@@ -295,7 +295,7 @@ defmodule OpenAPIClient.Client.TypedDecoder do
     end
   end
 
-  def decode(value, {module, type}, path, calling_module)
+  def decode(value, {module, type}, path, caller_module)
       when is_atom(module) and is_atom(type) and is_map(value) do
     if Utils.is_module?(module) and Utils.does_implement_behaviour?(module, OpenAPIClient.Schema) do
       fields =
@@ -309,7 +309,7 @@ defmodule OpenAPIClient.Client.TypedDecoder do
       |> Enum.reduce_while({:ok, %{}}, fn {old_name, field_value}, {:ok, acc} ->
         case Map.fetch(fields, old_name) do
           {:ok, {new_name, field_type}} ->
-            case calling_module.decode(field_value, field_type, [old_name | path], calling_module) do
+            case caller_module.decode(field_value, field_type, [old_name | path], caller_module) do
               {:ok, decoded_value} -> {:cont, {:ok, Map.put(acc, new_name, decoded_value)}}
               {:error, _} = error -> {:halt, error}
             end
@@ -324,7 +324,7 @@ defmodule OpenAPIClient.Client.TypedDecoder do
         {:error, _} = error -> error
       end
     else
-      calling_module.decode(value, :unknown, path, calling_module)
+      caller_module.decode(value, :unknown, path, caller_module)
     end
   end
 
