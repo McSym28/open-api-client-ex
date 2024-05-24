@@ -292,8 +292,8 @@ defmodule OpenAPIClient.Generator.Processor do
          %Field{name: name, type: {:enum, enum_values}, required: required, nullable: nullable} =
            field
        ) do
-    {enum_values_new, {enum_type, enum_aliases}} =
-      Enum.map_reduce(enum_values, {nil, %{}}, &process_enum_value/2)
+    {enum_values_new, {enum_type, enum_options}} =
+      Enum.map_reduce(enum_values, {nil, []}, &process_enum_value/2)
 
     name_new = snakesize_name(name)
     type_new = {:enum, enum_values_new}
@@ -302,7 +302,11 @@ defmodule OpenAPIClient.Generator.Processor do
     %GeneratorField{
       field: field_new,
       old_name: name,
-      enum_aliases: enum_aliases,
+      enum_options:
+        Enum.sort_by(enum_options, fn
+          {atom, _string} -> {0, atom}
+          value -> {1, value}
+        end),
       type: if(enum_type, do: {:union, [type_new, enum_type]}, else: type_new),
       enforce: required and not nullable
     }
@@ -317,8 +321,8 @@ defmodule OpenAPIClient.Generator.Processor do
          } =
            field
        ) do
-    {enum_values_new, {enum_type, enum_aliases}} =
-      Enum.map_reduce(enum_values, {nil, %{}}, &process_enum_value/2)
+    {enum_values_new, {enum_type, enum_options}} =
+      Enum.map_reduce(enum_values, {nil, []}, &process_enum_value/2)
 
     name_new = snakesize_name(name)
     type_new = {:array, {:enum, enum_values_new}}
@@ -327,7 +331,11 @@ defmodule OpenAPIClient.Generator.Processor do
     %GeneratorField{
       field: field_new,
       old_name: name,
-      enum_aliases: enum_aliases,
+      enum_options:
+        Enum.sort_by(enum_options, fn
+          {atom, _string} -> {0, atom}
+          value -> {1, value}
+        end),
       type: if(enum_type, do: {:array, {:union, [type_new, enum_type]}}, else: type_new),
       enforce: required and not nullable
     }
@@ -349,26 +357,30 @@ defmodule OpenAPIClient.Generator.Processor do
 
   defp process_enum_value(enum_value, {_type, acc}) when is_binary(enum_value) do
     enum_atom = enum_value |> snakesize_name() |> String.to_atom()
-    acc_new = Map.put(acc, enum_atom, enum_value)
+    acc_new = [{enum_atom, enum_value} | acc]
     {enum_atom, {{:string, :generic}, acc_new}}
   end
 
   defp process_enum_value(enum_value, {type, acc})
        when is_number(enum_value) and (is_nil(type) or type in [:integer, :boolean]) do
-    {enum_value, {:number, acc}}
+    acc_new = [enum_value | acc]
+    {enum_value, {:number, acc_new}}
   end
 
   defp process_enum_value(enum_value, {type, acc})
        when is_integer(enum_value) and (is_nil(type) or type in [:boolean]) do
-    {enum_value, {:integer, acc}}
+    acc_new = [enum_value | acc]
+    {enum_value, {:integer, acc_new}}
   end
 
   defp process_enum_value(enum_value, {type, acc}) when is_boolean(enum_value) do
-    {enum_value, {type || :boolean, acc}}
+    acc_new = [enum_value | acc]
+    {enum_value, {type || :boolean, acc_new}}
   end
 
   defp process_enum_value(enum_value, {type, acc}) do
-    {enum_value, {type, acc}}
+    acc_new = [enum_value | acc]
+    {enum_value, {type, acc_new}}
   end
 
   defp append_field_example(

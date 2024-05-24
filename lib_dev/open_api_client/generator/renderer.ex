@@ -540,8 +540,15 @@ defmodule OpenAPIClient.Generator.Renderer do
     end
   end
 
-  defp field_to_type(%GeneratorField{field: %Field{type: {:enum, _}}, enum_aliases: enum_aliases}),
-    do: {:enum, Map.to_list(enum_aliases) ++ [:not_strict]}
+  defp field_to_type(%GeneratorField{
+         field: %Field{type: {:enum, _}},
+         enum_options: enum_options,
+         enum_strict: true
+       }),
+       do: {:enum, enum_options}
+
+  defp field_to_type(%GeneratorField{field: %Field{type: {:enum, _}}, enum_options: enum_options}),
+    do: {:enum, enum_options ++ [:not_strict]}
 
   defp field_to_type(
          %GeneratorField{field: %Field{type: {:array, {:enum, _} = enum}} = inner_field} = field
