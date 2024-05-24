@@ -5,8 +5,6 @@ defmodule OpenAPIClient.TestSchema do
 
   @behaviour OpenAPIClient.Schema
 
-  require OpenAPIClient.Schema
-
   @type t :: %__MODULE__{
           boolean: boolean,
           date_time: DateTime.t(),

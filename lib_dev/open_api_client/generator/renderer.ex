@@ -50,10 +50,7 @@ defmodule OpenAPIClient.Generator.Renderer do
       list ->
         [
           quote(do: @behaviour(OpenAPIClient.Schema))
-          |> Util.put_newlines(),
-          quote(do: require(OpenAPIClient.Schema))
-          |> Util.put_newlines()
-          | list
+          |> Util.put_newlines() | list
         ]
     end
   end
