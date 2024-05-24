@@ -257,8 +257,8 @@ defmodule OpenAPIClient.Generator.Processor do
       [] ->
         schema_spec = Map.get(schema_specs_by_ref, ref)
 
-        {generator_fields, field_renamings} =
-          Enum.map_reduce(fields, %{}, fn field, acc ->
+        {generator_fields, schema_fields} =
+          Enum.map_reduce(fields, [], fn field, acc ->
             %GeneratorField{field: %Field{name: new_name}, old_name: old_name} =
               generator_field =
               field
@@ -266,7 +266,10 @@ defmodule OpenAPIClient.Generator.Processor do
               |> append_field_example(schema_spec, false, state)
               |> append_field_example(example, false, state)
 
-            acc_new = Map.put(acc, old_name, new_name)
+            acc_new = [
+              {String.to_atom(new_name), {old_name, field_to_type(generator_field)}} | acc
+            ]
+
             {generator_field, acc_new}
           end)
 
@@ -283,7 +286,11 @@ defmodule OpenAPIClient.Generator.Processor do
 
         :ets.insert(
           schemas_table,
-          {ref, %GeneratorSchema{fields: generator_fields, field_renamings: field_renamings}}
+          {ref,
+           %GeneratorSchema{
+             fields: generator_fields,
+             schema_fields: Enum.sort_by(schema_fields, fn {name, _} -> name end)
+           }}
         )
     end
   end
@@ -555,4 +562,22 @@ defmodule OpenAPIClient.Generator.Processor do
   end
 
   defp snakesize_name(name), do: Macro.underscore(name)
+
+  defp field_to_type(%GeneratorField{
+         field: %Field{type: {:enum, _}},
+         enum_options: enum_options,
+         enum_strict: true
+       }),
+       do: {:enum, enum_options}
+
+  defp field_to_type(%GeneratorField{field: %Field{type: {:enum, _}}, enum_options: enum_options}),
+    do: {:enum, enum_options ++ [:not_strict]}
+
+  defp field_to_type(
+         %GeneratorField{field: %Field{type: {:array, {:enum, _} = enum}} = inner_field} = field
+       ),
+       do:
+         {:array, field_to_type(%GeneratorField{field | field: %Field{inner_field | type: enum}})}
+
+  defp field_to_type(%GeneratorField{field: %Field{type: type}}), do: type
 end

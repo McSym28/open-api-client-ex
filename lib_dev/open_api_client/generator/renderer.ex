@@ -147,18 +147,7 @@ defmodule OpenAPIClient.Generator.Renderer do
         %Schema{ref: ref} =
           Enum.find(schemas, fn %Schema{type_name: schema_type} -> schema_type == type end)
 
-        [{_, %GeneratorSchema{fields: all_fields}}] = :ets.lookup(:schemas, ref)
-
-        fields_new =
-          all_fields
-          |> Enum.flat_map(fn
-            %GeneratorField{field: %Field{name: name}, old_name: old_name} = field ->
-              [{String.to_atom(name), {old_name, field_to_type(field)}}]
-
-            _ ->
-              []
-          end)
-          |> Enum.sort_by(fn {name, _} -> name end)
+        [{_, %GeneratorSchema{schema_fields: schema_fields}}] = :ets.lookup(:schemas, ref)
 
         [
           {:def, def_metadata,
@@ -167,7 +156,7 @@ defmodule OpenAPIClient.Generator.Renderer do
              [
                do:
                  quote do
-                   unquote(fields_new)
+                   unquote(schema_fields)
                  end
              ]
            ]}
@@ -539,22 +528,4 @@ defmodule OpenAPIClient.Generator.Renderer do
         end
     end
   end
-
-  defp field_to_type(%GeneratorField{
-         field: %Field{type: {:enum, _}},
-         enum_options: enum_options,
-         enum_strict: true
-       }),
-       do: {:enum, enum_options}
-
-  defp field_to_type(%GeneratorField{field: %Field{type: {:enum, _}}, enum_options: enum_options}),
-    do: {:enum, enum_options ++ [:not_strict]}
-
-  defp field_to_type(
-         %GeneratorField{field: %Field{type: {:array, {:enum, _} = enum}} = inner_field} = field
-       ),
-       do:
-         {:array, field_to_type(%GeneratorField{field | field: %Field{inner_field | type: enum}})}
-
-  defp field_to_type(%GeneratorField{field: %Field{type: type}}), do: type
 end

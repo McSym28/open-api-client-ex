@@ -1,3 +1,3 @@
 defmodule OpenAPIClient.Generator.Schema do
-  defstruct fields: [], field_renamings: %{}
+  defstruct fields: [], schema_fields: []
 end
