@@ -42,7 +42,7 @@ defmodule OpenAPIClient.Client.Error do
           reason: atom(),
           source: term(),
           stacktrace: Exception.stacktrace(),
-          step: OpenAPIClient.Client.step()
+          step: OpenAPIClient.Client.step() | nil
         }
 
   @derive {Inspect, except: [:operation, :stacktrace]}

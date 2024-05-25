@@ -203,8 +203,13 @@ defmodule OpenAPIClient.Generator.Renderer do
       |> then(fn map -> {Map.get(map, true, []), Map.get(map, false, [])} end)
 
     responses_new =
-      List.keystore(
-        responses,
+      responses
+      |> Enum.map(fn
+        {:default, schemas} -> {299, schemas}
+        {"2XX", schemas} -> {298, schemas}
+        other -> other
+      end)
+      |> List.keystore(
         999,
         0,
         {999, %{"application/json" => {:const, quote(do: OpenAPIClient.Client.Error.t())}}}

@@ -1,7 +1,8 @@
 defmodule OpenAPIClient.Schema do
   @typedoc "Type annotation produced by [OpenAPI](https://github.com/aj-foster/open-api-generator)"
   @type non_array_type ::
-          :binary
+          :null
+          | :binary
           | :boolean
           | :integer
           | :map

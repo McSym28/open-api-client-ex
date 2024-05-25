@@ -3,7 +3,8 @@ defmodule OpenAPIClient.Client.Operation do
   @type query_params :: %{String.t() => String.t()}
   @type headers :: %{String.t() => String.t()}
   @type request_type :: {String.t(), OpenAPIClient.Schema.type()}
-  @type response_type :: {integer() | String.t() | :default, OpenAPIClient.Schema.type() | nil}
+  @type response_status_code :: integer() | String.t() | :default
+  @type response_type :: {response_status_code(), OpenAPIClient.Schema.type()}
   @type external_headers :: [{String.t(), String.t()}] | keyword(String.t()) | headers()
   @type result :: {:ok, term()} | {:error, term()}
 
@@ -91,6 +92,29 @@ defmodule OpenAPIClient.Client.Operation do
 
   def put_private(operation, list) when is_list(list) do
     put_private(operation, Map.new(list))
+  end
+
+  @spec get_response_type(t()) :: {response_status_code() | :unknown, OpenAPIClient.Schema.type()}
+  def get_response_type(%__MODULE__{response_types: types, response_status_code: status_code}) do
+    types
+    |> Enum.reduce_while(
+      {:unknown, :unknown},
+      fn
+        {^status_code, _} = type, _current ->
+          {:halt, {:exact, type}}
+
+        {<<digit::utf8, "XX">>, _} = type, _current
+        when (digit - ?0) * 100 <= status_code and (digit - ?0 + 1) * 100 > status_code ->
+          {:cont, {:range, type}}
+
+        {:default, _} = type, {:unknown, _} ->
+          {:cont, {:default, type}}
+
+        _, current ->
+          current
+      end
+    )
+    |> elem(1)
   end
 
   defp get_header(headers, header_name) do

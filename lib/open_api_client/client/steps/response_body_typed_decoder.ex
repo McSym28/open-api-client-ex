@@ -30,7 +30,7 @@ defmodule OpenAPIClient.Client.Steps.ResponseBodyTypedDecoder do
         Application.get_env(:open_api_client_ex, :typed_decoder, TypedDecoder)
       end)
 
-    type = get_type(operation)
+    {_, type} = Operation.get_response_type(operation)
 
     case typed_decoder.decode(body, type) do
       {:ok, decoded_body} ->
@@ -42,27 +42,5 @@ defmodule OpenAPIClient.Client.Steps.ResponseBodyTypedDecoder do
           {:error, %Error{error | operation: operation, step: __MODULE__}}
         )
     end
-  end
-
-  defp get_type(%Operation{response_types: types, response_status_code: status_code}) do
-    types
-    |> Enum.reduce_while(
-      {:unknown, :unknown},
-      fn
-        {^status_code, type}, _current ->
-          {:halt, {:exact, type}}
-
-        {<<digit::utf8, "XX">>, type}, _current
-        when (digit - ?0) * 100 <= status_code and (digit - ?0 + 1) * 100 > status_code ->
-          {:cont, {:range, type}}
-
-        {:default, type}, {:unknown, _} ->
-          {:cont, {:default, type}}
-
-        _, current ->
-          current
-      end
-    )
-    |> elem(1)
   end
 end
