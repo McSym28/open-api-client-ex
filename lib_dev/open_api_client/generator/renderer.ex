@@ -299,7 +299,8 @@ defmodule OpenAPIClient.Generator.Renderer do
         %Operation{
           function_name: function_name,
           request_path: request_path,
-          request_method: request_method
+          request_method: request_method,
+          responses: responses
         } = operation
       ) do
     [{_, %GeneratorOperation{params: all_params}}] =
@@ -416,8 +417,34 @@ defmodule OpenAPIClient.Generator.Renderer do
               {:request, value}, acc ->
                 {[{:request_types, value}], acc}
 
-              {:response, value}, acc ->
-                {[{:response_types, value}], acc}
+              {:response, _value}, acc ->
+                items =
+                  responses
+                  |> Enum.sort_by(fn
+                    {status_code, _schemas} when is_integer(status_code) -> status_code
+                    {<<digit::utf8, "XX">>, _schemas} -> (digit - ?0 + 1) * 100 - 2
+                    {:default, _schemas} -> 299
+                  end)
+                  |> Enum.map(fn
+                    {status_or_default, schemas} when map_size(schemas) == 0 ->
+                      quote do
+                        {unquote(status_or_default), :null}
+                      end
+
+                    {status_or_default, schemas} ->
+                      schema_types =
+                        Enum.map(schemas, fn {content_type, type} ->
+                          quote do
+                            {unquote(content_type), unquote(Util.to_readable_type(state, type))}
+                          end
+                        end)
+
+                      quote do
+                        {unquote(status_or_default), unquote(schema_types)}
+                      end
+                  end)
+
+                {[{:response_types, items}], acc}
 
               {:opts, value}, acc ->
                 {[], Map.put(acc, :__opts__, value)}

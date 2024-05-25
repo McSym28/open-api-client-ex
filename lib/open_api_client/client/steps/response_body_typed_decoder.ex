@@ -30,17 +30,21 @@ defmodule OpenAPIClient.Client.Steps.ResponseBodyTypedDecoder do
         Application.get_env(:open_api_client_ex, :typed_decoder, TypedDecoder)
       end)
 
-    {_, type} = Operation.get_response_type(operation)
+    case Operation.get_response_type(operation) do
+      {:ok, {_, type}} when type != :null ->
+        case typed_decoder.decode(body, type) do
+          {:ok, decoded_body} ->
+            %Operation{operation | response_body: decoded_body}
 
-    case typed_decoder.decode(body, type) do
-      {:ok, decoded_body} ->
-        %Operation{operation | response_body: decoded_body}
+          {:error, %Error{} = error} ->
+            Operation.set_result(
+              operation,
+              {:error, %Error{error | operation: operation, step: __MODULE__}}
+            )
+        end
 
-      {:error, %Error{} = error} ->
-        Operation.set_result(
-          operation,
-          {:error, %Error{error | operation: operation, step: __MODULE__}}
-        )
+      _ ->
+        operation
     end
   end
 end

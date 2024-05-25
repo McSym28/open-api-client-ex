@@ -2,11 +2,14 @@ defmodule OpenAPIClient.Client.Operation do
   @type method :: :get | :put | :post | :delete | :options | :head | :patch | :trace
   @type query_params :: %{String.t() => String.t()}
   @type headers :: %{String.t() => String.t()}
-  @type request_type :: {String.t(), OpenAPIClient.Schema.type()}
+  @type request_schema :: {String.t(), OpenAPIClient.Schema.type()}
   @type response_status_code :: integer() | String.t() | :default
-  @type response_type :: {response_status_code(), OpenAPIClient.Schema.type()}
+  @type response_schema :: {String.t(), OpenAPIClient.Schema.type()}
+  @type response_type :: {response_status_code(), [response_schema()] | :null}
   @type external_headers :: [{String.t(), String.t()}] | keyword(String.t()) | headers()
   @type result :: {:ok, term()} | {:error, term()}
+
+  alias OpenAPIClient.Client.Error
 
   @type t :: %__MODULE__{
           halted: boolean(),
@@ -17,7 +20,7 @@ defmodule OpenAPIClient.Client.Operation do
           request_query_params: query_params(),
           request_headers: headers(),
           request_body: term() | nil,
-          request_types: [request_type()],
+          request_types: [request_schema()],
           response_body: term() | nil,
           response_headers: headers(),
           response_status_code: integer() | nil,
@@ -94,11 +97,15 @@ defmodule OpenAPIClient.Client.Operation do
     put_private(operation, Map.new(list))
   end
 
-  @spec get_response_type(t()) :: {response_status_code() | :unknown, OpenAPIClient.Schema.type()}
-  def get_response_type(%__MODULE__{response_types: types, response_status_code: status_code}) do
+  @spec get_response_type(t()) ::
+          {:ok, {response_status_code(), OpenAPIClient.Schema.type()}}
+          | {:error, Error.t()}
+  def get_response_type(
+        %__MODULE__{response_types: types, response_status_code: status_code} = operation
+      ) do
     types
     |> Enum.reduce_while(
-      {:unknown, :unknown},
+      {:unknown, nil},
       fn
         {^status_code, _} = type, _current ->
           {:halt, {:exact, type}}
@@ -115,6 +122,43 @@ defmodule OpenAPIClient.Client.Operation do
       end
     )
     |> elem(1)
+    |> case do
+      {status_code, :null} ->
+        {:ok, {status_code, :null}}
+
+      {status_code, schemas} ->
+        case get_response_header(operation, "Content-Type") do
+          {:ok, content_type} ->
+            case List.keyfind(schemas, content_type, 0) do
+              {_, type} ->
+                {:ok, {status_code, type}}
+
+              _ ->
+                {:error,
+                 Error.new(
+                   message: "Unexpected `Content-Type` HTTP header",
+                   operation: operation,
+                   reason: :unexpected_content_type
+                 )}
+            end
+
+          :error ->
+            {:error,
+             Error.new(
+               message: "Missing `Content-Type` HTTP header",
+               operation: operation,
+               reason: :missing_content_type
+             )}
+        end
+
+      nil ->
+        {:error,
+         Error.new(
+           message: "Unexpected HTTP status code",
+           operation: operation,
+           reason: :unexpected_status_code
+         )}
+    end
   end
 
   defp get_header(headers, header_name) do

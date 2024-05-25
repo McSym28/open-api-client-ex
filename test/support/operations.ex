@@ -31,7 +31,7 @@ defmodule OpenAPIClient.Operations do
       request_base_url: base_url,
       request_url: "/test",
       request_method: :get,
-      response_types: [{200, {OpenAPIClient.TestSchema, :t}}]
+      response_types: [{200, [{"application/json", {OpenAPIClient.TestSchema, :t}}]}]
     }
     |> OpenAPIClient.Client.Operation.put_private(
       __info__: {__MODULE__, :test, []},

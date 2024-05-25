@@ -1,5 +1,5 @@
 defmodule OpenAPIClient.Client do
-  alias OpenAPIClient.Client.{Error, Operation}
+  alias OpenAPIClient.Client.Operation
   alias OpenAPIClient.Utils
 
   @type step :: module() | {module(), term()} | {module(), atom(), [term()]}
@@ -17,37 +17,39 @@ defmodule OpenAPIClient.Client do
         result
 
       %Operation{response_body: response_body} = operation ->
-        {response_status_code, type} = Operation.get_response_type(operation)
+        case Operation.get_response_type(operation) do
+          {:ok, {response_status_code, type}} ->
+            is_success =
+              case response_status_code do
+                status_code when is_integer(status_code) ->
+                  status_code >= 200 and status_code < 300
 
-        success_flag =
-          case response_status_code do
-            status_code when is_integer(status_code) -> status_code >= 200 and status_code < 300
-            "2XX" -> true
-            :default -> true
-            :unknown -> nil
-            _else -> false
-          end
+                "2XX" ->
+                  true
 
-        case {success_flag, type} do
-          {true, :null} ->
-            :ok
+                :default ->
+                  true
 
-          {true, _type} ->
-            {:ok, response_body}
+                _else ->
+                  false
+              end
 
-          {false, :null} ->
-            :error
+            case {is_success, type} do
+              {true, :null} ->
+                :ok
 
-          {false, _type} ->
-            {:error, response_body}
+              {true, _type} ->
+                {:ok, response_body}
 
-          {nil, _type} ->
-            {:error,
-             Error.new(
-               message: "Unknown resonse HTTP status code",
-               operation: operation,
-               reason: :unknown_response_status_code
-             )}
+              {false, :null} ->
+                :error
+
+              {false, _type} ->
+                {:error, response_body}
+            end
+
+          {:error, _} = error ->
+            error
         end
     end
   end
