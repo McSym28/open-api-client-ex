@@ -202,7 +202,7 @@ defmodule OpenAPIClient.Generator.Renderer do
       )
       |> then(fn map -> {Map.get(map, true, []), Map.get(map, false, [])} end)
 
-    responses_new =
+    {responses_new, {atom_success, atom_failure}} =
       responses
       |> Enum.map(fn
         {:default, schemas} -> {299, schemas}
@@ -214,6 +214,19 @@ defmodule OpenAPIClient.Generator.Renderer do
         0,
         {999, %{"application/json" => {:const, quote(do: OpenAPIClient.Client.Error.t())}}}
       )
+      |> Enum.map_reduce({false, false}, fn
+        {status_code, schemas} = response, {_atom_success, atom_failure}
+        when map_size(schemas) == 0 and is_integer(status_code) and status_code >= 200 and
+               status_code < 300 ->
+          {response, {true, atom_failure}}
+
+        {_status_code, schemas} = response, {atom_success, _atom_failure}
+        when map_size(schemas) == 0 ->
+          {response, {atom_success, true}}
+
+        response, acc ->
+          {response, acc}
+      end)
 
     operation_new = %Operation{
       operation
@@ -232,6 +245,24 @@ defmodule OpenAPIClient.Generator.Renderer do
            ]}
         ]}
      ]} = OpenAPI.Renderer.Operation.render_spec(state, operation_new)
+
+    return_types = parse_spec_return_type(return_type, [])
+
+    return_types =
+      if atom_success and not Enum.member?(return_types, :ok) do
+        [:ok | return_types]
+      else
+        return_types
+      end
+
+    return_types =
+      if atom_failure and not Enum.member?(return_types, :error) do
+        List.insert_at(return_types, -2, :error)
+      else
+        return_types
+      end
+
+    return_type_new = return_types |> Enum.reverse() |> Enum.reduce(&{:|, [], [&1, &2]})
 
     opts_spec =
       dynamic_params
@@ -256,7 +287,7 @@ defmodule OpenAPIClient.Generator.Renderer do
           {:"::", return_type_delimiter_metadata,
            [
              {function_name, arguments_metadata, arguments_new},
-             return_type
+             return_type_new
            ]}
         ]}
      ]}
@@ -523,4 +554,9 @@ defmodule OpenAPIClient.Generator.Renderer do
         end
     end
   end
+
+  defp parse_spec_return_type({:|, _, [type, next]}, acc),
+    do: parse_spec_return_type(next, [type | acc])
+
+  defp parse_spec_return_type(type, acc), do: Enum.reverse([type | acc])
 end

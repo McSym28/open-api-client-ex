@@ -21,21 +21,11 @@ defmodule OpenAPIClient.Client do
 
         success_flag =
           case response_status_code do
-            status_code
-            when is_integer(status_code) and status_code >= 200 and status_code < 300 ->
-              true
-
-            "2XX" ->
-              true
-
-            :default ->
-              true
-
-            :unknown ->
-              nil
-
-            _else ->
-              false
+            status_code when is_integer(status_code) -> status_code >= 200 and status_code < 300
+            "2XX" -> true
+            :default -> true
+            :unknown -> nil
+            _else -> false
           end
 
         case {success_flag, type} do
