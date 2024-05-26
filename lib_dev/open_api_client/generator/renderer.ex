@@ -431,14 +431,26 @@ defmodule OpenAPIClient.Generator.Renderer do
     {responses_new, {atom_success, atom_failure}} =
       responses
       |> Enum.map(fn
-        {:default, schemas} -> {299, schemas}
-        {"2XX", schemas} -> {298, schemas}
-        other -> other
+        {:default, schemas} ->
+          status_code =
+            if Utils.get_config(state, :default_status_code_as_failure) do
+              599
+            else
+              299
+            end
+
+          {status_code, schemas}
+
+        {"2XX", schemas} ->
+          {298, schemas}
+
+        other ->
+          other
       end)
       |> List.keystore(
-        999,
+        598,
         0,
-        {999, %{"application/json" => {:const, quote(do: OpenAPIClient.Client.Error.t())}}}
+        {598, %{"application/json" => {:const, quote(do: OpenAPIClient.Client.Error.t())}}}
       )
       |> Enum.map_reduce({false, false}, fn
         {status_code, schemas} = response, {_atom_success, atom_failure}
@@ -644,9 +656,18 @@ defmodule OpenAPIClient.Generator.Renderer do
                 items =
                   responses
                   |> Enum.sort_by(fn
-                    {status_code, _schemas} when is_integer(status_code) -> status_code
-                    {<<digit::utf8, "XX">>, _schemas} -> (digit - ?0 + 1) * 100 - 2
-                    {:default, _schemas} -> 299
+                    {status_code, _schemas} when is_integer(status_code) ->
+                      status_code
+
+                    {<<digit::utf8, "XX">>, _schemas} ->
+                      (digit - ?0 + 1) * 100 - 2
+
+                    {:default, _schemas} ->
+                      if Utils.get_config(state, :default_status_code_as_failure) do
+                        599
+                      else
+                        299
+                      end
                   end)
                   |> Enum.map(fn
                     {status_or_default, schemas} when map_size(schemas) == 0 ->
@@ -875,7 +896,11 @@ defmodule OpenAPIClient.Generator.Renderer do
               ((digit + 1) * 100 - 1)..(digit * 100)
 
             :default ->
-              599..200
+              if Utils.get_config(state, :default_status_code_as_failure) do
+                599..400
+              else
+                299..200
+              end
           end
 
         status_code_new =

@@ -28,7 +28,19 @@ defmodule OpenAPIClient.Client do
                   true
 
                 :default ->
-                  true
+                  :open_api_client_ex
+                  |> Application.get_env(
+                    get_in(operation, [
+                      Access.key!(:assigns),
+                      :private,
+                      :default_status_code_as_failure
+                    ])
+                  )
+                  |> if do
+                    false
+                  else
+                    true
+                  end
 
                 _else ->
                   false
