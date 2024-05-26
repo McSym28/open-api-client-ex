@@ -22,8 +22,9 @@ defmodule OpenAPIClient.Generator.Utils do
       {:regex, _} -> 1
       {:exact, _} -> 2
     end)
-    |> Enum.map(fn {_type, config} -> config end)
-    |> Enum.reduce(&OpenAPIClient.Utils.config_merge(&2, &1))
+    |> Enum.reduce([], fn {_type, config}, acc ->
+      OpenAPIClient.Utils.config_merge(acc, config)
+    end)
   end
 
   @spec ensure_ets_table(atom()) :: :ets.table()
