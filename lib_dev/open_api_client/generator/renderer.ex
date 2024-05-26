@@ -8,6 +8,65 @@ defmodule OpenAPIClient.Generator.Renderer do
   alias OpenAPIClient.Generator.Param, as: GeneratorParam
   alias OpenAPIClient.Generator.Schema, as: GeneratorSchema
   alias OpenAPIClient.Generator.Field, as: GeneratorField
+  alias OpenAPIClient.Client.TypedDecoder
+  import Mox
+
+  @test_example_url "https://example.com"
+
+  defmodule ExampleSchemaFieldsAgent do
+    use Agent
+
+    @spec start_link() :: Agent.on_start()
+    def start_link() do
+      Agent.start_link(fn -> {nil, []} end)
+    end
+
+    @spec update(Agent.agent(), reference()) :: :ok
+    def update(pid, ref) do
+      Agent.update(pid, fn
+        {^ref, _} = state ->
+          state
+
+        _ ->
+          [{_, %GeneratorSchema{schema_fields: schema_fields}}] = :ets.lookup(:schemas, ref)
+          {ref, schema_fields}
+      end)
+    end
+
+    @spec get(Agent.agent()) :: keyword(OpenAPIClient.Schema.schema_type())
+    def get(pid), do: Agent.get(pid, fn {_ref, schema_fields} -> schema_fields end)
+  end
+
+  @impl true
+  def render(%OpenAPI.Renderer.State{schemas: schemas} = state, file) do
+    Enum.each(schemas, fn {schema_ref, _schema} ->
+      [
+        {_,
+         %GeneratorSchema{fields: generator_fields, schema_fields: schema_fields} =
+           generator_schema}
+      ] = :ets.lookup(:schemas, schema_ref)
+
+      if length(schema_fields) == 0 do
+        schema_fields =
+          generator_fields
+          |> Enum.flat_map(fn
+            %GeneratorField{field: %Field{name: new_name}, old_name: old_name} = generator_field ->
+              [{String.to_atom(new_name), {old_name, field_to_type(generator_field, state)}}]
+
+            _ ->
+              []
+          end)
+          |> Enum.sort_by(fn {name, _} -> name end)
+
+        :ets.insert(
+          :schemas,
+          {schema_ref, %GeneratorSchema{generator_schema | schema_fields: schema_fields}}
+        )
+      end
+    end)
+
+    OpenAPI.Renderer.Module.render(state, file)
+  end
 
   @impl true
   def render_default_client(%OpenAPI.Renderer.State{profile: profile} = state, file) do
@@ -158,27 +217,198 @@ defmodule OpenAPIClient.Generator.Renderer do
   end
 
   @impl true
-  def render_operation(
-        state,
-        %Operation{request_path: request_path, request_method: request_method} = operation
+  def render_operations(
+        %OpenAPI.Renderer.State{
+          schemas: schemas,
+          implementation: implementation,
+          profile: profile
+        } = state,
+        %File{module: module, operations: operations} = file
       ) do
-    [{_, %GeneratorOperation{param_renamings: param_renamings}}] =
-      :ets.lookup(:operations, {request_path, request_method})
+    schema_fields_agent =
+      if length(operations) > 0 do
+        {:ok, schema_fields_agent} = ExampleSchemaFieldsAgent.start_link()
 
-    request_path_new =
-      String.replace(request_path, ~r/\{([[:word:]]+)\}/, fn word ->
-        word
-        |> String.split(["{", "}"])
-        |> Enum.at(1)
-        |> then(fn name ->
-          name_new = Map.get(param_renamings, {name, :path}, name)
-          "{#{name_new}}"
+        Mox.defmock(ExampleSchema, for: OpenAPIClient.Schema)
+        Mox.defmock(ExampleTypedDecoder, for: TypedDecoder)
+
+        stub(ExampleSchema, :__fields__, fn _type ->
+          ExampleSchemaFieldsAgent.get(schema_fields_agent)
         end)
+
+        stub(ExampleTypedDecoder, :decode, fn value, type ->
+          apply(ExampleTypedDecoder, :decode, [value, type, [], ExampleTypedDecoder])
+        end)
+
+        stub(ExampleTypedDecoder, :decode, fn
+          value, {module, type}, path, _caller_module
+          when is_atom(module) and is_atom(type) and is_map(value) ->
+            with :alias <- Macro.classify_atom(module),
+                 %Schema{ref: schema_ref, output_format: output_format} <-
+                   Enum.find_value(schemas, fn
+                     {_ref, %Schema{module_name: module_name, type_name: ^type} = schema} ->
+                       if generate_module_name(module_name, state) == module do
+                         schema
+                       else
+                         nil
+                       end
+
+                     _ ->
+                       nil
+                   end) do
+              ExampleSchemaFieldsAgent.update(schema_fields_agent, schema_ref)
+
+              case TypedDecoder.decode(value, {ExampleSchema, type}, path, ExampleTypedDecoder) do
+                {:ok, decoded_value} when output_format == :struct ->
+                  decoded_value =
+                    quote do
+                      %unquote(module){
+                        unquote_splicing(
+                          decoded_value
+                          |> Map.to_list()
+                          |> Enum.sort_by(fn {name, _value} -> name end)
+                        )
+                      }
+                    end
+
+                  {:ok, decoded_value}
+
+                {:ok, decoded_value} ->
+                  quote do
+                    {:ok,
+                     %{
+                       unquote_splicing(
+                         decoded_value
+                         |> Map.to_list()
+                         |> Enum.sort_by(fn {name, _value} -> name end)
+                       )
+                     }}
+                  end
+
+                {:error, _} = error ->
+                  error
+              end
+            else
+              _ ->
+                TypedDecoder.decode(value, {module, type}, path, ExampleTypedDecoder)
+            end
+
+          value, type, path, _caller_module ->
+            TypedDecoder.decode(value, type, path, ExampleTypedDecoder)
+        end)
+
+        schema_fields_agent
+      end
+
+    {operations_new, operation_tests} =
+      Enum.map_reduce(operations, [], fn %Operation{
+                                           request_path: request_path,
+                                           request_method: request_method,
+                                           request_body: request_body,
+                                           function_name: function_name
+                                         } = operation,
+                                         acc ->
+        [{_, %GeneratorOperation{params: params, param_renamings: param_renamings}}] =
+          :ets.lookup(:operations, {request_path, request_method})
+
+        request_path_new =
+          String.replace(request_path, ~r/\{([[:word:]]+)\}/, fn word ->
+            word
+            |> String.split(["{", "}"])
+            |> Enum.at(1)
+            |> then(fn name ->
+              name_new = Map.get(param_renamings, {name, :path}, name)
+              "{#{name_new}}"
+            end)
+          end)
+
+        operation_new = %Operation{operation | request_path: request_path_new}
+
+        acc_new =
+          case generate_operation_test_functions(operation_new, state) do
+            [] ->
+              acc
+
+            test_functions ->
+              arity =
+                Enum.reduce(
+                  params,
+                  if(length(request_body) == 0, do: 1, else: 2),
+                  fn %GeneratorParam{static: static}, arity ->
+                    arity + if(static, do: 1, else: 0)
+                  end
+                )
+
+              describe_message = "#{function_name}/#{arity}"
+
+              describe_block =
+                quote do
+                  describe unquote(describe_message) do
+                    (unquote_splicing(test_functions))
+                  end
+                end
+
+              [describe_block | acc]
+          end
+
+        {operation_new, acc_new}
       end)
 
-    operation_new = %Operation{operation | request_path: request_path_new}
+    if schema_fields_agent do
+      Agent.stop(schema_fields_agent)
+    end
 
-    OpenAPI.Renderer.Operation.render(state, operation_new)
+    if length(operation_tests) != 0 do
+      test_module =
+        module
+        |> generate_module_name(state)
+        |> Module.split()
+        |> List.update_at(-1, &"#{&1}Test")
+        |> Module.concat()
+
+      test_ast =
+        quote do
+          defmodule unquote(test_module) do
+            use ExUnit.Case, async: true
+            import Mox
+
+            @httpoison OpenAPIClient.HTTPoisonMock
+
+            setup :verify_on_exit!
+
+            unquote_splicing(Enum.reverse(operation_tests))
+          end
+        end
+
+      %File{file | ast: test_ast}
+      |> then(&%File{&1 | contents: implementation.format(state, &1)})
+      |> then(fn file ->
+        base_location =
+          :oapi_generator
+          |> Application.get_env(profile, [])
+          |> Keyword.get(:output, [])
+          |> Keyword.get(:location, "")
+
+        test_base_location =
+          :open_api_client_ex
+          |> Application.get_env(profile, [])
+          |> Keyword.get(:test_location, "test")
+
+        location =
+          state
+          |> implementation.location(file)
+          |> Path.split()
+          |> List.update_at(-1, fn filename -> Path.basename(filename, ".ex") <> "_test.exs" end)
+          |> Path.join()
+          |> then(&Path.join([test_base_location, Path.relative_to(&1, base_location)]))
+
+        %File{file | location: location}
+      end)
+      |> then(&implementation.write(state, &1))
+    end
+
+    file_new = %File{file | operations: operations_new}
+    OpenAPI.Renderer.Operation.render_all(state, file_new)
   end
 
   @impl true
@@ -586,4 +816,475 @@ defmodule OpenAPIClient.Generator.Renderer do
     do: parse_spec_return_type(next, [type | acc])
 
   defp parse_spec_return_type(type, acc), do: Enum.reverse([type | acc])
+
+  defp field_to_type(
+         %GeneratorField{
+           field: %Field{type: {:enum, _}},
+           enum_options: enum_options,
+           enum_strict: true
+         },
+         _state
+       ),
+       do: {:enum, enum_options}
+
+  defp field_to_type(
+         %GeneratorField{field: %Field{type: {:enum, _}}, enum_options: enum_options},
+         _state
+       ),
+       do: {:enum, enum_options ++ [:not_strict]}
+
+  defp field_to_type(
+         %GeneratorField{field: %Field{type: {:array, {:enum, _} = enum}} = inner_field} = field,
+         state
+       ),
+       do:
+         {:array,
+          field_to_type(%GeneratorField{field | field: %Field{inner_field | type: enum}}, state)}
+
+  defp field_to_type(%GeneratorField{field: %Field{type: type}}, state),
+    do: Util.to_readable_type(state, type)
+
+  defp generate_operation_test_functions(%Operation{responses: []}, _state), do: []
+
+  defp generate_operation_test_functions(
+         %Operation{
+           module_name: module_name,
+           function_name: function_name,
+           request_path: request_path,
+           request_method: request_method,
+           request_body: request_body,
+           responses: responses
+         },
+         state
+       ) do
+    module_name = generate_module_name(module_name, state)
+
+    {request_content_type, request_schema} = select_example_schema(request_body)
+    {request_encoded, request_decoded} = generate_schema_example(request_schema, state)
+
+    request_schema_test_message =
+      if request_schema_test_message = test_message_schema(request_schema, state) do
+        "encodes #{request_schema_test_message} from request's body"
+      end
+
+    {exact_responses, non_exact_responses} =
+      Enum.split_with(responses, fn {status_code, _} -> is_integer(status_code) end)
+
+    non_exact_responses
+    |> Map.new()
+    |> Enum.reduce(
+      Map.new(exact_responses),
+      fn {status_code, schemas}, responses ->
+        status_code_range =
+          case status_code do
+            <<digit::utf8, "XX">> ->
+              digit = digit - ?0
+              ((digit + 1) * 100 - 1)..(digit * 100)
+
+            :default ->
+              599..200
+          end
+
+        status_code_new =
+          Enum.find(status_code_range, fn code -> not Map.has_key?(responses, code) end)
+
+        Map.put(responses, status_code_new, schemas)
+      end
+    )
+    |> Enum.sort_by(fn {status_code, _} -> status_code end)
+    |> Enum.map(fn {status_code, schemas} ->
+      {response_content_type, response_schema} = select_example_schema(schemas)
+      {response_encoded, response_decoded} = generate_schema_example(response_schema, state)
+
+      response_schema_test_message =
+        if response_schema_test_message = test_message_schema(response_schema, state) do
+          "encodes #{response_schema_test_message} from response's body"
+        end
+
+      [{_, %GeneratorOperation{params: all_params}}] =
+        :ets.lookup(:operations, {request_path, request_method})
+
+      expected_result_tag =
+        if status_code >= 200 and status_code < 300 do
+          :ok
+        else
+          :error
+        end
+
+      test_parameters =
+        [
+          Enum.map(all_params, &{:param, &1}),
+          {:request_body, {request_content_type, request_encoded, request_decoded}},
+          {:response_body, {response_content_type, response_encoded, response_decoded}}
+        ]
+        |> List.flatten()
+        |> Enum.reduce(
+          %{
+            httpoison_request_arguments: [
+              request_method,
+              @test_example_url |> URI.merge(request_path) |> URI.to_string(),
+              quote(do: _),
+              quote(do: _),
+              quote(do: _)
+            ],
+            call_arguments: [],
+            call_opts: [base_url: @test_example_url],
+            httpoison_request_query_params_assigned: false,
+            httpoison_request_assertions: [],
+            httpoison_response_fields: [{:status_code, status_code}],
+            expected_result: expected_result_tag
+          },
+          fn
+            {:param,
+             %GeneratorParam{
+               param: %Param{name: name, location: location},
+               old_name: old_name,
+               static: static
+             } = param},
+            acc ->
+              param_example = example(param, state)
+
+              acc_new =
+                if static do
+                  Map.update!(acc, :call_arguments, &[param_example | &1])
+                else
+                  Map.update!(acc, :call_opts, &[{String.to_atom(name), param_example} | &1])
+                end
+
+              case location do
+                :path ->
+                  acc_new
+                  |> Map.update!(
+                    :httpoison_request_arguments,
+                    &List.update_at(&1, 1, fn url ->
+                      String.replace(url, "{#{name}}", to_string(param_example))
+                    end)
+                  )
+
+                :query ->
+                  acc_new
+                  |> Map.update!(
+                    :httpoison_request_arguments,
+                    &List.replace_at(&1, 4, quote(do: options))
+                  )
+                  |> Map.replace!(:httpoison_request_query_params_assigned, true)
+                  |> Map.update!(
+                    :httpoison_request_assertions,
+                    &[
+                      quote(do: assert(unquote(param_example) == query_params[unquote(old_name)]))
+                      | &1
+                    ]
+                  )
+
+                :header ->
+                  acc_new
+                  |> Map.update!(
+                    :httpoison_request_arguments,
+                    &List.replace_at(&1, 3, quote(do: headers))
+                  )
+                  |> Map.update!(
+                    :httpoison_request_assertions,
+                    &[
+                      quote(
+                        do:
+                          assert(
+                            {_, unquote(param_example)} ==
+                              List.keyfind(headers, unquote(old_name), 0)
+                          )
+                      )
+                      | &1
+                    ]
+                  )
+
+                _ ->
+                  acc_new
+              end
+
+            {:request_body, {nil, _, _}}, acc ->
+              acc
+
+            {:request_body, {content_type, body_encoded, body_decoded}}, acc ->
+              acc_new =
+                acc
+                |> Map.update!(
+                  :httpoison_request_arguments,
+                  &List.replace_at(&1, 3, quote(do: headers))
+                )
+                |> Map.update!(
+                  :httpoison_request_assertions,
+                  &[
+                    quote(
+                      do:
+                        assert(
+                          {_, unquote(content_type)} ==
+                            List.keyfind(headers, "Content-Type", 0)
+                        )
+                    )
+                    | &1
+                  ]
+                )
+
+              acc_new =
+                acc_new
+                |> Map.update!(
+                  :httpoison_request_arguments,
+                  &List.replace_at(&1, 2, quote(do: body))
+                )
+
+              if content_type == "application/json" do
+                acc_new
+                |> Map.update!(
+                  :httpoison_request_assertions,
+                  &[
+                    quote do
+                      assert unquote(body_encoded) == body |> Jason.decode!()
+                    end
+                    | &1
+                  ]
+                )
+              else
+                acc_new
+                |> Map.update!(
+                  :httpoison_request_assertions,
+                  &[
+                    quote do
+                      assert to_string(unquote(body_encoded)) == body
+                    end
+                    | &1
+                  ]
+                )
+              end
+              |> Map.update!(:call_arguments, &[body_decoded | &1])
+
+            {:response_body, {nil, _, _}}, acc ->
+              acc
+
+            {:response_body, {content_type, body_encoded, body_decoded}}, acc ->
+              acc_new =
+                acc
+                |> Map.update!(
+                  :httpoison_response_fields,
+                  &[{:headers, quote(do: [{"Content-Type", unquote(content_type)}])} | &1]
+                )
+
+              if content_type == "application/json" do
+                acc_new
+                |> Map.update!(
+                  :httpoison_response_fields,
+                  &[{:body, quote(do: unquote(body_encoded) |> Jason.encode!())} | &1]
+                )
+              else
+                acc_new
+                |> Map.update!(
+                  :httpoison_response_fields,
+                  &[{:body, quote(do: unquote(body_encoded) |> to_string())} | &1]
+                )
+              end
+              |> Map.replace!(
+                :expected_result,
+                {expected_result_tag, body_decoded}
+              )
+          end
+        )
+
+      test_message =
+        ["performs a request", request_schema_test_message, response_schema_test_message]
+        |> Enum.reject(&is_nil/1)
+        |> Enum.split(-1)
+        |> case do
+          {[], [last_message]} ->
+            last_message
+
+          {comma_separated_messages, [last_message]} ->
+            comma_separated_messages
+            |> Enum.join(", ")
+            |> then(&"#{&1} and #{last_message}")
+        end
+        |> then(&"[#{status_code}] #{&1}")
+
+      quote do
+        test unquote(test_message) do
+          expect(
+            @httpoison,
+            :request,
+            unquote(
+              {:fn, [],
+               [
+                 {:->, [],
+                  [
+                    test_parameters[:httpoison_request_arguments],
+                    quote do
+                      unquote_splicing(
+                        if(test_parameters[:httpoison_request_query_params_assigned],
+                          do: [quote(do: query_params = options[:params])],
+                          else: []
+                        )
+                      )
+
+                      unquote_splicing(
+                        Enum.reverse(test_parameters[:httpoison_request_assertions])
+                      )
+
+                      {:ok,
+                       %HTTPoison.Response{
+                         unquote_splicing(
+                           Enum.reverse(test_parameters[:httpoison_response_fields])
+                         )
+                       }}
+                    end
+                  ]}
+               ]}
+            )
+          )
+
+          assert unquote(test_parameters[:expected_result]) ==
+                   unquote(module_name).unquote(function_name)(
+                     unquote_splicing(
+                       Enum.reverse([
+                         test_parameters[:call_opts] | test_parameters[:call_arguments]
+                       ])
+                     )
+                   )
+        end
+      end
+    end)
+  end
+
+  defp example(:null, _state), do: nil
+  defp example(:boolean, _state), do: true
+  defp example(:integer, _state), do: 1
+  defp example(:number, _state), do: 1.0
+  defp example({:string, :date}, _state), do: "2024-01-02"
+  defp example({:string, :date_time}, _state), do: "2024-01-02T01:23:45Z"
+  defp example({:string, :time}, _state), do: "01:23:45"
+  defp example({:string, :uri}, _state), do: "http://example.com"
+  defp example({:string, _}, _state), do: "string"
+  defp example({:array, type}, state), do: [example(type, state)]
+  defp example({:const, value}, _state), do: value
+  defp example({:enum, [{_atom, value} | _]}, _state), do: value
+  defp example({:enum, [value | _]}, _state), do: value
+  defp example({:union, [type | _]}, state), do: example(type, state)
+  defp example(type, _state) when type in [:any, :map], do: %{"a" => "b"}
+  defp example(%GeneratorField{examples: [value | _]}, _state), do: value
+
+  defp example(
+         %GeneratorField{field: %Field{type: {:array, {:enum, _}}}, enum_options: enum_options},
+         state
+       ),
+       do: example({:array, {:enum, enum_options}}, state)
+
+  defp example(
+         %GeneratorField{field: %Field{type: {:enum, _}}, enum_options: enum_options},
+         state
+       ),
+       do: example({:enum, enum_options}, state)
+
+  defp example(%GeneratorField{field: %Field{type: type}}, state), do: example(type, state)
+
+  defp example(%GeneratorSchema{fields: all_fields}, state) do
+    all_fields
+    |> Enum.flat_map(fn
+      %GeneratorField{field: nil} -> []
+      %GeneratorField{old_name: name} = field -> [{name, example(field, state)}]
+    end)
+    |> Map.new()
+  end
+
+  defp example(schema_ref, state) when is_reference(schema_ref) do
+    [{_, schema}] = :ets.lookup(:schemas, schema_ref)
+    example(schema, state)
+  end
+
+  defp example(%GeneratorParam{param: %Param{value_type: type}}, state), do: example(type, state)
+
+  defp select_example_schema([]), do: {nil, :null}
+
+  defp select_example_schema(schemas) when is_map(schemas),
+    do: schemas |> Map.to_list() |> select_example_schema()
+
+  defp select_example_schema([body | _]), do: body
+
+  defp generate_schema_example(:null, _state), do: {nil, nil}
+
+  defp generate_schema_example(schema_ref, %OpenAPI.Renderer.State{schemas: schemas} = state)
+       when is_reference(schema_ref) do
+    [{_, generator_schema}] = :ets.lookup(:schemas, schema_ref)
+
+    %Schema{module_name: module, type_name: type, output_format: _output_format} =
+      Map.fetch!(schemas, schema_ref)
+
+    example_encoded = example(generator_schema, state)
+
+    module = generate_module_name(module, state)
+
+    {:ok, example_decoded} =
+      apply(ExampleTypedDecoder, :decode, [example_encoded, {module, type}])
+
+    example_encoded =
+      if is_map(example_encoded) do
+        quote do
+          %{unquote_splicing(Enum.sort_by(example_encoded, fn {name, _value} -> name end))}
+        end
+      else
+        example_encoded
+      end
+
+    {example_encoded, example_decoded}
+  end
+
+  defp generate_schema_example(type, state) do
+    example_encoded = example(type, state)
+    {:ok, example_decoded} = apply(ExampleTypedDecoder, :decode, [example_encoded, type])
+
+    example_encoded =
+      if is_map(example_encoded) do
+        quote do
+          %{unquote_splicing(Enum.sort_by(example_encoded, fn {name, _value} -> name end))}
+        end
+      else
+        example_encoded
+      end
+
+    {example_encoded, example_decoded}
+  end
+
+  defp generate_module_name(module_name, %OpenAPI.Renderer.State{profile: profile}) do
+    :oapi_generator
+    |> Application.get_env(profile, [])
+    |> Keyword.get(:output, [])
+    |> Keyword.get(:base_module)
+    |> Module.concat(module_name)
+  end
+
+  defp test_message_schema(schema, state) do
+    case Util.to_readable_type(state, schema) do
+      [{module, _type}] ->
+        if Macro.classify_atom(module) == :alias do
+          module
+          |> Module.split()
+          |> Enum.join(".")
+          |> then(&"array of #{&1}")
+        else
+          nil
+        end
+
+      [:map] ->
+        "array of maps"
+
+      {module, _type} ->
+        if Macro.classify_atom(module) == :alias do
+          module
+          |> Module.split()
+          |> Enum.join(".")
+        else
+          nil
+        end
+
+      :map ->
+        "map"
+
+      _ ->
+        nil
+    end
+  end
 end

@@ -82,19 +82,11 @@ defmodule OpenAPIClient.Client do
     fn operation -> apply(module, function, [operation | args]) end
   end
 
-  defp put_request_content_type_header(%Operation{request_types: request_types} = operation) do
-    request_types
-    |> Enum.reduce_while(nil, fn
-      {"application/json", _type} = body, _acc_type -> {:halt, body}
-      body, nil -> {:cont, body}
-      _body, acc_type -> {:cont, acc_type}
-    end)
-    |> case do
-      {content_type, _body_type} ->
-        Operation.put_request_header(operation, "Content-Type", content_type)
-
-      nil ->
-        operation
-    end
+  defp put_request_content_type_header(
+         %Operation{request_types: [{content_type, _} | _]} = operation
+       ) do
+    Operation.put_request_header(operation, "Content-Type", content_type)
   end
+
+  defp put_request_content_type_header(operation), do: operation
 end

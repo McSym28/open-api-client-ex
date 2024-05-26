@@ -30,7 +30,7 @@ defmodule OpenAPIClient.MixProject do
       {:pluggable, "~> 1.1"},
       {:jason, "~> 1.4", only: [:dev, :test]},
       {:httpoison, "~> 2.2", only: [:dev, :test]},
-      {:mox, "~> 1.1", only: :test}
+      {:mox, "~> 1.1", only: [:dev, :test]}
     ]
   end
 end

@@ -1,43 +1,38 @@
 defmodule OpenAPIClient.OperationsTest do
   use ExUnit.Case, async: true
-  alias OpenAPIClient.Operations
-  alias OpenAPIClient.TestSchema
   import Mox
-
   @httpoison OpenAPIClient.HTTPoisonMock
-
   setup :verify_on_exit!
 
-  describe "test/1" do
-    test "successfully performs a requests" do
-      expect(@httpoison, :request, fn :get, "https://example.com/test", _, [], _ ->
+  describe("test/1") do
+    test "[200] performs a request and encodes OpenAPIClient.TestSchema from response's body" do
+      expect(@httpoison, :request, fn :get, "https://example.com/test", _, _, _ ->
         {:ok,
          %HTTPoison.Response{
+           status_code: 200,
+           headers: [{"Content-Type", "application/json"}],
            body:
              %{
-               "Boolean" => false,
-               "Integer" => 1,
-               "Number" => 1.0,
-               "String" => "string",
+               "Boolean" => true,
                "DateTime" => "2024-01-02T01:23:45Z",
                "Enum" => "ENUM_1",
-               "Extra" => "some_data"
+               "Integer" => 1,
+               "Number" => 1.0,
+               "String" => "string"
              }
-             |> Jason.encode!(),
-           headers: [{"Content-Type", "application/json"}],
-           status_code: 200
+             |> Jason.encode!()
          }}
       end)
 
       assert {:ok,
-              %TestSchema{
-                boolean: false,
+              %OpenAPIClient.TestSchema{
+                boolean: true,
+                date_time: ~U[2024-01-02 01:23:45Z],
+                enum: :enum_1,
                 integer: 1,
                 number: 1.0,
-                string: "string",
-                date_time: ~U[2024-01-02T01:23:45Z],
-                enum: :enum_1
-              }} == Operations.test()
+                string: "string"
+              }} == OpenAPIClient.Operations.test(base_url: "https://example.com")
     end
   end
 end
