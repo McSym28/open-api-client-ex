@@ -14,12 +14,6 @@ defmodule OpenAPIClient.Generator.Processor do
   alias OpenAPIClient.Generator.Field, as: GeneratorField
   require Logger
 
-  @extra_fields :oapi_generator
-                |> Application.get_all_env()
-                |> Enum.map(fn {key, options} -> {key, options[:output][:extra_fields]} end)
-                |> Enum.filter(fn {_key, extra_fields} -> extra_fields end)
-                |> Map.new()
-
   @impl true
   def ignore_operation?(
         %OpenAPI.Processor.State{profile: profile} = state,
@@ -265,16 +259,19 @@ defmodule OpenAPIClient.Generator.Processor do
             |> append_field_example(example, false, state)
           end)
 
-        generator_fields =
-          generator_fields ++
-            Enum.map(@extra_fields, fn {key, type} ->
-              %GeneratorField{
-                old_name: key,
-                type: type,
-                enforce: true,
-                extra: true
-              }
-            end)
+        extra_fields =
+          state
+          |> Utils.get_oapi_generator_config(:extra_fields, [])
+          |> Enum.map(fn {key, type} ->
+            %GeneratorField{
+              old_name: key,
+              type: type,
+              enforce: true,
+              extra: true
+            }
+          end)
+
+        generator_fields = generator_fields ++ extra_fields
 
         :ets.insert(
           schemas_table,

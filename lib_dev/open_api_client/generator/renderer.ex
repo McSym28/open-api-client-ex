@@ -8,6 +8,7 @@ defmodule OpenAPIClient.Generator.Renderer do
   alias OpenAPIClient.Generator.Param, as: GeneratorParam
   alias OpenAPIClient.Generator.Schema, as: GeneratorSchema
   alias OpenAPIClient.Generator.Field, as: GeneratorField
+  alias OpenAPIClient.Generator.Utils
   alias OpenAPIClient.Client.TypedDecoder
   import Mox
 
@@ -383,11 +384,7 @@ defmodule OpenAPIClient.Generator.Renderer do
       %File{file | ast: test_ast}
       |> then(&%File{&1 | contents: implementation.format(state, &1)})
       |> then(fn file ->
-        base_location =
-          :oapi_generator
-          |> Application.get_env(profile, [])
-          |> Keyword.get(:output, [])
-          |> Keyword.get(:location, "")
+        base_location = Utils.get_oapi_generator_config(state, :location, "")
 
         test_base_location =
           :open_api_client_ex
@@ -1248,12 +1245,8 @@ defmodule OpenAPIClient.Generator.Renderer do
     {example_encoded, example_decoded}
   end
 
-  defp generate_module_name(module_name, %OpenAPI.Renderer.State{profile: profile}) do
-    :oapi_generator
-    |> Application.get_env(profile, [])
-    |> Keyword.get(:output, [])
-    |> Keyword.get(:base_module)
-    |> Module.concat(module_name)
+  defp generate_module_name(module_name, state) do
+    Module.concat(Utils.get_oapi_generator_config(state, :base_module, ""), module_name)
   end
 
   defp test_message_schema(schema, state) do

@@ -23,6 +23,32 @@ defmodule OpenAPIClient.Generator.Utils do
     end
   end
 
+  @spec get_oapi_generator_config(
+          OpenAPI.Processor.State.t() | OpenAPI.Renderer.State.t(),
+          atom()
+        ) :: term()
+  @spec get_oapi_generator_config(
+          OpenAPI.Processor.State.t() | OpenAPI.Renderer.State.t(),
+          atom(),
+          term()
+        ) :: term()
+  def get_oapi_generator_config(state, key, default \\ nil)
+
+  def get_oapi_generator_config(%OpenAPI.Processor.State{profile: profile}, key, default) do
+    get_oapi_generator_config_profile(profile, key, default)
+  end
+
+  def get_oapi_generator_config(%OpenAPI.Renderer.State{profile: profile}, key, default) do
+    get_oapi_generator_config_profile(profile, key, default)
+  end
+
+  defp get_oapi_generator_config_profile(profile, key, default) do
+    :oapi_generator
+    |> Application.get_env(profile, [])
+    |> Keyword.get(:output, [])
+    |> Keyword.get(key, default)
+  end
+
   defp pattern_match?(pattern, url, method) do
     case pattern do
       :all ->
