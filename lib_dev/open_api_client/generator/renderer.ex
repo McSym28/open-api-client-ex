@@ -375,10 +375,9 @@ defmodule OpenAPIClient.Generator.Renderer do
         quote do
           defmodule unquote(test_module) do
             use ExUnit.Case, async: true
-            import Mox
+            unquote(quote(do: import(Mox)) |> Util.put_newlines())
 
             @httpoison OpenAPIClient.HTTPoisonMock
-
             setup do
               Mox.defmock(@httpoison, for: HTTPoison.Base)
               :ok
@@ -391,7 +390,16 @@ defmodule OpenAPIClient.Generator.Renderer do
         end
 
       %File{file | ast: test_ast}
-      |> then(&%File{&1 | contents: implementation.format(state, &1)})
+      |> then(fn %File{ast: ast} = file ->
+        # All this effort just not to have parenthesis in `describe/*` calls
+        contents =
+          ast
+          |> OpenAPI.Renderer.Util.format_multiline_docs()
+          |> Code.quoted_to_algebra(escape: false, locals_without_parens: [describe: :*])
+          |> Inspect.Algebra.format(98)
+
+        %File{file | contents: contents}
+      end)
       |> then(fn file ->
         base_location = Utils.get_oapi_generator_config(state, :location, "")
 
