@@ -9,13 +9,19 @@ defmodule OpenAPIClient.Generator.Utils do
     state
     |> get_config(:operations, [])
     |> Enum.flat_map(fn {pattern, config} ->
-      if pattern_match?(pattern, url, method) do
-        [config]
+      if type = pattern_matched_type(pattern, url, method) do
+        [{type, config}]
       else
         []
       end
     end)
-    |> Enum.reduce([], &merge_config/2)
+    |> Enum.sort_by(fn
+      {:all, _} -> 0
+      {:regex, _} -> 1
+      {:exact, _} -> 2
+    end)
+    |> Enum.map(fn {_type, config} -> config end)
+    |> Enum.reduce(&OpenAPIClient.Utils.config_merge(&2, &1))
   end
 
   @spec ensure_ets_table(atom()) :: :ets.table()
@@ -75,39 +81,19 @@ defmodule OpenAPIClient.Generator.Utils do
     |> Keyword.get(key, default)
   end
 
-  defp pattern_match?(pattern, url, method) do
+  defp pattern_matched_type(pattern, url, method) do
     case pattern do
       :all ->
-        true
+        :all
 
       {%Regex{} = regex, pattern_method}
       when pattern_method == :all or pattern_method == method ->
-        Regex.match?(regex, url)
+        if Regex.match?(regex, url) do
+          :regex
+        end
 
       {^url, pattern_method} when pattern_method == :all or pattern_method == method ->
-        true
-
-      _ ->
-        false
+        :exact
     end
   end
-
-  defp merge_config([], list2) when is_list(list2), do: list2
-  defp merge_config(list1, []) when is_list(list1), do: list1
-
-  defp merge_config([{key1, _} | _] = list1, [{key2, _} | _] = list2)
-       when is_atom(key1) and is_atom(key2),
-       do: Keyword.merge(list1, list2, fn _, v1, v2 -> merge_config(v1, v2) end)
-
-  defp merge_config([{_, _} | _] = list1, [{_, _} | _] = list2) do
-    list1
-    |> Map.new()
-    |> merge_config(Map.new(list2))
-    |> Keyword.new()
-  end
-
-  defp merge_config(%{} = map1, %{} = map2),
-    do: Map.merge(map1, map2, fn _, v1, v2 -> merge_config(v1, v2) end)
-
-  defp merge_config(_v1, v2), do: v2
 end
