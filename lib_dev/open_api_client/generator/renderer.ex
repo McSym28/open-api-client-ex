@@ -1237,39 +1237,34 @@ defmodule OpenAPIClient.Generator.Renderer do
       Map.fetch!(schemas, schema_ref)
 
     example_encoded = example(generator_schema, state)
-
     module = generate_module_name(module, state)
 
     {:ok, example_decoded} =
       apply(ExampleTypedDecoder, :decode, [example_encoded, {module, type}])
 
-    example_encoded =
-      if is_map(example_encoded) do
-        quote do
-          %{unquote_splicing(Enum.sort_by(example_encoded, fn {name, _value} -> name end))}
-        end
-      else
-        example_encoded
-      end
-
+    example_encoded = sort_encoded_example(example_encoded)
     {example_encoded, example_decoded}
   end
 
   defp generate_schema_example(type, state) do
     example_encoded = example(type, state)
     {:ok, example_decoded} = apply(ExampleTypedDecoder, :decode, [example_encoded, type])
-
-    example_encoded =
-      if is_map(example_encoded) do
-        quote do
-          %{unquote_splicing(Enum.sort_by(example_encoded, fn {name, _value} -> name end))}
-        end
-      else
-        example_encoded
-      end
-
+    example_encoded = sort_encoded_example(example_encoded)
     {example_encoded, example_decoded}
   end
+
+  defp sort_encoded_example(map) when is_map(map) do
+    items =
+      map
+      |> Enum.sort_by(fn {name, _value} -> name end)
+      |> Enum.map(fn {name, value} -> {name, sort_encoded_example(value)} end)
+
+    quote do
+      %{unquote_splicing(items)}
+    end
+  end
+
+  defp sort_encoded_example(value), do: value
 
   defp generate_module_name(module_name, state) do
     Module.concat(Utils.get_oapi_generator_config(state, :base_module, ""), module_name)
