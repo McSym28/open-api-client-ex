@@ -13,7 +13,7 @@ defmodule OpenAPIClient.Operations do
   ## Options
 
     * `base_url`: Request's base URL. Default value is taken from `@base_url`
-    * `client_pipeline`: Client pipeline for making a request. Default value obtained through a call to `Application.get_env(:open_api_client_ex, :client_pipeline)`
+    * `client_pipeline`: Client pipeline for making a request. Default value obtained through a call to `OpenAPIClient.Utils.get_config(:default, :client_pipeline)}
 
   """
   @spec test([
@@ -22,7 +22,7 @@ defmodule OpenAPIClient.Operations do
   def test opts \\ [] do
     client_pipeline =
       Keyword.get_lazy(opts, :client_pipeline, fn ->
-        Application.get_env(:open_api_client_ex, :client_pipeline)
+        OpenAPIClient.Utils.get_config(:default, :client_pipeline)
       end)
 
     base_url = opts[:base_url] || @base_url

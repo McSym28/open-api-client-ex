@@ -14,11 +14,12 @@ config :oapi_generator,
   ]
 
 config :open_api_client_ex,
-  json_library: Jason,
-  client_pipeline: OpenAPIClient.TestClientPipeline,
-  httpoison: OpenAPIClient.HTTPoisonMock,
+  "$base": [
+    client_pipeline: OpenAPIClient.TestClientPipeline,
+    json_library: Jason,
+    httpoison: OpenAPIClient.HTTPoisonMock
+  ],
   default: [
     base_url: "https://example.com",
-    client_pipeline: {Application, :get_env, [:open_api_client_ex, :client_pipeline]},
     test_location: "test/open_api_client"
   ]

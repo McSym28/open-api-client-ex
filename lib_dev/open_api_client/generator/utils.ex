@@ -46,9 +46,7 @@ defmodule OpenAPIClient.Generator.Utils do
   end
 
   def get_config(profile, key, default) when is_atom(profile) do
-    :open_api_client_ex
-    |> Application.get_env(profile, [])
-    |> Keyword.get(key, default)
+    OpenAPIClient.Utils.get_config(profile, key, default)
   end
 
   @spec get_oapi_generator_config(

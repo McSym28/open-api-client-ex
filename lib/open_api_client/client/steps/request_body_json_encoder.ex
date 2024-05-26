@@ -5,7 +5,7 @@ defmodule OpenAPIClient.Client.Steps.RequestBodyJSONEncoder do
   Encoding is performed only when request's `"Content-Type"` header is equal to `"application/json"`.
 
   Accepts the following `opts`:
-  * `:json_library` - JSON library module. Default value obtained through a call to `Application.get_env(:open_api_client_ex, :json_library)`
+  * `:json_library` - JSON library module. Default value obtained through a call to `OpenAPIClient.Utils.get_config(operation, :json_library)`
 
   """
 
@@ -29,7 +29,7 @@ defmodule OpenAPIClient.Client.Steps.RequestBodyJSONEncoder do
       {:ok, "application/json"} ->
         json_library =
           Keyword.get_lazy(opts, :json_library, fn ->
-            Application.get_env(:open_api_client_ex, :json_library)
+            OpenAPIClient.Utils.get_config(operation, :json_library)
           end)
 
         if json_library do

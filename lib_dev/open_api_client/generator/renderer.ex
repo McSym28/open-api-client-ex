@@ -538,7 +538,7 @@ defmodule OpenAPIClient.Generator.Renderer do
 
   @impl true
   def render_operation_function(
-        %OpenAPI.Renderer.State{profile: profile} = state,
+        state,
         %Operation{
           function_name: function_name,
           request_path: request_path,
@@ -573,7 +573,8 @@ defmodule OpenAPIClient.Generator.Renderer do
           param_assignments =
             all_params
             |> Enum.flat_map(fn
-              %GeneratorParam{default: {m, f, a}, param: %Param{name: name}} ->
+              %GeneratorParam{default: default, param: %Param{name: name}}
+              when not is_nil(default) ->
                 atom = String.to_atom(name)
                 variable = Macro.var(atom, nil)
 
@@ -582,7 +583,7 @@ defmodule OpenAPIClient.Generator.Renderer do
                     do:
                       unquote(variable) =
                         Keyword.get_lazy(opts, unquote(atom), fn ->
-                          unquote(m).unquote(f)(unquote_splicing(a))
+                          unquote(default)
                         end)
                   )
                 ]
@@ -592,16 +593,11 @@ defmodule OpenAPIClient.Generator.Renderer do
             end)
 
           client_pipeline_expression =
-            case Utils.get_config(state, :client_pipeline) do
-              {m, f, a} ->
-                quote do:
-                        client_pipeline =
-                          Keyword.get_lazy(opts, :client_pipeline, fn ->
-                            unquote(m).unquote(f)(unquote_splicing(a))
-                          end)
-
-              _ ->
-                quote do: client_pipeline = opts[:client_pipeline]
+            quote do
+              client_pipeline =
+                Keyword.get_lazy(opts, :client_pipeline, fn ->
+                  OpenAPIClient.Utils.get_config(unquote(state.profile), :client_pipeline)
+                end)
             end
 
           base_url_expression =
@@ -635,7 +631,7 @@ defmodule OpenAPIClient.Generator.Renderer do
             |> render_params_parse()
 
           {operation_assigns, private_assigns} =
-            Enum.flat_map_reduce(map_arguments, %{__profile__: profile}, fn
+            Enum.flat_map_reduce(map_arguments, %{__profile__: state.profile}, fn
               {:url, value}, acc ->
                 {[{:request_url, value}], acc}
 

@@ -40,37 +40,33 @@ defmodule OpenAPIClient.Generator.Processor do
 
           {_, config} = List.keyfind(param_configs, {name, location}, 0, {name, []})
 
-          default = Keyword.get(config, :default)
-
           name_new =
             Keyword.get_lazy(config, :name, fn -> snakesize_name(name) end)
+
+          default =
+            config
+            |> Keyword.get(:default)
+            |> generate_function_call(state)
 
           description_new =
             if name_new == name do
               description
             else
-              Enum.join(["[#{inspect(name)}]", description], " ")
+              ["[#{inspect(name)}]", description]
+              |> Enum.reject(&is_nil/1)
+              |> Enum.join(" ")
             end
 
           description_new =
-            case default do
-              {m, f, a} ->
-                function_call_string =
-                  quote do
-                    unquote(m).unquote(f)(unquote_splicing(a))
-                  end
-                  |> Macro.to_string()
-
-                Enum.join(
-                  [
-                    description_new,
-                    "Default value obtained through a call to `#{function_call_string}`"
-                  ],
-                  ". "
-                )
-
-              _ ->
-                description_new
+            if default do
+              [
+                description_new,
+                "Default value obtained through a call to `#{Macro.to_string(default)}`"
+              ]
+              |> Enum.reject(&is_nil/1)
+              |> Enum.join(". ")
+            else
+              description_new
             end
 
           param_new = %Param{param | name: name_new, description: description_new}
@@ -154,28 +150,8 @@ defmodule OpenAPIClient.Generator.Processor do
               []
           end
 
-        client_pipeline_description = "Client pipeline for making a request"
-
         client_pipeline_description =
-          case Utils.get_config(state, :client_pipeline) do
-            {m, f, a} ->
-              function_call_string =
-                quote do
-                  unquote(m).unquote(f)(unquote_splicing(a))
-                end
-                |> Macro.to_string()
-
-              Enum.join(
-                [
-                  client_pipeline_description,
-                  "Default value obtained through a call to `#{function_call_string}`"
-                ],
-                ". "
-              )
-
-            _ ->
-              client_pipeline_description
-          end
+          "Client pipeline for making a request. Default value obtained through a call to `OpenAPIClient.Utils.get_config(#{inspect(state.profile)}, :client_pipeline)}"
 
         additional_dynamic_params = [
           %Param{
@@ -544,4 +520,19 @@ defmodule OpenAPIClient.Generator.Processor do
   end
 
   defp snakesize_name(name), do: Macro.underscore(name)
+
+  defp generate_function_call({:profile_config, key}, state) when is_atom(key) do
+    quote do
+      OpenAPIClient.Utils.get_config(unquote(state.profile), unquote(key))
+    end
+  end
+
+  defp generate_function_call({module, function, args}, _state)
+       when is_atom(module) and is_atom(function) and is_list(args) do
+    quote do
+      unquote(module).unquote(function)(unquote_splicing(args))
+    end
+  end
+
+  defp generate_function_call(nil, _state), do: nil
 end

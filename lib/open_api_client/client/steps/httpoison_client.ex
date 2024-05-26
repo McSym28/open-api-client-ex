@@ -4,7 +4,7 @@ if Code.ensure_loaded?(HTTPoison) do
     `Pluggable` step implementation for making a HTTP request through `HTTPoison`
 
     Accepts the following `opts`:
-    * `:httpoison` - `HTTPoison` module. Used for tests
+    * `:httpoison` - `HTTPoison` module. Default value obtained through a call to `OpenAPIClient.Utils.get_config(operation, :httpoison, HTTPoison)`
     * `:headers` - Default `HTTPoison.request/5` `:headers`
     * `:query_params` - Default `HTTPoison.request/5` query params (passed through `[:options, :params]`)
     * `:options` - Default `HTTPoison.request/5` `:options`
@@ -41,7 +41,7 @@ if Code.ensure_loaded?(HTTPoison) do
         ) do
       httpoison =
         Keyword.get_lazy(opts, :httpoison, fn ->
-          Application.get_env(:open_api_client_ex, :httpoison, HTTPoison)
+          OpenAPIClient.Utils.get_config(operation, :httpoison, HTTPoison)
         end)
 
       url = base_url |> URI.merge(url) |> URI.to_string()
