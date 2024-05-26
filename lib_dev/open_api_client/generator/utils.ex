@@ -6,6 +6,8 @@ defmodule OpenAPIClient.Generator.Utils do
         ) ::
           keyword()
   def operation_config(state, url, method) do
+    url = to_string(url)
+
     state
     |> get_config(:operations, [])
     |> Enum.flat_map(fn {pattern, config} ->
