@@ -1,10 +1,13 @@
 defmodule OpenAPIClient.Generator.Utils do
-  @spec operation_config(atom(), String.t() | URI.t(), OpenAPI.Processor.Operation.method()) ::
+  @spec operation_config(
+          OpenAPI.Processor.State.t(),
+          String.t() | URI.t(),
+          OpenAPI.Processor.Operation.method()
+        ) ::
           keyword()
-  def operation_config(profile, url, method) do
-    :open_api_client_ex
-    |> Application.get_env(profile, [])
-    |> Keyword.get(:operations, [])
+  def operation_config(state, url, method) do
+    state
+    |> get_config(:operations, [])
     |> Enum.flat_map(fn {pattern, config} ->
       if pattern_match?(pattern, url, method) do
         [config]
@@ -21,6 +24,31 @@ defmodule OpenAPIClient.Generator.Utils do
       :undefined -> :ets.new(name, [:set, :public, :named_table])
       tid -> tid
     end
+  end
+
+  @spec get_config(
+          OpenAPI.Processor.State.t() | OpenAPI.Renderer.State.t() | String.t(),
+          atom()
+        ) :: term()
+  @spec get_config(
+          OpenAPI.Processor.State.t() | OpenAPI.Renderer.State.t() | atom(),
+          atom(),
+          term()
+        ) :: term()
+  def get_config(state, key, default \\ nil)
+
+  def get_config(%OpenAPI.Processor.State{profile: profile}, key, default) do
+    get_config(profile, key, default)
+  end
+
+  def get_config(%OpenAPI.Renderer.State{profile: profile}, key, default) do
+    get_config(profile, key, default)
+  end
+
+  def get_config(profile, key, default) when is_atom(profile) do
+    :open_api_client_ex
+    |> Application.get_env(profile, [])
+    |> Keyword.get(key, default)
   end
 
   @spec get_oapi_generator_config(

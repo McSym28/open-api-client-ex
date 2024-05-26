@@ -70,11 +70,14 @@ defmodule OpenAPIClient.Generator.Renderer do
   end
 
   @impl true
-  def render_default_client(%OpenAPI.Renderer.State{profile: profile} = state, file) do
+  def render_default_client(state, file) do
     case OpenAPI.Renderer.render_default_client(state, file) do
       {:@, _, [{:default_client, _, _}] = _default_client_expression} ->
-        base_url =
-          :open_api_client_ex |> Application.fetch_env!(profile) |> Keyword.fetch!(:base_url)
+        base_url = Utils.get_config(state, :base_url)
+
+        if not is_binary(base_url) do
+          throw("`:base_url` for profile `#{inspect(state.profile)}` is not set!")
+        end
 
         Util.put_newlines(quote(do: @base_url(unquote(base_url))))
 
@@ -221,8 +224,7 @@ defmodule OpenAPIClient.Generator.Renderer do
   def render_operations(
         %OpenAPI.Renderer.State{
           schemas: schemas,
-          implementation: implementation,
-          profile: profile
+          implementation: implementation
         } = state,
         %File{module: module, operations: operations} = file
       ) do
@@ -386,10 +388,7 @@ defmodule OpenAPIClient.Generator.Renderer do
       |> then(fn file ->
         base_location = Utils.get_oapi_generator_config(state, :location, "")
 
-        test_base_location =
-          :open_api_client_ex
-          |> Application.get_env(profile, [])
-          |> Keyword.get(:test_location, "test")
+        test_base_location = Utils.get_config(state, :test_location, "test")
 
         location =
           state
@@ -576,10 +575,7 @@ defmodule OpenAPIClient.Generator.Renderer do
             end)
 
           client_pipeline_expression =
-            :open_api_client_ex
-            |> Application.get_env(profile, [])
-            |> Keyword.get(:client_pipeline)
-            |> case do
+            case Utils.get_config(state, :client_pipeline) do
               {m, f, a} ->
                 quote do:
                         client_pipeline =

@@ -16,7 +16,7 @@ defmodule OpenAPIClient.Generator.Processor do
 
   @impl true
   def ignore_operation?(
-        %OpenAPI.Processor.State{profile: profile} = state,
+        state,
         %OperationSpec{
           "$oag_path": request_path,
           "$oag_path_parameters": params_from_path,
@@ -28,7 +28,7 @@ defmodule OpenAPIClient.Generator.Processor do
     else
       request_method = OpenAPI.Processor.Operation.request_method(state, operation_spec)
 
-      operation_config = Utils.operation_config(profile, request_path, request_method)
+      operation_config = Utils.operation_config(state, request_path, request_method)
       param_configs = Keyword.get(operation_config, :params, [])
 
       {all_params, param_renamings} =
@@ -122,7 +122,7 @@ defmodule OpenAPIClient.Generator.Processor do
 
   @impl true
   def operation_docstring(
-        %OpenAPI.Processor.State{profile: profile} = state,
+        state,
         %OperationSpec{"$oag_path": request_path, request_body: request_body} = operation_spec,
         query_params
       ) do
@@ -157,10 +157,7 @@ defmodule OpenAPIClient.Generator.Processor do
         client_pipeline_description = "Client pipeline for making a request"
 
         client_pipeline_description =
-          :open_api_client_ex
-          |> Application.get_env(profile, [])
-          |> Keyword.get(:client_pipeline)
-          |> case do
+          case Utils.get_config(state, :client_pipeline) do
             {m, f, a} ->
               function_call_string =
                 quote do
