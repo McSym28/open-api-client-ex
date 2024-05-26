@@ -151,7 +151,7 @@ defmodule OpenAPIClient.Generator.Processor do
           end
 
         client_pipeline_description =
-          "Client pipeline for making a request. Default value obtained through a call to `OpenAPIClient.Utils.get_config(#{inspect(state.profile)}, :client_pipeline)}"
+          "Client pipeline for making a request. Default value obtained through a call to `OpenAPIClient.Utils.get_config(__operation__, :client_pipeline)}"
 
         additional_dynamic_params = [
           %Param{

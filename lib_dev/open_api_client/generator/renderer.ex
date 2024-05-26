@@ -594,10 +594,7 @@ defmodule OpenAPIClient.Generator.Renderer do
 
           client_pipeline_expression =
             quote do
-              client_pipeline =
-                Keyword.get_lazy(opts, :client_pipeline, fn ->
-                  OpenAPIClient.Utils.get_config(unquote(state.profile), :client_pipeline)
-                end)
+              client_pipeline = Keyword.get(opts, :client_pipeline)
             end
 
           base_url_expression =

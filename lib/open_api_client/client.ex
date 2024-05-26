@@ -5,9 +5,11 @@ defmodule OpenAPIClient.Client do
   @type step :: module() | {module(), term()} | {module(), atom(), [term()]}
   @type pipeline :: step() | nonempty_list(step())
 
-  @spec perform(Operation.t(), pipeline()) :: :ok | {:ok, term()} | :error | {:error, term()}
+  @spec perform(Operation.t(), pipeline() | nil) ::
+          :ok | {:ok, term()} | :error | {:error, term()}
   def perform(operation, pipeline) do
-    normalized_pipeline = normalize_pipeline(pipeline)
+    normalized_pipeline =
+      normalize_pipeline(pipeline || OpenAPIClient.Utils.get_config(operation, :client_pipeline))
 
     operation
     |> put_request_content_type_header()
