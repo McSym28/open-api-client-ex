@@ -230,6 +230,8 @@ defmodule OpenAPIClient.Generator.Renderer do
       ) do
     schema_fields_agent =
       if length(operations) > 0 do
+        typed_decoder = Utils.get_config(state, :typed_decoder, TypedDecoder)
+
         {:ok, schema_fields_agent} = ExampleSchemaFieldsAgent.start_link()
 
         Mox.defmock(ExampleSchema, for: OpenAPIClient.Schema)
@@ -261,7 +263,7 @@ defmodule OpenAPIClient.Generator.Renderer do
                    end) do
               ExampleSchemaFieldsAgent.update(schema_fields_agent, schema_ref)
 
-              case TypedDecoder.decode(value, {ExampleSchema, type}, path, ExampleTypedDecoder) do
+              case typed_decoder.decode(value, {ExampleSchema, type}, path, ExampleTypedDecoder) do
                 {:ok, decoded_value} when output_format == :struct ->
                   decoded_value =
                     quote do
@@ -293,11 +295,11 @@ defmodule OpenAPIClient.Generator.Renderer do
               end
             else
               _ ->
-                TypedDecoder.decode(value, {module, type}, path, ExampleTypedDecoder)
+                typed_decoder.decode(value, {module, type}, path, ExampleTypedDecoder)
             end
 
           value, type, path, _caller_module ->
-            TypedDecoder.decode(value, type, path, ExampleTypedDecoder)
+            typed_decoder.decode(value, type, path, ExampleTypedDecoder)
         end)
 
         schema_fields_agent
