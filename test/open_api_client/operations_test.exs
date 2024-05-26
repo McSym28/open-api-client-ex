@@ -2,6 +2,11 @@ defmodule OpenAPIClient.OperationsTest do
   use ExUnit.Case, async: true
   import Mox
   @httpoison OpenAPIClient.HTTPoisonMock
+  setup do
+    Mox.defmock(@httpoison, for: HTTPoison.Base)
+    :ok
+  end
+
   setup :verify_on_exit!
 
   describe("test/1") do

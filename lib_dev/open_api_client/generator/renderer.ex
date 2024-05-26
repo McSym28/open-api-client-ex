@@ -377,6 +377,11 @@ defmodule OpenAPIClient.Generator.Renderer do
 
             @httpoison OpenAPIClient.HTTPoisonMock
 
+            setup do
+              Mox.defmock(@httpoison, for: HTTPoison.Base)
+              :ok
+            end
+
             setup :verify_on_exit!
 
             unquote_splicing(Enum.reverse(operation_tests))

@@ -39,7 +39,10 @@ if Code.ensure_loaded?(HTTPoison) do
           } = operation,
           opts
         ) do
-      httpoison = opts[:httpoison] || HTTPoison
+      httpoison =
+        Keyword.get_lazy(opts, :httpoison, fn ->
+          Application.get_env(:open_api_client_ex, :httpoison, HTTPoison)
+        end)
 
       url = base_url |> URI.merge(url) |> URI.to_string()
       body = body || ""
