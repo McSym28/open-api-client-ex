@@ -16,13 +16,12 @@ config :oapi_generator,
 config :open_api_client_ex,
   "$base": [
     client_pipeline: OpenAPIClient.TestClientPipeline,
-    json_library: Jason,
     httpoison: OpenAPIClient.HTTPoisonMock,
     decoders: [
-      {"application/json", {Jason, :decode!, []}}
+      {"application/json", {Jason, :decode, []}}
     ],
     encoders: [
-      {"application/json", {Jason, :encode!, []}}
+      {"application/json", {Jason, :encode, []}}
     ]
   ],
   default: [
