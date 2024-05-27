@@ -242,11 +242,13 @@ defmodule OpenAPIClient.Client.TypedDecoder do
          source: path
        )}
 
-  def decode(value, {:union, types}, path, caller_module) do
-    case choose_union(value, types) do
-      {:ok, type} -> caller_module.decode(value, type)
-      {:error, error} -> {:error, %Error{error | source: path}}
-    end
+  def decode(_value, {:union, types}, path, _caller_module) do
+    {:error,
+     Error.new(
+       message: "Error while decoding union type `#{inspect(types)}`",
+       reason: :unsupported_type,
+       source: path
+     )}
   end
 
   def decode(value, [_type], path, _) when not is_list(value),
@@ -338,82 +340,4 @@ defmodule OpenAPIClient.Client.TypedDecoder do
        )}
 
   def decode(value, _type, _, _), do: {:ok, value}
-
-  #
-  # Union Type Handlers
-  #
-
-  defp choose_union(nil, [_type, :null]), do: {:ok, :null}
-  defp choose_union(nil, [:null, _type]), do: {:ok, :null}
-  defp choose_union(_value, [type, :null]), do: {:ok, type}
-  defp choose_union(_value, [:null, type]), do: {:ok, type}
-
-  defp choose_union(%{}, [:map, {:string, :generic}]), do: {:ok, :map}
-  defp choose_union(_value, [:map, {:string, :generic}]), do: {:ok, {:string, :generic}}
-
-  defp choose_union(value, [:number, {:string, :generic}]) when is_number(value),
-    do: {:ok, :number}
-
-  defp choose_union(_value, [:number, {:string, :generic}]), do: {:ok, {:string, :generic}}
-
-  defp choose_union(value, [{:string, :generic}, [string: :generic]])
-       when is_list(value) or is_binary(value) do
-    cond do
-      is_list(value) -> {:ok, [string: :generic]}
-      is_binary(value) -> {:ok, {:string, :generic}}
-    end
-  end
-
-  defp choose_union(value, [:integer, {:string, :generic}, [string: :generic], :null])
-       when is_nil(value) or is_integer(value) or is_binary(value) or is_list(value) do
-    cond do
-      is_nil(value) -> {:ok, :null}
-      is_integer(value) -> {:ok, :integer}
-      is_binary(value) -> {:ok, {:string, :generic}}
-      is_list(value) -> {:ok, [string: :generic]}
-    end
-  end
-
-  defp choose_union(value, [
-         :map,
-         {:string, :generic},
-         [{:string, :generic}]
-       ])
-       when is_binary(value) or is_map(value) or is_list(value) do
-    cond do
-      is_binary(value) -> {:ok, {:string, :generic}}
-      is_map(value) -> {:ok, :map}
-      is_list(value) -> {:ok, [string: :generic]}
-    end
-  end
-
-  defp choose_union(value, [
-         :map,
-         {:string, :generic},
-         [:map],
-         [{:string, :generic}]
-       ])
-       when is_binary(value) or is_map(value) or is_list(value) do
-    cond do
-      is_binary(value) ->
-        {:ok, {:string, :generic}}
-
-      is_map(value) ->
-        {:ok, :map}
-
-      is_list(value) ->
-        case value do
-          [%{} | _] -> {:ok, [:map]}
-          _else -> {:ok, [string: :generic]}
-        end
-    end
-  end
-
-  defp choose_union(_value, _types) do
-    {:error,
-     Error.new(
-       message: "Error while decoding union type",
-       reason: :unsupported_union
-     )}
-  end
 end
