@@ -25,10 +25,24 @@ defmodule OpenAPIClient.Utils do
   end
 
   def get_config(profile, key, default) do
-    :open_api_client_ex
-    |> Application.get_env(:"$base", [])
-    |> config_merge(Application.get_env(:open_api_client_ex, profile, []))
-    |> Keyword.get(key, default)
+    app_data = Process.get(:open_api_client_ex)
+
+    case get_in(app_data, [:config_cache, profile]) do
+      nil ->
+        :open_api_client_ex
+        |> Application.get_env(:"$base", [])
+        |> config_merge(Application.get_env(:open_api_client_ex, profile, []))
+        |> tap(
+          &Process.put(
+            :open_api_client_ex,
+            put_in(app_data || %{}, [Access.key(:config_cache, %{}), profile], &1)
+          )
+        )
+        |> Keyword.get(key, default)
+
+      config ->
+        Keyword.get(config, key, default)
+    end
   end
 
   @spec config_merge(list(), list()) :: list()
