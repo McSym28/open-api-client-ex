@@ -17,7 +17,13 @@ config :open_api_client_ex,
   "$base": [
     client_pipeline: OpenAPIClient.TestClientPipeline,
     json_library: Jason,
-    httpoison: OpenAPIClient.HTTPoisonMock
+    httpoison: OpenAPIClient.HTTPoisonMock,
+    decoders: [
+      {"application/json", {Jason, :decode!, []}}
+    ],
+    encoders: [
+      {"application/json", {Jason, :encode!, []}}
+    ]
   ],
   default: [
     base_url: "https://example.com",

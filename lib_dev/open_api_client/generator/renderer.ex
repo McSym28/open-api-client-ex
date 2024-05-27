@@ -1030,82 +1030,67 @@ defmodule OpenAPIClient.Generator.Renderer do
               acc
 
             {:request_body, {content_type, body_encoded, body_decoded}}, acc ->
-              acc_new =
-                acc
-                |> Map.update!(
-                  :httpoison_request_arguments,
-                  &List.replace_at(&1, 3, quote(do: headers))
-                )
-                |> Map.update!(
-                  :httpoison_request_assertions,
-                  &[
-                    quote(
-                      do:
-                        assert(
-                          {_, unquote(content_type)} ==
-                            List.keyfind(headers, "Content-Type", 0)
-                        )
-                    )
-                    | &1
-                  ]
-                )
-
-              acc_new =
-                acc_new
-                |> Map.update!(
-                  :httpoison_request_arguments,
-                  &List.replace_at(&1, 2, quote(do: body))
-                )
-
-              if content_type == "application/json" do
-                acc_new
-                |> Map.update!(
-                  :httpoison_request_assertions,
-                  &[
-                    quote do
-                      assert unquote(body_encoded) == body |> Jason.decode!()
-                    end
-                    | &1
-                  ]
-                )
-              else
-                acc_new
-                |> Map.update!(
-                  :httpoison_request_assertions,
-                  &[
-                    quote do
-                      assert to_string(unquote(body_encoded)) == body
-                    end
-                    | &1
-                  ]
-                )
-              end
+              acc
+              |> Map.update!(
+                :httpoison_request_arguments,
+                &List.replace_at(&1, 3, quote(do: headers))
+              )
+              |> Map.update!(
+                :httpoison_request_assertions,
+                &[
+                  quote(
+                    do:
+                      assert(
+                        {_, unquote(content_type)} ==
+                          List.keyfind(headers, "Content-Type", 0)
+                      )
+                  )
+                  | &1
+                ]
+              )
+              |> Map.update!(
+                :httpoison_request_arguments,
+                &List.replace_at(&1, 2, quote(do: body))
+              )
+              |> Map.update!(
+                :httpoison_request_assertions,
+                &[
+                  quote do
+                    assert unquote(body_encoded) ==
+                             unquote(
+                               apply_body_converter(
+                                 Macro.var(:body, nil),
+                                 content_type,
+                                 :decoders,
+                                 state
+                               )
+                             )
+                  end
+                  | &1
+                ]
+              )
               |> Map.update!(:call_arguments, &[body_decoded | &1])
 
             {:response_body, {nil, _, _}}, acc ->
               acc
 
             {:response_body, {content_type, body_encoded, body_decoded}}, acc ->
-              acc_new =
-                acc
-                |> Map.update!(
-                  :httpoison_response_fields,
-                  &[{:headers, quote(do: [{"Content-Type", unquote(content_type)}])} | &1]
-                )
-
-              if content_type == "application/json" do
-                acc_new
-                |> Map.update!(
-                  :httpoison_response_fields,
-                  &[{:body, quote(do: unquote(body_encoded) |> Jason.encode!())} | &1]
-                )
-              else
-                acc_new
-                |> Map.update!(
-                  :httpoison_response_fields,
-                  &[{:body, quote(do: unquote(body_encoded) |> to_string())} | &1]
-                )
-              end
+              acc
+              |> Map.update!(
+                :httpoison_response_fields,
+                &[{:headers, quote(do: [{"Content-Type", unquote(content_type)}])} | &1]
+              )
+              |> Map.update!(
+                :httpoison_response_fields,
+                &[
+                  {:body,
+                   quote(
+                     do:
+                       unquote(apply_body_converter(body_encoded, content_type, :encoders, state))
+                   )}
+                  | &1
+                ]
+              )
               |> Map.replace!(
                 :expected_result,
                 {expected_result_tag, body_decoded}
@@ -1302,6 +1287,15 @@ defmodule OpenAPIClient.Generator.Renderer do
 
       _ ->
         nil
+    end
+  end
+
+  defp apply_body_converter(body, content_type, converted_key, state) do
+    {_, {module, function, args}} =
+      state |> Utils.get_config(converted_key) |> List.keyfind!(content_type, 0)
+
+    quote do
+      unquote(body) |> unquote(module).unquote(function)(unquote_splicing(args))
     end
   end
 end
