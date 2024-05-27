@@ -13,20 +13,21 @@ defmodule OpenAPIClient.OperationsTest do
   describe "test/1" do
     test "[200] performs a request and encodes OpenAPIClient.TestSchema from response's body" do
       expect(@httpoison, :request, fn :get, "https://example.com/test", _, _, _ ->
+        assert {:ok, body_encoded} =
+                 Jason.encode(%{
+                   "Boolean" => true,
+                   "DateTime" => "2024-01-02T01:23:45Z",
+                   "Enum" => "ENUM_1",
+                   "Integer" => 1,
+                   "Number" => 1.0,
+                   "String" => "string"
+                 })
+
         {:ok,
          %HTTPoison.Response{
            status_code: 200,
            headers: [{"Content-Type", "application/json"}],
-           body:
-             %{
-               "Boolean" => true,
-               "DateTime" => "2024-01-02T01:23:45Z",
-               "Enum" => "ENUM_1",
-               "Integer" => 1,
-               "Number" => 1.0,
-               "String" => "string"
-             }
-             |> Jason.encode!()
+           body: body_encoded
          }}
       end)
 

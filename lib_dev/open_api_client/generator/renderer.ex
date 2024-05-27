@@ -955,8 +955,8 @@ defmodule OpenAPIClient.Generator.Renderer do
             ],
             call_arguments: [],
             call_opts: [base_url: @test_example_url],
-            httpoison_request_query_params_assigned: false,
             httpoison_request_assertions: [],
+            httpoison_response_assignmets: [],
             httpoison_response_fields: [{:status_code, status_code}],
             expected_result: expected_result_tag
           },
@@ -993,11 +993,12 @@ defmodule OpenAPIClient.Generator.Renderer do
                     :httpoison_request_arguments,
                     &List.replace_at(&1, 4, quote(do: options))
                   )
-                  |> Map.replace!(:httpoison_request_query_params_assigned, true)
                   |> Map.update!(
                     :httpoison_request_assertions,
                     &[
-                      quote(do: assert(unquote(param_example) == query_params[unquote(old_name)]))
+                      quote(
+                        do: assert(unquote(param_example) == options[:params][unquote(old_name)])
+                      )
                       | &1
                     ]
                   )
@@ -1056,7 +1057,7 @@ defmodule OpenAPIClient.Generator.Renderer do
                 :httpoison_request_assertions,
                 &[
                   quote do
-                    assert unquote(body_encoded) ==
+                    assert {:ok, unquote(body_encoded)} ==
                              unquote(
                                apply_body_converter(
                                  Macro.var(:body, nil),
@@ -1081,15 +1082,20 @@ defmodule OpenAPIClient.Generator.Renderer do
                 &[{:headers, quote(do: [{"Content-Type", unquote(content_type)}])} | &1]
               )
               |> Map.update!(
-                :httpoison_response_fields,
+                :httpoison_response_assignmets,
                 &[
-                  {:body,
-                   quote(
-                     do:
-                       unquote(apply_body_converter(body_encoded, content_type, :encoders, state))
-                   )}
+                  quote do
+                    assert {:ok, body_encoded} =
+                             unquote(
+                               apply_body_converter(body_encoded, content_type, :encoders, state)
+                             )
+                  end
                   | &1
                 ]
+              )
+              |> Map.update!(
+                :httpoison_response_fields,
+                &[{:body, Macro.var(:body_encoded, nil)} | &1]
               )
               |> Map.replace!(
                 :expected_result,
@@ -1126,14 +1132,11 @@ defmodule OpenAPIClient.Generator.Renderer do
                     test_parameters[:httpoison_request_arguments],
                     quote do
                       unquote_splicing(
-                        if(test_parameters[:httpoison_request_query_params_assigned],
-                          do: [quote(do: query_params = options[:params])],
-                          else: []
-                        )
+                        Enum.reverse(test_parameters[:httpoison_request_assertions])
                       )
 
                       unquote_splicing(
-                        Enum.reverse(test_parameters[:httpoison_request_assertions])
+                        Enum.reverse(test_parameters[:httpoison_response_assignmets])
                       )
 
                       {:ok,
@@ -1295,7 +1298,7 @@ defmodule OpenAPIClient.Generator.Renderer do
       state |> Utils.get_config(converted_key) |> List.keyfind!(content_type, 0)
 
     quote do
-      unquote(body) |> unquote(module).unquote(function)(unquote_splicing(args))
+      unquote(module).unquote(function)(unquote_splicing(List.insert_at(args, 0, body)))
     end
   end
 end
