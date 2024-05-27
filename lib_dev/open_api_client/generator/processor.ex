@@ -348,12 +348,12 @@ defmodule OpenAPIClient.Generator.Processor do
     {enum_value, {type, acc_new}}
   end
 
-  defp append_field_example(
-         %GeneratorField{old_name: name} = field,
-         %SchemaSpec{properties: properties, example: schema_example},
-         false,
-         state
-       ) do
+  def append_field_example(
+        %GeneratorField{old_name: name} = field,
+        %SchemaSpec{properties: properties, example: schema_example},
+        false,
+        state
+      ) do
     case Map.get(properties, name) do
       %SchemaSpec{
         type: "array",
@@ -388,17 +388,36 @@ defmodule OpenAPIClient.Generator.Processor do
     end
   end
 
-  defp append_field_example(%GeneratorField{old_name: name} = field, %{} = example, false, state) do
+  def append_field_example(
+        field,
+        %OpenAPI.Spec.Schema.Media{example: example, examples: examples},
+        false,
+        state
+      ) do
+    field
+    |> append_field_example(example, false, state)
+    |> then(fn field ->
+      Enum.reduce(examples, field, fn
+        {_key, %Example{value: example}}, field ->
+          append_field_example(field, example, false, state)
+
+        _, field ->
+          field
+      end)
+    end)
+  end
+
+  def append_field_example(%GeneratorField{old_name: name} = field, %{} = example, false, state) do
     append_field_example(field, Map.get(example, name), true, state)
   end
 
-  defp append_field_example(
-         %GeneratorField{field: %Field{name: name}} = field,
-         example,
-         false,
-         state
-       )
-       when is_list(example) do
+  def append_field_example(
+        %GeneratorField{field: %Field{name: name}} = field,
+        example,
+        false,
+        state
+      )
+      when is_list(example) do
     {field_new, valid?} =
       Enum.reduce(example, {field, true}, fn
         map, {field, acc} when is_map(map) ->
@@ -416,25 +435,25 @@ defmodule OpenAPIClient.Generator.Processor do
     field_new
   end
 
-  defp append_field_example(field, %SchemaSpec{example: example}, true, state) do
+  def append_field_example(field, %SchemaSpec{example: example}, true, state) do
     append_field_example(field, example, true, state)
   end
 
-  defp append_field_example(%GeneratorField{} = field, nil, _is_field_spec, _state) do
+  def append_field_example(%GeneratorField{} = field, nil, _is_field_spec, _state) do
     field
   end
 
-  defp append_field_example(
-         %GeneratorField{field: %Field{name: name}} = field,
-         example,
-         false,
-         _state
-       ) do
+  def append_field_example(
+        %GeneratorField{field: %Field{name: name}} = field,
+        example,
+        false,
+        _state
+      ) do
     Logger.warning("Unknown schema example `#{inspect(example)}` for field `#{name}`")
     field
   end
 
-  defp append_field_example(%GeneratorField{examples: examples} = field, example, true, _state) do
+  def append_field_example(%GeneratorField{examples: examples} = field, example, true, _state) do
     %GeneratorField{field | examples: [example | examples]}
   end
 

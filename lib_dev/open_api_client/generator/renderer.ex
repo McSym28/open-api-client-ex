@@ -10,6 +10,7 @@ defmodule OpenAPIClient.Generator.Renderer do
   alias OpenAPIClient.Generator.Field, as: GeneratorField
   alias OpenAPIClient.Generator.Utils
   alias OpenAPIClient.Client.TypedDecoder
+  alias OpenAPI.Spec.Path.Operation, as: OperationSpec
   import Mox
 
   @test_example_url "https://example.com"
@@ -39,7 +40,10 @@ defmodule OpenAPIClient.Generator.Renderer do
   end
 
   @impl true
-  def render(%OpenAPI.Renderer.State{schemas: schemas} = state, file) do
+  def render(
+        %OpenAPI.Renderer.State{schemas: schemas} = state,
+        %File{operations: operations} = file
+      ) do
     Enum.each(schemas, fn {schema_ref, _schema} ->
       [
         {_,
@@ -64,6 +68,37 @@ defmodule OpenAPIClient.Generator.Renderer do
           {schema_ref, %GeneratorSchema{generator_schema | schema_fields: schema_fields}}
         )
       end
+    end)
+
+    Enum.each(operations, fn %Operation{
+                               request_path: request_path,
+                               request_method: request_method,
+                               responses: responses,
+                               request_body: request_body
+                             } ->
+      [
+        {_,
+         %GeneratorOperation{
+           spec: %OperationSpec{
+             request_body: spec_request_body,
+             responses: spec_responses
+           }
+         }}
+      ] =
+        :ets.lookup(:operations, {request_path, request_method})
+
+      Enum.each(request_body, fn {content_type, schema_type} ->
+        %OpenAPI.Spec.Schema.Media{} = media = spec_request_body.content[content_type]
+        update_schema_examples(schema_type, media, state)
+      end)
+
+      Enum.each(responses, fn {status_code, schemas} ->
+        Enum.each(schemas, fn {content_type, schema_type} ->
+          %OpenAPI.Spec.Response{content: content} = spec_responses[status_code]
+          %OpenAPI.Spec.Schema.Media{} = media = content[content_type]
+          update_schema_examples(schema_type, media, state)
+        end)
+      end)
     end)
 
     OpenAPI.Renderer.Module.render(state, file)
@@ -254,8 +289,6 @@ defmodule OpenAPIClient.Generator.Renderer do
                      {_ref, %Schema{module_name: module_name, type_name: ^type} = schema} ->
                        if generate_module_name(module_name, state) == module do
                          schema
-                       else
-                         nil
                        end
 
                      _ ->
@@ -820,8 +853,6 @@ defmodule OpenAPIClient.Generator.Renderer do
           unquote(dynamic_params)
           |> Map.new()
         end
-      else
-        nil
       end
 
     case {length(static_params) > 0, not is_nil(dynamic_params)} do
@@ -1274,8 +1305,6 @@ defmodule OpenAPIClient.Generator.Renderer do
           |> Module.split()
           |> Enum.join(".")
           |> then(&"array of #{&1}")
-        else
-          nil
         end
 
       [:map] ->
@@ -1286,8 +1315,6 @@ defmodule OpenAPIClient.Generator.Renderer do
           module
           |> Module.split()
           |> Enum.join(".")
-        else
-          nil
         end
 
       :map ->
@@ -1304,6 +1331,37 @@ defmodule OpenAPIClient.Generator.Renderer do
 
     quote do
       unquote(module).unquote(function)(unquote_splicing(List.insert_at(args, 0, body)))
+    end
+  end
+
+  defp update_schema_examples(schema_type, media, _state) do
+    schema_type
+    |> case do
+      schema_ref when is_reference(schema_ref) -> {schema_ref, false}
+      {:array, schema_ref} when is_reference(schema_ref) -> {schema_ref, true}
+      _ -> nil
+    end
+    |> case do
+      {schema_ref, _is_array} ->
+        [{_, %GeneratorSchema{fields: generator_fields} = generator_schema}] =
+          :ets.lookup(:schemas, schema_ref)
+
+        generator_fields_new =
+          Enum.map(
+            generator_fields,
+            &OpenAPIClient.Generator.Processor.append_field_example(
+              &1,
+              media,
+              false,
+              %OpenAPI.Processor.State{}
+            )
+          )
+
+        generator_schema_new = %GeneratorSchema{generator_schema | fields: generator_fields_new}
+        :ets.insert(:schemas, {schema_ref, generator_schema_new})
+
+      _ ->
+        nil
     end
   end
 end
