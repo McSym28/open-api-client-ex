@@ -745,12 +745,17 @@ defmodule OpenAPIClient.Generator.Renderer do
               operation
             end
 
-          [
-            quote do
-              unquote(operation)
-              |> OpenAPIClient.Client.perform(unquote(Macro.var(:client_pipeline, nil)))
-            end
-          ]
+          if headers_value do
+            [quote(do: headers = unquote(headers_value))]
+          else
+            []
+          end ++
+            [
+              quote do
+                unquote(operation)
+                |> OpenAPIClient.Client.perform(unquote(Macro.var(:client_pipeline, nil)))
+              end
+            ]
 
         expression ->
           [expression]
@@ -1015,7 +1020,7 @@ defmodule OpenAPIClient.Generator.Renderer do
                       quote(
                         do:
                           assert(
-                            {_, unquote(param_example)} ==
+                            {_, unquote(param_example)} =
                               List.keyfind(headers, unquote(old_name), 0)
                           )
                       )
@@ -1042,7 +1047,7 @@ defmodule OpenAPIClient.Generator.Renderer do
                   quote(
                     do:
                       assert(
-                        {_, unquote(content_type)} ==
+                        {_, unquote(content_type)} =
                           List.keyfind(headers, "Content-Type", 0)
                       )
                   )
