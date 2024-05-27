@@ -1,4 +1,5 @@
 defmodule OpenAPIClient.Client.Operation do
+  @type url :: String.t() | URI.t()
   @type method :: :get | :put | :post | :delete | :options | :head | :patch | :trace
   @type query_params :: %{String.t() => String.t()}
   @type headers :: %{String.t() => String.t()}
@@ -14,8 +15,8 @@ defmodule OpenAPIClient.Client.Operation do
   @type t :: %__MODULE__{
           halted: boolean(),
           assigns: map(),
-          request_base_url: String.t() | URI.t(),
-          request_url: String.t() | URI.t(),
+          request_base_url: url(),
+          request_url: url(),
           request_method: method(),
           request_query_params: query_params(),
           request_headers: headers(),

@@ -30,7 +30,12 @@ defmodule OpenAPIClient.Client.Steps.RequestBodyTypedEncoder do
 
     type = get_type(operation)
 
-    case typed_encoder.encode(request_body, type) do
+    case typed_encoder.encode(
+           request_body,
+           type,
+           [type, {operation.request_url, operation.request_method}],
+           typed_encoder
+         ) do
       {:ok, encoded_body} ->
         %Operation{operation | request_body: encoded_body}
 

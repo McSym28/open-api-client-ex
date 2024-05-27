@@ -3,7 +3,13 @@ defmodule OpenAPIClient.Client.TypedDecoder do
   alias OpenAPIClient.Client.Error
 
   @type result :: {:ok, term()} | {:error, Error.t()}
-  @type path :: list(String.t() | nonempty_list(integer()))
+  @type path ::
+          list(
+            OpenAPIClient.Schema.type()
+            | OpenAPIClient.Schema.schema_type()
+            | nonempty_list(non_neg_integer())
+            | {OpenAPIClient.Client.Operation.url(), OpenAPIClient.Client.Operation.method()}
+          )
 
   @callback decode(value :: term(), type :: OpenAPIClient.Schema.type()) :: result()
   @callback decode(
@@ -21,7 +27,7 @@ defmodule OpenAPIClient.Client.TypedDecoder do
 
       @impl OpenAPIClient.Client.TypedDecoder
       def decode(value, type) do
-        decode(value, type, [], __MODULE__)
+        decode(value, type, [type], __MODULE__)
       end
     end
   end
@@ -84,7 +90,7 @@ defmodule OpenAPIClient.Client.TypedDecoder do
   """
   @impl __MODULE__
   def decode(value, type) do
-    decode(value, type, [], __MODULE__)
+    decode(value, type, [type], __MODULE__)
   end
 
   @impl __MODULE__
@@ -242,25 +248,16 @@ defmodule OpenAPIClient.Client.TypedDecoder do
          source: path
        )}
 
-  def decode(_value, {:union, types}, path, _caller_module) do
-    {:error,
-     Error.new(
-       message: "Error while decoding union type `#{inspect(types)}`",
-       reason: :unsupported_type,
-       source: path
-     )}
-  end
-
-  def decode(value, [_type], path, _) when not is_list(value),
+  def decode(_value, {:union, types}, path, _caller_module),
     do:
       {:error,
        Error.new(
-         message: "Error while decoding list",
-         reason: :invalid_list,
+         message: "Error while decoding union type `#{inspect(types)}`",
+         reason: :unsupported_type,
          source: path
        )}
 
-  def decode(value, [type], path, caller_module) do
+  def decode(value, [type], path, caller_module) when is_list(value) do
     value
     |> Enum.with_index()
     |> Enum.reduce_while({:ok, []}, fn {item_value, index}, {:ok, acc} ->
@@ -274,6 +271,15 @@ defmodule OpenAPIClient.Client.TypedDecoder do
       {:error, _} = error -> error
     end
   end
+
+  def decode(_value, [_type], path, _),
+    do:
+      {:error,
+       Error.new(
+         message: "Error while decoding list",
+         reason: :invalid_list,
+         source: path
+       )}
 
   def decode(value, {:enum, enum_options}, path, _) do
     enum_options
@@ -311,7 +317,12 @@ defmodule OpenAPIClient.Client.TypedDecoder do
       |> Enum.reduce_while({:ok, %{}}, fn {old_name, field_value}, {:ok, acc} ->
         case Map.fetch(fields, old_name) do
           {:ok, {new_name, field_type}} ->
-            case caller_module.decode(field_value, field_type, [old_name | path], caller_module) do
+            case caller_module.decode(
+                   field_value,
+                   field_type,
+                   [{old_name, field_type} | path],
+                   caller_module
+                 ) do
               {:ok, decoded_value} -> {:cont, {:ok, Map.put(acc, new_name, decoded_value)}}
               {:error, _} = error -> {:halt, error}
             end

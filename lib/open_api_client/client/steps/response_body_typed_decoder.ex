@@ -32,7 +32,12 @@ defmodule OpenAPIClient.Client.Steps.ResponseBodyTypedDecoder do
 
     case Operation.get_response_type(operation) do
       {:ok, {_, type}} when type != :null ->
-        case typed_decoder.decode(body, type) do
+        case typed_decoder.decode(
+               body,
+               type,
+               [type, {operation.request_url, operation.request_method}],
+               typed_decoder
+             ) do
           {:ok, decoded_body} ->
             %Operation{operation | response_body: decoded_body}
 

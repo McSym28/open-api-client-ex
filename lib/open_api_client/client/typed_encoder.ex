@@ -3,7 +3,13 @@ defmodule OpenAPIClient.Client.TypedEncoder do
   alias OpenAPIClient.Client.Error
 
   @type result :: {:ok, term()} | {:error, Error.t()}
-  @type path :: list(String.t() | nonempty_list(integer()))
+  @type path ::
+          list(
+            OpenAPIClient.Schema.type()
+            | OpenAPIClient.Schema.schema_type()
+            | nonempty_list(non_neg_integer())
+            | {OpenAPIClient.Client.Operation.url(), OpenAPIClient.Client.Operation.method()}
+          )
 
   @callback encode(value :: term(), type :: OpenAPIClient.Schema.type()) :: result()
   @callback encode(
@@ -20,7 +26,7 @@ defmodule OpenAPIClient.Client.TypedEncoder do
 
       @impl OpenAPIClient.Client.TypedEncoder
       def encode(value, type) do
-        encode(value, type, [], __MODULE__)
+        encode(value, type, [type], __MODULE__)
       end
     end
   end
@@ -29,7 +35,7 @@ defmodule OpenAPIClient.Client.TypedEncoder do
 
   @impl __MODULE__
   def encode(value, type) do
-    encode(value, type, [], __MODULE__)
+    encode(value, type, [type], __MODULE__)
   end
 
   @impl __MODULE__
@@ -94,12 +100,12 @@ defmodule OpenAPIClient.Client.TypedEncoder do
          source: path
        )}
 
-  def encode(value, [_type], path, _) when not is_list(value),
+  def encode(_value, {:union, types}, path, _caller_module),
     do:
       {:error,
        Error.new(
-         message: "Error while encoding list",
-         reason: :invalid_list,
+         message: "Error while encoding union type `#{inspect(types)}`",
+         reason: :unsupported_type,
          source: path
        )}
 
@@ -117,6 +123,15 @@ defmodule OpenAPIClient.Client.TypedEncoder do
       {:error, _} = error -> error
     end
   end
+
+  def encode(_value, [_type], path, _),
+    do:
+      {:error,
+       Error.new(
+         message: "Error while encoding list",
+         reason: :invalid_list,
+         source: path
+       )}
 
   def encode(value, {:enum, enum_options}, path, _) do
     enum_options
@@ -157,7 +172,12 @@ defmodule OpenAPIClient.Client.TypedEncoder do
       |> Enum.reduce_while({:ok, %{}}, fn {new_name, field_value}, {:ok, acc} ->
         case Map.fetch(fields, new_name) do
           {:ok, {old_name, field_type}} ->
-            case caller_module.encode(field_value, field_type, [new_name | path], caller_module) do
+            case caller_module.encode(
+                   field_value,
+                   field_type,
+                   [{old_name, field_type} | path],
+                   caller_module
+                 ) do
               {:ok, encoded_value} -> {:cont, {:ok, Map.put(acc, old_name, encoded_value)}}
               {:error, _} = error -> {:halt, error}
             end
