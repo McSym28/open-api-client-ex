@@ -23,7 +23,6 @@ defmodule OpenAPIClient.Client.Steps.ResponseBodyContentTypeDecoder do
         operation
         |> OpenAPIClient.Utils.get_config(:decoders, [])
         |> List.keyfind(content_type, 0)
-        |> IO.inspect()
         |> case do
           {_, {module, function, args}}
           when is_atom(module) and is_atom(function) and is_list(args) ->
