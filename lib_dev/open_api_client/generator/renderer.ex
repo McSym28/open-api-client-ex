@@ -11,6 +11,7 @@ defmodule OpenAPIClient.Generator.Renderer do
   alias OpenAPIClient.Generator.Utils
   alias OpenAPIClient.Client.TypedDecoder
   alias OpenAPI.Spec.Path.Operation, as: OperationSpec
+  require Logger
   import Mox
 
   @test_example_url "https://example.com"
@@ -1334,7 +1335,11 @@ defmodule OpenAPIClient.Generator.Renderer do
     end
   end
 
-  defp update_schema_examples(schema_type, media, _state) do
+  defp update_schema_examples(
+         schema_type,
+         %OpenAPI.Spec.Schema.Media{example: example, examples: examples},
+         %OpenAPI.Renderer.State{schemas: schemas} = _state
+       ) do
     schema_type
     |> case do
       schema_ref when is_reference(schema_ref) -> {schema_ref, false}
@@ -1342,22 +1347,42 @@ defmodule OpenAPIClient.Generator.Renderer do
       _ -> nil
     end
     |> case do
-      {schema_ref, _is_array} ->
-        [{_, %GeneratorSchema{fields: generator_fields} = generator_schema}] =
-          :ets.lookup(:schemas, schema_ref)
+      {schema_ref, is_array} ->
+        [{_, %GeneratorSchema{} = generator_schema}] = :ets.lookup(:schemas, schema_ref)
+        %Schema{} = schema = schemas[schema_ref]
 
-        generator_fields_new =
-          Enum.map(
-            generator_fields,
-            &OpenAPIClient.Generator.Processor.append_field_example(
-              &1,
-              media,
-              false,
-              %OpenAPI.Processor.State{}
-            )
+        examples =
+          examples
+          |> Enum.flat_map(fn
+            {_key, %OpenAPI.Spec.Schema.Example{value: nil}} -> []
+            {_key, %OpenAPI.Spec.Schema.Example{value: example}} -> [example]
+          end)
+          |> then(&[example | &1])
+
+        examples =
+          if is_array do
+            Enum.flat_map(examples, fn
+              example when is_list(example) ->
+                example
+
+              example ->
+                Logger.warning(
+                  "Invalid array example `#{inspect(example)}` for schema `{#{schema.module_name}, #{schema.type_name}}`"
+                )
+
+                []
+            end)
+          else
+            examples
+          end
+
+        generator_schema_new =
+          OpenAPIClient.Generator.Processor.process_schema_examples(
+            generator_schema,
+            examples,
+            %OpenAPI.Processor.State{schemas_by_ref: schemas}
           )
 
-        generator_schema_new = %GeneratorSchema{generator_schema | fields: generator_fields_new}
         :ets.insert(:schemas, {schema_ref, generator_schema_new})
 
       _ ->

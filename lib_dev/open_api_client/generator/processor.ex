@@ -6,7 +6,6 @@ defmodule OpenAPIClient.Generator.Processor do
   alias OpenAPI.Spec.Path.Parameter, as: ParamSpec
   alias OpenAPI.Spec.Schema, as: SchemaSpec
   alias OpenAPI.Spec.RequestBody
-  alias SchemaSpec.Example
   alias OpenAPIClient.Generator.Utils
   alias OpenAPIClient.Generator.Operation, as: GeneratorOperation
   alias OpenAPIClient.Generator.Param, as: GeneratorParam
@@ -199,38 +198,93 @@ defmodule OpenAPIClient.Generator.Processor do
 
   @impl true
   def schema_module_and_type(state, schema) do
-    process_schema(state, schema, nil)
+    process_schema(state, schema, [])
     OpenAPI.Processor.schema_module_and_type(state, schema)
+  end
+
+  defp accumulate_schema_examples(nil, acc, _state), do: acc
+
+  defp accumulate_schema_examples(
+         %SchemaSpec{properties: properties, example: example},
+         acc,
+         state
+       ) do
+    Enum.reduce(
+      properties,
+      accumulate_schema_examples(example, acc, state),
+      fn {name, property}, acc -> accumulate_schema_examples({name, property}, acc, state) end
+    )
+  end
+
+  defp accumulate_schema_examples(map, acc, _state) when is_map(map) do
+    Enum.reduce(
+      map,
+      acc,
+      fn
+        {_name, nil}, acc -> acc
+        {name, example}, acc -> Map.update(acc, name, [example], &[example | &1])
+      end
+    )
+  end
+
+  defp accumulate_schema_examples({_name, %SchemaSpec{example: nil}}, acc, _state), do: acc
+
+  defp accumulate_schema_examples(
+         {_name,
+          %SchemaSpec{
+            type: "array",
+            items: %SchemaSpec{type: "object"} = _items_spec
+          }},
+         acc,
+         _state
+       ) do
+    acc
+  end
+
+  defp accumulate_schema_examples({name, %SchemaSpec{example: example}}, acc, _state) do
+    Map.update(acc, name, [example], &[example | &1])
+  end
+
+  defp accumulate_schema_examples({_name, {:ref, _schema_path}}, acc, _state) do
+    acc
+  end
+
+  def process_schema_examples(%GeneratorSchema{fields: fields} = schema, examples, state) do
+    examples =
+      Enum.reduce(examples, %{}, fn example, acc ->
+        accumulate_schema_examples(example, acc, true)
+      end)
+
+    fields_new =
+      Enum.map(fields, fn %GeneratorField{old_name: name} = field ->
+        case Map.fetch(examples, name) do
+          {:ok, field_examples} -> append_field_examples(field, field_examples, state)
+          :error -> field
+        end
+      end)
+
+    %GeneratorSchema{schema | fields: fields_new}
   end
 
   defp process_schema(
          %OpenAPI.Processor.State{schema_specs_by_ref: schema_specs_by_ref} = state,
-         %Schema{ref: ref, fields: fields} = _schema,
-         example
+         %Schema{ref: ref, fields: fields},
+         examples
        ) do
     schemas_table = Utils.ensure_ets_table(:schemas)
 
     case :ets.lookup(schemas_table, ref) do
-      [{_, %GeneratorSchema{}}] when is_nil(example) ->
+      [{_, %GeneratorSchema{}}] when examples == [] ->
         []
 
-      [{_, %GeneratorSchema{fields: generator_fields} = generator_schema}] ->
-        generator_fields_new =
-          Enum.map(generator_fields, &append_field_example(&1, example, false, state))
-
-        generator_schema_new = %GeneratorSchema{generator_schema | fields: generator_fields_new}
+      [{_, %GeneratorSchema{} = generator_schema}] ->
+        generator_schema_new = process_schema_examples(generator_schema, examples, state)
         :ets.insert(schemas_table, {ref, generator_schema_new})
 
       [] ->
-        schema_spec = Map.get(schema_specs_by_ref, ref)
+        %SchemaSpec{} = schema_spec = Map.get(schema_specs_by_ref, ref)
 
-        generator_fields =
-          Enum.map(fields, fn field ->
-            field
-            |> process_field()
-            |> append_field_example(schema_spec, false, state)
-            |> append_field_example(example, false, state)
-          end)
+        generator_fields = Enum.map(fields, &process_field/1)
 
         extra_fields =
           state
@@ -246,10 +300,11 @@ defmodule OpenAPIClient.Generator.Processor do
 
         generator_fields = generator_fields ++ extra_fields
 
-        :ets.insert(
-          schemas_table,
-          {ref, %GeneratorSchema{fields: generator_fields}}
-        )
+        generator_schema =
+          %GeneratorSchema{fields: generator_fields}
+          |> process_schema_examples([schema_spec | examples], state)
+
+        :ets.insert(schemas_table, {ref, generator_schema})
     end
   end
 
@@ -348,166 +403,83 @@ defmodule OpenAPIClient.Generator.Processor do
     {enum_value, {type, acc_new}}
   end
 
-  def append_field_example(
-        %GeneratorField{old_name: name} = field,
-        %SchemaSpec{properties: properties, example: schema_example},
-        false,
-        state
-      ) do
-    case Map.get(properties, name) do
-      %SchemaSpec{
-        type: "array",
-        items:
-          %SchemaSpec{
-            type: "object",
-            "$oag_last_ref_file": last_ref_file,
-            "$oag_last_ref_path": last_ref_path
-          } = _items_spec
-      } ->
-        append_referenced_field_example(
-          field,
-          {last_ref_file, last_ref_path},
-          schema_example,
-          true,
-          state
-        )
+  defp append_field_examples(field, [], _state), do: field
 
-      %SchemaSpec{} = field_spec ->
-        field
-        |> append_field_example(field_spec, true, state)
-        |> append_field_example(schema_example, false, state)
-
-      {:ref, schema_path} ->
-        append_referenced_field_example(
-          field,
-          schema_path,
-          schema_example,
-          false,
-          state
-        )
-    end
-  end
-
-  def append_field_example(
-        field,
-        %OpenAPI.Spec.Schema.Media{example: example, examples: examples},
-        false,
-        state
-      ) do
-    field
-    |> append_field_example(example, false, state)
-    |> then(fn field ->
-      Enum.reduce(examples, field, fn
-        {_key, %Example{value: example}}, field ->
-          append_field_example(field, example, false, state)
-
-        _, field ->
-          field
-      end)
-    end)
-  end
-
-  def append_field_example(%GeneratorField{old_name: name} = field, %{} = example, false, state) do
-    append_field_example(field, Map.get(example, name), true, state)
-  end
-
-  def append_field_example(
-        %GeneratorField{field: %Field{name: name}} = field,
-        example,
-        false,
-        state
-      )
-      when is_list(example) do
-    {field_new, valid?} =
-      Enum.reduce(example, {field, true}, fn
-        map, {field, acc} when is_map(map) ->
-          field_new = append_field_example(field, map, false, state)
-          {field_new, acc}
-
-        _, {field, _acc} ->
-          {field, false}
-      end)
-
-    if not valid? do
-      Logger.warning("Invalid schema example `#{inspect(example)}` for field `#{name}`")
-    end
-
-    field_new
-  end
-
-  def append_field_example(field, %SchemaSpec{example: example}, true, state) do
-    append_field_example(field, example, true, state)
-  end
-
-  def append_field_example(%GeneratorField{} = field, nil, _is_field_spec, _state) do
-    field
-  end
-
-  def append_field_example(
-        %GeneratorField{field: %Field{name: name}} = field,
-        example,
-        false,
-        _state
-      ) do
-    Logger.warning("Unknown schema example `#{inspect(example)}` for field `#{name}`")
-    field
-  end
-
-  def append_field_example(%GeneratorField{examples: examples} = field, example, true, _state) do
-    %GeneratorField{field | examples: [example | examples]}
-  end
-
-  defp append_referenced_field_example(field, _schema_path, nil, _is_array, _state), do: field
-
-  defp append_referenced_field_example(
-         %GeneratorField{old_name: name, field: %Field{name: field_name}} = field,
-         schema_path,
-         schema_example,
-         is_array,
-         %OpenAPI.Processor.State{
-           schema_refs_by_path: schema_refs_by_path,
-           schemas_by_ref: schemas_by_ref
-         } = state
+  defp append_field_examples(
+         %GeneratorField{old_name: name, field: %Field{type: {:array, schema_ref}}} = field,
+         examples,
+         state
        )
-       when is_map(schema_example) or is_list(schema_example) do
-    with schema_ref when is_reference(schema_ref) <-
-           Map.get(schema_refs_by_path, schema_path),
-         %Schema{} = schema_by_ref <- Map.get(schemas_by_ref, schema_ref) do
-      field_example =
-        cond do
-          is_map(schema_example) ->
-            Map.get(schema_example, name)
+       when is_reference(schema_ref) do
+    examples =
+      Enum.flat_map(examples, fn
+        list when is_list(list) ->
+          list
 
-          is_list(schema_example) ->
-            {field_example, valid?} =
-              Enum.flat_map_reduce(schema_example, true, fn
-                map, acc when is_map(map) -> {Map.get(schema_example, name), acc}
-                _, _acc -> {[], false}
-              end)
+        example ->
+          Logger.warning(
+            "Unknown example `#{inspect(example)}` for referenced array field `#{name}`"
+          )
+      end)
 
-            if not valid? do
-              Logger.warning(
-                "Invalid schema example `#{inspect(schema_example)}` for referenced #{if is_array, do: "array "}field `#{field_name}`"
-              )
-            end
+    append_referenced_field_examples(
+      field,
+      schema_ref,
+      examples,
+      true,
+      state
+    )
+  end
 
-            field_example
-        end
+  defp append_field_examples(
+         %GeneratorField{field: %Field{type: schema_ref}} = field,
+         examples,
+         state
+       )
+       when is_reference(schema_ref) do
+    append_referenced_field_examples(
+      field,
+      schema_ref,
+      examples,
+      false,
+      state
+    )
+  end
 
-      process_schema(state, schema_by_ref, field_example)
+  defp append_field_examples(
+         %GeneratorField{examples: examples} = field,
+         [example | rest],
+         state
+       ) do
+    %GeneratorField{field | examples: [example | examples]}
+    |> append_field_examples(rest, state)
+  end
+
+  defp append_referenced_field_examples(field, _schema_path, [], _is_array, _state), do: field
+
+  defp append_referenced_field_examples(
+         %GeneratorField{old_name: name} = field,
+         schema_ref,
+         examples,
+         is_array,
+         %OpenAPI.Processor.State{schemas_by_ref: schemas_by_ref} = state
+       )
+       when is_reference(schema_ref) do
+    with %Schema{} = schema_by_ref <- Map.get(schemas_by_ref, schema_ref) do
+      process_schema(state, schema_by_ref, examples)
     else
       _ ->
         Logger.warning(
-          "Unknown schema reference path `#{inspect(schema_path)}` for #{if is_array, do: "array "}field `#{field_name}`"
+          "Unknown schema reference `#{inspect(schema_ref)}` for referenced #{if is_array, do: "array "}field `#{name}`"
         )
     end
 
     field
   end
 
-  defp append_referenced_field_example(
+  defp append_referenced_field_examples(
          %GeneratorField{field: %Field{name: name}} = field,
-         _schema_path,
+         _schema_ref_or_path,
          schema_example,
          is_array,
          _state
@@ -524,8 +496,11 @@ defmodule OpenAPIClient.Generator.Processor do
     |> append_param_example(example, state)
     |> then(fn param ->
       Enum.reduce(examples, param, fn
-        {_key, %Example{value: example}}, param -> append_param_example(param, example, state)
-        _, param -> param
+        {_key, %SchemaSpec.Example{value: example}}, param ->
+          append_param_example(param, example, state)
+
+        _, param ->
+          param
       end)
     end)
   end
