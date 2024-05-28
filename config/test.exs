@@ -15,7 +15,7 @@ config :oapi_generator,
 
 config :open_api_client_ex,
   "$base": [
-    client_pipeline: OpenAPIClient.TestClientPipeline,
+    client_pipeline: OpenAPIClient.BasicHTTPoisontPipeline,
     httpoison: OpenAPIClient.HTTPoisonMock,
     decoders: [
       {"application/json", {Jason, :decode, []}}
