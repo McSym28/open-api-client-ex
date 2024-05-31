@@ -215,20 +215,10 @@ defmodule OpenAPIClient.Generator.Renderer do
     state
     |> OpenAPI.Renderer.render_schema_field_function(schemas)
     |> Enum.flat_map(fn
-      {:@, _attribute_metadata, [{:spec, spec_metadata, [{:"::", [], [{:__fields__, _, _}, _]}]}]} ->
+      {:@, _, [{:spec, _, [{:"::", [], [{:__fields__, _, _}, _]}]}]} ->
         [
           {:@, [], [{:impl, [], [true]}]},
-          {:@, [],
-           [
-             {:spec, spec_metadata,
-              [
-                {:"::", [],
-                 [
-                   {:__fields__, [], [quote(do: types())]},
-                   quote(do: keyword(OpenAPIClient.Schema.schema_type()))
-                 ]}
-              ]}
-           ]}
+          quote(do: @spec(__fields__(types()) :: keyword(OpenAPIClient.Schema.schema_type())))
         ]
 
       {:def, def_metadata,
@@ -251,7 +241,14 @@ defmodule OpenAPIClient.Generator.Renderer do
            ]}
         ]
 
+      {:def, _, [{:__fields__, _, [{:\\, _, [_, :t]}]}]} = fields_default_declaration ->
+        [
+          quote(do: @spec(__fields__() :: keyword(OpenAPIClient.Schema.schema_type()))),
+          fields_default_declaration
+        ]
+
       expression ->
+        # IO.inspect(expression)
         [expression]
     end)
   end
