@@ -22,11 +22,11 @@ if Code.ensure_loaded?(HTTPoison) do
             | {:options, keyword()}
     @type options :: [option()]
 
-    @impl true
+    @impl Pluggable
     @spec init(options()) :: options()
     def init(opts), do: opts
 
-    @impl true
+    @impl Pluggable
     @spec call(Operation.t(), options()) :: Operation.t()
     def call(
           %Operation{

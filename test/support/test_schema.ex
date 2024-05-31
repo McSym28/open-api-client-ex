@@ -19,7 +19,7 @@ defmodule OpenAPIClient.TestSchema do
   defstruct [:boolean, :date_time, :enum, :integer, :number, :string]
 
   @doc false
-  @impl true
+  @impl OpenAPIClient.Schema
   @spec __fields__(types()) :: keyword(OpenAPIClient.Schema.schema_type())
   @spec __fields__() :: keyword(OpenAPIClient.Schema.schema_type())
   def __fields__(type \\ :t)

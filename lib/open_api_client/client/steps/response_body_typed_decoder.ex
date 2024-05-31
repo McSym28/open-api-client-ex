@@ -16,11 +16,11 @@ defmodule OpenAPIClient.Client.Steps.ResponseBodyTypedDecoder do
   @type option :: [{:typed_decoder, module()}]
   @type options :: [option()]
 
-  @impl true
+  @impl Pluggable
   @spec init(options()) :: options()
   def init(opts), do: opts
 
-  @impl true
+  @impl Pluggable
   @spec call(Operation.t(), options()) :: Operation.t()
   def call(%Operation{response_body: nil} = operation, _opts), do: operation
 

@@ -217,7 +217,7 @@ defmodule OpenAPIClient.Generator.Renderer do
     |> Enum.flat_map(fn
       {:@, _, [{:spec, _, [{:"::", [], [{:__fields__, _, _}, _]}]}]} ->
         [
-          {:@, [], [{:impl, [], [true]}]},
+          quote(do: @impl(OpenAPIClient.Schema)),
           quote(do: @spec(__fields__(types()) :: keyword(OpenAPIClient.Schema.schema_type())))
         ]
 
