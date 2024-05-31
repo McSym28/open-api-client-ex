@@ -13,7 +13,7 @@ defmodule OpenAPIClient.Schema do
           | {:enum, [integer() | number() | boolean() | {atom(), String.t()} | :not_strict]}
           | {module(), atom()}
   @type type :: non_array_type() | [non_array_type()]
-  @type schema_type :: {String.t(), schema_type()}
+  @type schema_type :: {String.t(), type()}
 
   @callback __fields__(atom()) :: keyword(schema_type())
 end
