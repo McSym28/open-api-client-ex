@@ -201,7 +201,7 @@ defmodule OpenAPIClient.Client.TypedEncoder do
        )}
 
   def encode(value, _type, path, caller_module) when is_struct(value) do
-    caller_module.encode(value, :unknown, path, caller_module)
+    caller_module.encode(Map.from_struct(value), :unknown, path, caller_module)
   end
 
   def encode(value, _, _, _) do
