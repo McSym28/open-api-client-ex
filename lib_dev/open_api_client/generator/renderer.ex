@@ -1027,7 +1027,11 @@ defmodule OpenAPIClient.Generator.Renderer do
                     :httpoison_request_assertions,
                     &[
                       quote(
-                        do: assert(unquote(param_example) == options[:params][unquote(old_name)])
+                        do:
+                          assert(
+                            {_, unquote(param_example)} =
+                              List.keyfind(options[:params], unquote(old_name), 0)
+                          )
                       )
                       | &1
                     ]
