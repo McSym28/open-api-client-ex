@@ -1050,7 +1050,7 @@ defmodule OpenAPIClient.Generator.Renderer do
                         do:
                           assert(
                             {_, unquote(param_example)} =
-                              List.keyfind(headers, unquote(old_name), 0)
+                              List.keyfind(headers, unquote(String.downcase(old_name)), 0)
                           )
                       )
                       | &1
@@ -1077,7 +1077,7 @@ defmodule OpenAPIClient.Generator.Renderer do
                     do:
                       assert(
                         {_, unquote(content_type)} =
-                          List.keyfind(headers, "Content-Type", 0)
+                          List.keyfind(headers, "content-type", 0)
                       )
                   )
                   | &1

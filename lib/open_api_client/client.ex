@@ -7,11 +7,14 @@ defmodule OpenAPIClient.Client do
 
   @spec perform(Operation.t(), pipeline() | nil) ::
           :ok | {:ok, term()} | :error | {:error, term()}
-  def perform(operation, pipeline) do
+  def perform(%Operation{request_headers: request_headers} = operation, pipeline) do
     normalized_pipeline =
       normalize_pipeline(pipeline || OpenAPIClient.Utils.get_config(operation, :client_pipeline))
 
-    operation
+    request_headers_new =
+      Map.new(request_headers, fn {key, value} -> {String.downcase(key), value} end)
+
+    %{operation | request_headers: request_headers_new}
     |> put_request_content_type_header()
     |> Pluggable.run(normalized_pipeline)
     |> case do
@@ -105,7 +108,7 @@ defmodule OpenAPIClient.Client do
       end
 
     request_types
-    |> Enum.reduce({nil, nil}, fn {content_type, schema}, acc ->
+    |> Enum.reduce_while({nil, nil}, fn {content_type, schema}, acc ->
       has_encoder = List.keymember?(encoders, content_type, 0)
 
       is_schema_struct =
