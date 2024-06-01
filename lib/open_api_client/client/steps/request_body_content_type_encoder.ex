@@ -58,7 +58,7 @@ defmodule OpenAPIClient.Client.Steps.RequestBodyContentTypeEncoder do
             )
         end
 
-      _ ->
+      :error ->
         operation
     end
   end

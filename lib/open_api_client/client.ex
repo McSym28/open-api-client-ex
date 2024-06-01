@@ -84,11 +84,59 @@ defmodule OpenAPIClient.Client do
     fn operation -> apply(module, function, [operation | args]) end
   end
 
-  defp put_request_content_type_header(
-         %Operation{request_types: [{content_type, _} | _]} = operation
-       ) do
-    Operation.put_request_header(operation, "Content-Type", content_type)
+  defp put_request_content_type_header(%Operation{request_body: nil} = operation), do: operation
+
+  defp put_request_content_type_header(operation) do
+    case Operation.get_request_header(operation, "Content-Type") do
+      {:ok, _content_type} -> operation
+      :error -> put_most_suitable_request_content_type_header(operation)
+    end
   end
 
-  defp put_request_content_type_header(operation), do: operation
+  defp put_most_suitable_request_content_type_header(
+         %Operation{request_body: request_body, request_types: request_types} = operation
+       ) do
+    encoders = Utils.get_config(operation, :encoders, [])
+
+    request_body_struct =
+      case request_body do
+        %struct{} -> struct
+        _ -> nil
+      end
+
+    request_types
+    |> Enum.reduce({nil, nil}, fn {content_type, schema}, acc ->
+      has_encoder = List.keymember?(encoders, content_type, 0)
+
+      is_schema_struct =
+        case schema do
+          {^request_body_struct, schema_type} when is_atom(schema_type) -> true
+          _ -> false
+        end
+
+      case {is_schema_struct, has_encoder, acc} do
+        {true, true, _} ->
+          {:halt, {:exact, content_type}}
+
+        {true, false, {tag, _}} when tag in [:first, :with_encoder] ->
+          {:cont, {:schema_struct, content_type}}
+
+        {false, true, {tag, _}} when tag in [:first] ->
+          {:cont, {:with_encoder, content_type}}
+
+        {false, false, {nil, _}} ->
+          {:cont, {:first, content_type}}
+
+        {_, _, acc} ->
+          {:cont, acc}
+      end
+    end)
+    |> case do
+      {nil, _} ->
+        operation
+
+      {_tag, content_type} ->
+        Operation.put_request_header(operation, "Content-Type", content_type)
+    end
+  end
 end

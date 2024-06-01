@@ -915,7 +915,7 @@ defmodule OpenAPIClient.Generator.Renderer do
        ) do
     module_name = generate_module_name(module_name, state)
 
-    {request_content_type, request_schema} = select_example_schema(request_body)
+    {request_content_type, request_schema} = select_example_schema(request_body, :decoders, state)
     {request_encoded, request_decoded} = generate_schema_example(request_schema, state)
 
     request_schema_test_message =
@@ -953,7 +953,7 @@ defmodule OpenAPIClient.Generator.Renderer do
     )
     |> Enum.sort_by(fn {status_code, _} -> status_code end)
     |> Enum.map(fn {status_code, schemas} ->
-      {response_content_type, response_schema} = select_example_schema(schemas)
+      {response_content_type, response_schema} = select_example_schema(schemas, :encoders, state)
       {response_encoded, response_decoded} = generate_schema_example(response_schema, state)
 
       response_schema_test_message =
@@ -1245,12 +1245,23 @@ defmodule OpenAPIClient.Generator.Renderer do
 
   defp example(%GeneratorParam{param: %Param{value_type: type}}, state), do: example(type, state)
 
-  defp select_example_schema([]), do: {nil, :null}
+  defp select_example_schema([], _converter_key, _state), do: {nil, :null}
 
-  defp select_example_schema(schemas) when is_map(schemas),
-    do: schemas |> Map.to_list() |> select_example_schema()
+  defp select_example_schema(schemas, converter_key, state) when is_map(schemas),
+    do: schemas |> Map.to_list() |> select_example_schema(converter_key, state)
 
-  defp select_example_schema([body | _]), do: body
+  defp select_example_schema(schemas, converter_key, state) do
+    converters = Utils.get_config(state, converter_key, [])
+
+    Enum.reduce_while(schemas, {nil, :null}, fn {content_type, schema},
+                                                {current_content_type, _} = acc ->
+      case List.keyfind(converters, content_type, 0) do
+        {_content_type, _mfa} -> {:halt, {content_type, schema}}
+        nil when is_nil(current_content_type) -> {:cont, {content_type, schema}}
+        _ -> {:cont, acc}
+      end
+    end)
+  end
 
   defp generate_schema_example(:null, _state), do: {nil, nil}
 
@@ -1323,9 +1334,9 @@ defmodule OpenAPIClient.Generator.Renderer do
     end
   end
 
-  defp apply_body_converter(body, content_type, converted_key, state) do
+  defp apply_body_converter(body, content_type, converter_key, state) do
     {_, {module, function, args}} =
-      state |> Utils.get_config(converted_key) |> List.keyfind!(content_type, 0)
+      state |> Utils.get_config(converter_key) |> List.keyfind!(content_type, 0)
 
     quote do
       unquote(module).unquote(function)(unquote_splicing(List.insert_at(args, 0, body)))
