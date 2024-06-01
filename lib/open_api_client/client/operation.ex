@@ -119,7 +119,7 @@ defmodule OpenAPIClient.Client.Operation do
           {:cont, {:default, type}}
 
         _, current ->
-          current
+          {:cont, current}
       end
     )
     |> elem(1)
