@@ -248,7 +248,6 @@ defmodule OpenAPIClient.Generator.Renderer do
         ]
 
       expression ->
-        # IO.inspect(expression)
         [expression]
     end)
   end
@@ -261,80 +260,92 @@ defmodule OpenAPIClient.Generator.Renderer do
         } = state,
         %File{module: module, operations: operations} = file
       ) do
-    schema_fields_agent =
-      if length(operations) > 0 do
-        typed_decoder = Utils.get_config(state, :typed_decoder, TypedDecoder)
+    if length(operations) > 0 do
+      app_data = Process.get(:open_api_client_ex, [])
 
-        {:ok, schema_fields_agent} = ExampleSchemaFieldsAgent.start_link()
+      schema_fields_agent =
+        app_data
+        |> Map.get(:schema_fields_agent)
+        |> case do
+          pid when is_pid(pid) ->
+            pid
 
-        Mox.defmock(ExampleSchema, for: OpenAPIClient.Schema)
-        Mox.defmock(ExampleTypedDecoder, for: TypedDecoder)
+          nil ->
+            {:ok, pid} = ExampleSchemaFieldsAgent.start_link()
 
-        stub(ExampleSchema, :__fields__, fn _type ->
-          ExampleSchemaFieldsAgent.get(schema_fields_agent)
-        end)
+            Mox.defmock(ExampleSchema, for: OpenAPIClient.Schema)
+            Mox.defmock(ExampleTypedDecoder, for: TypedDecoder)
 
-        stub(ExampleTypedDecoder, :decode, fn value, type ->
-          apply(ExampleTypedDecoder, :decode, [value, type, [], ExampleTypedDecoder])
-        end)
+            stub(ExampleSchema, :__fields__, fn _type ->
+              ExampleSchemaFieldsAgent.get(pid)
+            end)
 
-        stub(ExampleTypedDecoder, :decode, fn
-          value, {module, type}, path, _caller_module
-          when is_atom(module) and is_atom(type) and is_map(value) ->
-            with :alias <- Macro.classify_atom(module),
-                 %Schema{ref: schema_ref, output_format: output_format} <-
-                   Enum.find_value(schemas, fn
-                     {_ref, %Schema{module_name: module_name, type_name: ^type} = schema} ->
-                       if generate_module_name(module_name, state) == module do
-                         schema
-                       end
+            Process.put(:open_api_client_ex, Map.put(app_data, :schema_fields_agent, pid))
 
-                     _ ->
-                       nil
-                   end) do
-              ExampleSchemaFieldsAgent.update(schema_fields_agent, schema_ref)
+            pid
+        end
 
-              case typed_decoder.decode(value, {ExampleSchema, type}, path, ExampleTypedDecoder) do
-                {:ok, decoded_value} when output_format == :struct ->
-                  decoded_value =
-                    quote do
-                      %unquote(module){
-                        unquote_splicing(
-                          decoded_value
-                          |> Map.to_list()
-                          |> Enum.sort_by(fn {name, _value} -> name end)
-                        )
-                      }
-                    end
+      typed_decoder = Utils.get_config(state, :typed_decoder, TypedDecoder)
 
-                  {:ok, decoded_value}
+      stub(ExampleTypedDecoder, :decode, fn value, type ->
+        apply(ExampleTypedDecoder, :decode, [value, type, [], ExampleTypedDecoder])
+      end)
 
-                {:ok, decoded_value} ->
+      stub(ExampleTypedDecoder, :decode, fn
+        value, {module, type}, path, _caller_module
+        when is_atom(module) and is_atom(type) and is_map(value) ->
+          with :alias <- Macro.classify_atom(module),
+               %Schema{ref: schema_ref, output_format: output_format} <-
+                 Enum.find_value(schemas, fn
+                   {_ref, %Schema{module_name: module_name, type_name: ^type} = schema} ->
+                     if generate_module_name(module_name, state) == module do
+                       schema
+                     end
+
+                   _ ->
+                     nil
+                 end) do
+            ExampleSchemaFieldsAgent.update(schema_fields_agent, schema_ref)
+
+            case typed_decoder.decode(value, {ExampleSchema, type}, path, ExampleTypedDecoder) do
+              {:ok, decoded_value} when output_format == :struct ->
+                decoded_value =
                   quote do
-                    {:ok,
-                     %{
-                       unquote_splicing(
-                         decoded_value
-                         |> Map.to_list()
-                         |> Enum.sort_by(fn {name, _value} -> name end)
-                       )
-                     }}
+                    %unquote(module){
+                      unquote_splicing(
+                        decoded_value
+                        |> Map.to_list()
+                        |> Enum.sort_by(fn {name, _value} -> name end)
+                      )
+                    }
                   end
 
-                {:error, _} = error ->
-                  error
-              end
-            else
-              _ ->
-                typed_decoder.decode(value, {module, type}, path, ExampleTypedDecoder)
+                {:ok, decoded_value}
+
+              {:ok, decoded_value} ->
+                quote do
+                  {:ok,
+                   %{
+                     unquote_splicing(
+                       decoded_value
+                       |> Map.to_list()
+                       |> Enum.sort_by(fn {name, _value} -> name end)
+                     )
+                   }}
+                end
+
+              {:error, _} = error ->
+                error
             end
+          else
+            _ ->
+              typed_decoder.decode(value, {module, type}, path, ExampleTypedDecoder)
+          end
 
-          value, type, path, _caller_module ->
-            typed_decoder.decode(value, type, path, ExampleTypedDecoder)
-        end)
-
-        schema_fields_agent
-      end
+        value, type, path, _caller_module ->
+          typed_decoder.decode(value, type, path, ExampleTypedDecoder)
+      end)
+    end
 
     {operations_new, operation_tests} =
       Enum.map_reduce(operations, [], fn %Operation{
@@ -389,10 +400,6 @@ defmodule OpenAPIClient.Generator.Renderer do
 
         {operation_new, acc_new}
       end)
-
-    if schema_fields_agent do
-      Agent.stop(schema_fields_agent)
-    end
 
     if length(operation_tests) != 0 do
       test_module =
