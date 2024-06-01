@@ -408,11 +408,7 @@ defmodule OpenAPIClient.Generator.Renderer do
             use ExUnit.Case, async: true
             unquote(quote(do: import(Mox)) |> Util.put_newlines())
 
-            @httpoison OpenAPIClient.HTTPoisonMock
-            setup do
-              Mox.defmock(@httpoison, for: HTTPoison.Base)
-              :ok
-            end
+            unquote(quote(do: @httpoison(OpenAPIClient.HTTPoisonMock)) |> Util.put_newlines())
 
             setup :verify_on_exit!
 

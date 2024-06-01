@@ -3,10 +3,6 @@ defmodule OpenAPIClient.OperationsTest do
   import Mox
 
   @httpoison OpenAPIClient.HTTPoisonMock
-  setup do
-    Mox.defmock(@httpoison, for: HTTPoison.Base)
-    :ok
-  end
 
   setup :verify_on_exit!
 
