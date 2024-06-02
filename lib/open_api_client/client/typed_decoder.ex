@@ -5,8 +5,7 @@ defmodule OpenAPIClient.Client.TypedDecoder do
   @type result :: {:ok, term()} | {:error, Error.t()}
   @type path ::
           list(
-            OpenAPIClient.Schema.type()
-            | OpenAPIClient.Schema.schema_type()
+            String.t()
             | nonempty_list(non_neg_integer())
             | {OpenAPIClient.Client.Operation.url(), OpenAPIClient.Client.Operation.method()}
           )
@@ -320,7 +319,7 @@ defmodule OpenAPIClient.Client.TypedDecoder do
             case caller_module.decode(
                    field_value,
                    field_type,
-                   [{old_name, field_type} | path],
+                   [old_name | path],
                    caller_module
                  ) do
               {:ok, decoded_value} -> {:cont, {:ok, Map.put(acc, new_name, decoded_value)}}

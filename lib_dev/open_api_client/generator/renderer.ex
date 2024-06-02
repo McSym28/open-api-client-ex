@@ -11,6 +11,7 @@ defmodule OpenAPIClient.Generator.Renderer do
   alias OpenAPIClient.Generator.Utils
   alias OpenAPIClient.Client.TypedDecoder
   alias OpenAPI.Spec.Path.Operation, as: OperationSpec
+  alias OpenAPIClient.Generator.ExampleGenerator
   require Logger
   import Mox
 
@@ -918,8 +919,15 @@ defmodule OpenAPIClient.Generator.Renderer do
        ) do
     module_name = generate_module_name(module_name, state)
 
+    example_generator = Utils.get_config(state, :example_generator, ExampleGenerator)
+
     {request_content_type, request_schema} = select_example_schema(request_body, :decoders, state)
-    {request_encoded, request_decoded} = generate_schema_example(request_schema, state)
+
+    {request_encoded, request_decoded} =
+      generate_schema_example(request_schema, state, example_generator, [
+        {:request_body, request_content_type},
+        {request_path, request_method}
+      ])
 
     request_schema_test_message =
       if request_schema_test_message = test_message_schema(request_schema, state) do
@@ -957,7 +965,12 @@ defmodule OpenAPIClient.Generator.Renderer do
     |> Enum.sort_by(fn {status_code, _} -> status_code end)
     |> Enum.map(fn {status_code, schemas} ->
       {response_content_type, response_schema} = select_example_schema(schemas, :encoders, state)
-      {response_encoded, response_decoded} = generate_schema_example(response_schema, state)
+
+      {response_encoded, response_decoded} =
+        generate_schema_example(response_schema, state, example_generator, [
+          {:response_body, status_code, response_content_type},
+          {request_path, request_method}
+        ])
 
       response_schema_test_message =
         if response_schema_test_message = test_message_schema(response_schema, state) do
@@ -1005,7 +1018,13 @@ defmodule OpenAPIClient.Generator.Renderer do
                static: static
              } = param},
             acc ->
-              param_example = example(param, state)
+              param_example =
+                example_generator.generate(
+                  param,
+                  state,
+                  [{:parameters, old_name}, {request_path, request_method}],
+                  example_generator
+                )
 
               acc_new =
                 if static do
@@ -1205,53 +1224,6 @@ defmodule OpenAPIClient.Generator.Renderer do
     end)
   end
 
-  defp example(:null, _state), do: nil
-  defp example(:boolean, _state), do: true
-  defp example(:integer, _state), do: 1
-  defp example(:number, _state), do: 1.0
-  defp example({:string, :date}, _state), do: "2024-01-02"
-  defp example({:string, :date_time}, _state), do: "2024-01-02T01:23:45Z"
-  defp example({:string, :time}, _state), do: "01:23:45"
-  defp example({:string, :uri}, _state), do: "http://example.com"
-  defp example({:string, _}, _state), do: "string"
-  defp example({:array, type}, state), do: [example(type, state)]
-  defp example({:const, value}, _state), do: value
-  defp example({:enum, [{_atom, value} | _]}, _state), do: value
-  defp example({:enum, [value | _]}, _state), do: value
-  defp example({:union, [type | _]}, state), do: example(type, state)
-  defp example(type, _state) when type in [:any, :map], do: %{"a" => "b"}
-  defp example(%GeneratorField{examples: [value | _]}, _state), do: value
-
-  defp example(
-         %GeneratorField{field: %Field{type: {:array, {:enum, _}}}, enum_options: enum_options},
-         state
-       ),
-       do: example({:array, {:enum, enum_options}}, state)
-
-  defp example(
-         %GeneratorField{field: %Field{type: {:enum, _}}, enum_options: enum_options},
-         state
-       ),
-       do: example({:enum, enum_options}, state)
-
-  defp example(%GeneratorField{field: %Field{type: type}}, state), do: example(type, state)
-
-  defp example(%GeneratorSchema{fields: all_fields}, state) do
-    all_fields
-    |> Enum.flat_map(fn
-      %GeneratorField{field: nil} -> []
-      %GeneratorField{old_name: name} = field -> [{name, example(field, state)}]
-    end)
-    |> Map.new()
-  end
-
-  defp example(schema_ref, state) when is_reference(schema_ref) do
-    [{_, schema}] = :ets.lookup(:schemas, schema_ref)
-    example(schema, state)
-  end
-
-  defp example(%GeneratorParam{param: %Param{value_type: type}}, state), do: example(type, state)
-
   defp select_example_schema([], _converter_key, _state), do: {nil, :null}
 
   defp select_example_schema(schemas, converter_key, state) when is_map(schemas),
@@ -1270,16 +1242,29 @@ defmodule OpenAPIClient.Generator.Renderer do
     end)
   end
 
-  defp generate_schema_example(:null, _state), do: {nil, nil}
+  defp generate_schema_example(:null, _state, _example_generator, _example_generator_path),
+    do: {nil, nil}
 
-  defp generate_schema_example(schema_ref, %OpenAPI.Renderer.State{schemas: schemas} = state)
+  defp generate_schema_example(
+         schema_ref,
+         %OpenAPI.Renderer.State{schemas: schemas} = state,
+         example_generator,
+         example_generator_path
+       )
        when is_reference(schema_ref) do
     [{_, generator_schema}] = :ets.lookup(:schemas, schema_ref)
 
     %Schema{module_name: module, type_name: type, output_format: _output_format} =
       Map.fetch!(schemas, schema_ref)
 
-    example_encoded = example(generator_schema, state)
+    example_encoded =
+      example_generator.generate(
+        generator_schema,
+        state,
+        example_generator_path,
+        example_generator
+      )
+
     module = generate_module_name(module, state)
 
     {:ok, example_decoded} =
@@ -1289,8 +1274,10 @@ defmodule OpenAPIClient.Generator.Renderer do
     {example_encoded, example_decoded}
   end
 
-  defp generate_schema_example(type, state) do
-    example_encoded = example(type, state)
+  defp generate_schema_example(type, state, example_generator, example_generator_path) do
+    example_encoded =
+      example_generator.generate(type, state, example_generator_path, example_generator)
+
     {:ok, example_decoded} = apply(ExampleTypedDecoder, :decode, [example_encoded, type])
     example_encoded = sort_encoded_example(example_encoded)
     {example_encoded, example_decoded}

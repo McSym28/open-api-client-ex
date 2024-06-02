@@ -3,9 +3,10 @@ defmodule OpenAPIClient.Client.Operation do
   @type method :: :get | :put | :post | :delete | :options | :head | :patch | :trace
   @type query_params :: %{String.t() => String.t()}
   @type headers :: %{String.t() => String.t()}
-  @type request_schema :: {String.t(), OpenAPIClient.Schema.type()}
+  @type content_type :: String.t()
+  @type request_schema :: {content_type(), OpenAPIClient.Schema.type()}
   @type response_status_code :: integer() | String.t() | :default
-  @type response_schema :: {String.t(), OpenAPIClient.Schema.type()}
+  @type response_schema :: {content_type(), OpenAPIClient.Schema.type()}
   @type response_type :: {response_status_code(), [response_schema()] | :null}
   @type external_headers :: [{String.t(), String.t()}] | keyword(String.t()) | headers()
   @type result :: {:ok, term()} | {:error, term()}
