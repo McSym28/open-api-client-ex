@@ -32,6 +32,25 @@ defmodule OpenAPIClient.Client.TypedEncoder do
 
   @behaviour __MODULE__
 
+  @doc """
+  Encode a value of a specific type
+
+  ## Examples
+
+      iex> #{__MODULE__}.encode(1, :integer)
+      {:ok, 1}
+      iex> #{__MODULE__}.encode(1, :number)
+      {:ok, 1}
+      iex> #{__MODULE__}.encode(1.0, :number)
+      {:ok, 1.0}
+      iex> #{__MODULE__}.encode(~D[2024-02-03], {:string, :date})
+      {:ok, ~D[2024-02-03]}
+      iex> #{__MODULE__}.encode("string", {:string, :generic})
+      {:ok, "string"}
+
+  Base implementation is copied from [GitHub REST API Client for Elixir library](https://github.com/aj-foster/open-api-github)
+
+  """
   @impl __MODULE__
   def encode(value, type) do
     encode(value, type, [type], __MODULE__)
@@ -39,7 +58,6 @@ defmodule OpenAPIClient.Client.TypedEncoder do
 
   @impl __MODULE__
   def encode(nil, _, _, _), do: {:ok, nil}
-  def encode("", :null, _, _), do: {:ok, nil}
 
   def encode(value, :boolean, _, _) when is_boolean(value), do: {:ok, value}
 
@@ -80,13 +98,13 @@ defmodule OpenAPIClient.Client.TypedEncoder do
   def encode(%Time{} = value, {:string, :time}, _, _), do: {:ok, value}
   def encode(%DateTime{} = value, {:string, :time}, _, _), do: {:ok, DateTime.to_time(value)}
 
-  def encode(value, {:string, string_format}, path, _)
-      when not is_binary(value) and string_format in [:date, :date_time, :time],
+  def encode(_value, {:string, string_format}, path, _)
+      when string_format in [:date, :date_time, :time],
       do:
         {:error,
          Error.new(
            message: "Invalid format for date/time value",
-           reason: :invalid_datetime_string,
+           reason: :invalid_datetime_format,
            source: path
          )}
 
