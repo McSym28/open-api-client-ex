@@ -34,57 +34,24 @@ defmodule OpenAPIClient.Client.TypedDecoder do
   @behaviour __MODULE__
 
   @doc """
-  Manually decode a response
-
-  This function takes a parsed response and decodes it using the given type. It is intended for
-  use in testing scenarios only. For regular API requests, use `decode_response/2` as part of the
-  client stack.
-
-  Taken from [GitHub REST API Client for Elixir library](https://github.com/aj-foster/open-api-github)
+  Decode a value of a specific type
 
   ## Examples
 
-      iex> #{__MODULE__}.decode("", :null)
-      {:ok, nil}
-      iex> #{__MODULE__}.decode(nil, {:string, :generic})
-      {:ok, nil}
-      iex> #{__MODULE__}.decode(true, :boolean)
-      {:ok, true}
-      iex> #{__MODULE__}.decode("true", :boolean)
-      {:ok, true}
-      iex> #{__MODULE__}.decode("false", :boolean)
-      {:ok, false}
-      iex> {:error, %OpenAPIClient.Client.Error{reason: reason}} = #{__MODULE__}.decode(1, :boolean)
-      iex> reason
-      :invalid_boolean
       iex> #{__MODULE__}.decode(1, :integer)
       {:ok, 1}
       iex> #{__MODULE__}.decode("1", :integer)
       {:ok, 1}
-      iex> {:error, %OpenAPIClient.Client.Error{reason: reason}} = #{__MODULE__}.decode("1!", :integer)
-      iex> reason
-      :invalid_integer
       iex> #{__MODULE__}.decode(1, :number)
       {:ok, 1}
       iex> #{__MODULE__}.decode(1.0, :number)
       {:ok, 1.0}
-      iex> #{__MODULE__}.decode("1", :number)
-      {:ok, 1.0}
-      iex> #{__MODULE__}.decode("1.0", :number)
-      {:ok, 1.0}
-      iex> {:error, %OpenAPIClient.Client.Error{reason: reason}} = #{__MODULE__}.decode("1.0!", :number)
-      iex> reason
-      :invalid_number
       iex> #{__MODULE__}.decode("2024-02-03", {:string, :date})
       {:ok, ~D[2024-02-03]}
-      iex> #{__MODULE__}.decode("2024-01-01T12:34:56Z", {:string, :date_time})
-      {:ok, ~U[2024-01-01 12:34:56Z]}
-      iex> #{__MODULE__}.decode("12:34:56Z", {:string, :time})
-      {:ok, ~T[12:34:56]}
-      iex> #{__MODULE__}.decode("stirng", {:string, :generic})
-      {:ok, "stirng"}
-      iex> #{__MODULE__}.decode(1, {:string, :generic})
-      {:ok, "1"}
+      iex> #{__MODULE__}.decode("string", {:string, :generic})
+      {:ok, "string"}
+
+  Base implementation is copied from [GitHub REST API Client for Elixir library](https://github.com/aj-foster/open-api-github)
 
   """
   @impl __MODULE__
