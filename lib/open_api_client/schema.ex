@@ -10,7 +10,14 @@ defmodule OpenAPIClient.Schema do
           | {:string, atom()}
           | :unknown
           | {:union, [type()]}
-          | {:enum, [integer() | number() | boolean() | {atom(), String.t()} | :not_strict]}
+          | {:enum,
+             [
+               integer()
+               | number()
+               | boolean()
+               | {atom(), String.t() | integer() | number() | boolean()}
+               | :not_strict
+             ]}
           | {module(), atom()}
   @type type :: non_array_type() | [non_array_type()]
   @type schema_type :: {String.t(), type()}

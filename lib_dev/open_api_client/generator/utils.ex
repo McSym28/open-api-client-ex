@@ -17,12 +17,32 @@ defmodule OpenAPIClient.Generator.Utils do
   @schema_type_pattern_rank_any 0
   @schema_type_pattern_rank_exact 1
 
+  @type operation_param_config :: [
+          {:name, String.t()}
+          | {:default, {:profile_config, atom()} | {module(), atom(), list()}}
+          | {:example, term()}
+        ]
+  @type operation_config :: [
+          {:params,
+           [
+             {{String.t(), OpenAPI.Processor.Operation.Param.location()},
+              operation_param_config()}
+           ]}
+        ]
+
+  @type schema_field_enum_config :: [
+          {:strict, boolean()} | {:options, [{term(), [{:value, atom()}]}]}
+        ]
+  @type schema_field_config :: [
+          {:name, String.t()} | {:example, term()} | {:enum, schema_field_enum_config()}
+        ]
+  @type schema_config :: [{:fields, [{String.t(), schema_field_config()}]}]
+
   @spec operation_config(
           OpenAPI.Processor.State.t(),
           String.t() | URI.t(),
           OpenAPI.Processor.Operation.method()
-        ) ::
-          keyword()
+        ) :: operation_config()
   def operation_config(state, url, method) do
     url = to_string(url)
 
@@ -47,8 +67,7 @@ defmodule OpenAPIClient.Generator.Utils do
           OpenAPI.Processor.State.t(),
           String.t() | atom(),
           atom() | String.t()
-        ) ::
-          keyword()
+        ) :: schema_config()
   def schema_config(state, module, type) do
     state
     |> get_config(:schemas, [])
