@@ -8,7 +8,12 @@ defmodule OpenAPIClient.MixProject do
       elixir: "~> 1.16",
       start_permanent: Mix.env() == :prod,
       deps: deps(),
-      elixirc_paths: elixirc_paths(Mix.env())
+      elixirc_paths: elixirc_paths(Mix.env()),
+      test_coverage: [tool: ExCoveralls],
+      preferred_cli_env: [
+        coveralls: :test,
+        "coveralls.html": :test
+      ]
     ]
   end
 
@@ -32,7 +37,8 @@ defmodule OpenAPIClient.MixProject do
       {:jason, "~> 1.4", only: [:dev, :test]},
       {:httpoison, "~> 2.2", only: [:dev, :test]},
       {:mox, "~> 1.1", only: [:dev, :test]},
-      {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false}
+      {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false},
+      {:excoveralls, "~> 0.18", only: :test}
     ]
   end
 end
