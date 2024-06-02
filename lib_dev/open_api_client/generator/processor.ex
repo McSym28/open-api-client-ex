@@ -47,6 +47,14 @@ defmodule OpenAPIClient.Generator.Processor do
             |> Keyword.get(:default)
             |> generate_function_call(state)
 
+          examples =
+            config
+            |> Keyword.fetch(:example)
+            |> case do
+              {:ok, value} -> [value]
+              :error -> []
+            end
+
           description_new =
             if name_new == name do
               description
@@ -78,7 +86,8 @@ defmodule OpenAPIClient.Generator.Processor do
               old_name: name,
               default: default,
               config: config,
-              static: is_nil(default) and (required or location == :path)
+              static: is_nil(default) and (required or location == :path),
+              examples: examples
             }
             |> append_param_example(param_spec, state)
 
@@ -362,11 +371,20 @@ defmodule OpenAPIClient.Generator.Processor do
     name_new = Keyword.get_lazy(config, :name, fn -> snakesize_name(name) end)
     field_new = %Field{field | name: name_new}
 
+    examples =
+      config
+      |> Keyword.fetch(:example)
+      |> case do
+        {:ok, value} -> [value]
+        :error -> []
+      end
+
     %GeneratorField{
       field: field_new,
       old_name: name,
       type: type,
-      enforce: required and not nullable
+      enforce: required and not nullable,
+      examples: examples
     }
   end
 
