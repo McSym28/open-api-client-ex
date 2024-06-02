@@ -31,7 +31,7 @@ defmodule OpenAPIClient.OperationsTest do
               %OpenAPIClient.TestSchema{
                 boolean: true,
                 date_time: ~U[2024-01-02 01:23:45Z],
-                enum: :enum_1,
+                enum: :enum1,
                 integer: 1,
                 number: 1.0,
                 string: "string"

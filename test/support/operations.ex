@@ -31,7 +31,7 @@ defmodule OpenAPIClient.Operations do
     }
     |> OpenAPIClient.Client.Operation.put_private(
       __info__: {__MODULE__, :test, []},
-      __profile__: :default,
+      __profile__: :test,
       __opts__: opts
     )
     |> OpenAPIClient.Client.perform(client_pipeline)

@@ -21,7 +21,7 @@ defmodule OpenAPIClient.Client.TypedEncoderTest do
                    number: 1.0,
                    string: "string",
                    date_time: ~U[2024-01-02T01:23:45Z],
-                   enum: :enum_1
+                   enum: :enum1
                  },
                  {TestSchema, :t}
                )
@@ -55,7 +55,7 @@ defmodule OpenAPIClient.Client.TypedEncoderTest do
                      number: 1.0,
                      string: "string",
                      date_time: ~U[2024-01-02T01:23:45Z],
-                     enum: :enum_1
+                     enum: :enum1
                    },
                    %TestSchema{
                      boolean: true,

@@ -198,8 +198,9 @@ defmodule OpenAPIClient.Generator.Processor do
 
   @impl true
   def schema_module_and_type(state, schema) do
-    process_schema(state, schema, [])
-    OpenAPI.Processor.schema_module_and_type(state, schema)
+    {module, type} = OpenAPI.Processor.schema_module_and_type(state, schema)
+    process_schema(state, %Schema{schema | module_name: module, type_name: type}, [])
+    {module, type}
   end
 
   defp accumulate_schema_examples(nil, acc, _state), do: acc
@@ -268,7 +269,7 @@ defmodule OpenAPIClient.Generator.Processor do
 
   defp process_schema(
          %OpenAPI.Processor.State{schema_specs_by_ref: schema_specs_by_ref} = state,
-         %Schema{ref: ref, fields: fields},
+         %Schema{ref: ref, fields: fields, module_name: module_name, type_name: type_name},
          examples
        ) do
     schemas_table = Utils.ensure_ets_table(:schemas)
@@ -284,7 +285,14 @@ defmodule OpenAPIClient.Generator.Processor do
       [] ->
         %SchemaSpec{} = schema_spec = Map.get(schema_specs_by_ref, ref)
 
-        generator_fields = Enum.map(fields, &process_field/1)
+        schema_config = Utils.schema_config(state, module_name, type_name)
+        field_configs = Keyword.get(schema_config, :fields, [])
+
+        generator_fields =
+          Enum.map(fields, fn %Field{name: name} = field ->
+            {_, config} = List.keyfind(field_configs, name, 0, {name, []})
+            process_field(field, config)
+          end)
 
         extra_fields =
           state
@@ -308,63 +316,50 @@ defmodule OpenAPIClient.Generator.Processor do
     end
   end
 
-  defp process_field(
-         %Field{name: name, type: {:enum, enum_values}, required: required, nullable: nullable} =
-           field
-       ) do
-    {enum_values_new, {enum_type, enum_options}} =
-      Enum.map_reduce(enum_values, {nil, []}, &process_enum_value/2)
+  defp process_field(%Field{type: {:enum, enum_values}} = field, config) do
+    %GeneratorField{field: field_new} =
+      generator_field = process_field(%Field{field | type: {:string, :generic}}, config)
 
-    name_new = snakesize_name(name)
+    enum_config = Keyword.get(config, :enum, [])
+    enum_options = Keyword.get(enum_config, :options, [])
+
+    {enum_values_new, {enum_type, enum_options}} =
+      Enum.map_reduce(enum_values, {:unknown, []}, &process_enum_value(&1, &2, enum_options))
+
     type_new = {:enum, enum_values_new}
-    field_new = %Field{field | name: name_new, type: type_new}
+    field_new = %Field{field_new | type: type_new}
 
     %GeneratorField{
-      field: field_new,
-      old_name: name,
-      enum_options:
-        Enum.sort_by(enum_options, fn
-          {atom, _string} -> {0, atom}
-          value -> {1, value}
-        end),
-      type: if(enum_type, do: {:union, [type_new, enum_type]}, else: type_new),
-      enforce: required and not nullable
+      generator_field
+      | field: field_new,
+        type: if(enum_type == :unknown, do: type_new, else: {:union, [type_new, enum_type]}),
+        enum_options:
+          Enum.sort_by(enum_options, fn
+            {atom, _string} -> {0, atom}
+            value -> {1, value}
+          end),
+        enum_strict: Keyword.get(enum_config, :strict, false)
+    }
+  end
+
+  defp process_field(%Field{type: {:array, {:enum, _} = enum_type}} = field, config) do
+    %GeneratorField{
+      field: %Field{type: type_new} = field_new,
+      type: generator_field_type
+    } = generator_field = process_field(%Field{field | type: enum_type}, config)
+
+    %GeneratorField{
+      generator_field
+      | field: %Field{field_new | type: {:array, type_new}},
+        type: {:array, generator_field_type}
     }
   end
 
   defp process_field(
-         %Field{
-           name: name,
-           type: {:array, {:enum, enum_values}},
-           required: required,
-           nullable: nullable
-         } =
-           field
+         %Field{name: name, required: required, nullable: nullable, type: type} = field,
+         config
        ) do
-    {enum_values_new, {enum_type, enum_options}} =
-      Enum.map_reduce(enum_values, {nil, []}, &process_enum_value/2)
-
-    name_new = snakesize_name(name)
-    type_new = {:array, {:enum, enum_values_new}}
-    field_new = %Field{field | name: name_new, type: type_new}
-
-    %GeneratorField{
-      field: field_new,
-      old_name: name,
-      enum_options:
-        Enum.sort_by(enum_options, fn
-          {atom, _string} -> {0, atom}
-          value -> {1, value}
-        end),
-      type: if(enum_type, do: {:array, {:union, [type_new, enum_type]}}, else: type_new),
-      enforce: required and not nullable
-    }
-  end
-
-  defp process_field(
-         %Field{name: name, required: required, nullable: nullable, type: type} = field
-       ) do
-    name_new = snakesize_name(name)
+    name_new = Keyword.get_lazy(config, :name, fn -> snakesize_name(name) end)
     field_new = %Field{field | name: name_new}
 
     %GeneratorField{
@@ -375,32 +370,33 @@ defmodule OpenAPIClient.Generator.Processor do
     }
   end
 
-  defp process_enum_value(enum_value, {_type, acc}) when is_binary(enum_value) do
-    enum_atom = enum_value |> snakesize_name() |> String.to_atom()
-    acc_new = [{enum_atom, enum_value} | acc]
-    {enum_atom, {{:string, :generic}, acc_new}}
-  end
+  defp process_enum_value(value, {type, acc}, options) do
+    {_, config} = List.keyfind(options, value, 0, {value, []})
 
-  defp process_enum_value(enum_value, {type, acc})
-       when is_number(enum_value) and (is_nil(type) or type in [:integer, :boolean]) do
-    acc_new = [enum_value | acc]
-    {enum_value, {:number, acc_new}}
-  end
+    type_new =
+      cond do
+        is_binary(value) -> {:string, :generic}
+        is_number(value) and type in [:integer, :boolean, :unknown] -> :number
+        is_integer(value) and type in [:boolean, :unknown] -> :integer
+        is_boolean(value) and type in [:unknown] -> :boolean
+        :else -> type
+      end
 
-  defp process_enum_value(enum_value, {type, acc})
-       when is_integer(enum_value) and (is_nil(type) or type in [:boolean]) do
-    acc_new = [enum_value | acc]
-    {enum_value, {:integer, acc_new}}
-  end
+    {new_value, acc_new} =
+      value
+      |> is_binary()
+      |> if do
+        {:ok,
+         Keyword.get_lazy(config, :value, fn -> value |> snakesize_name() |> String.to_atom() end)}
+      else
+        Keyword.fetch(config, :value)
+      end
+      |> case do
+        {:ok, new_value} -> {new_value, [{new_value, value} | acc]}
+        :error -> {value, [value | acc]}
+      end
 
-  defp process_enum_value(enum_value, {type, acc}) when is_boolean(enum_value) do
-    acc_new = [enum_value | acc]
-    {enum_value, {type || :boolean, acc_new}}
-  end
-
-  defp process_enum_value(enum_value, {type, acc}) do
-    acc_new = [enum_value | acc]
-    {enum_value, {type, acc_new}}
+    {new_value, {type_new, acc_new}}
   end
 
   defp append_field_examples(field, [], _state), do: field

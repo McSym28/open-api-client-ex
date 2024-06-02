@@ -4,7 +4,7 @@ import Config
 config :logger, level: :warning
 
 config :oapi_generator,
-  default: [
+  test: [
     processor: OpenAPIClient.Generator.Processor,
     renderer: OpenAPIClient.Generator.Renderer,
     output: [
@@ -24,7 +24,15 @@ config :open_api_client_ex,
       {"application/json", {Jason, :encode, []}}
     ]
   ],
-  default: [
+  test: [
     base_url: "https://example.com",
-    test_location: "test/open_api_client"
+    test_location: "test/open_api_client",
+    schemas: [
+      {{"TestSchema", :t},
+       [
+         fields: [
+           {"Enum", [enum: [options: [{"ENUM_1", [value: :enum1]}, {"ENUM_2", [value: :enum2]}]]]}
+         ]
+       ]}
+    ]
   ]

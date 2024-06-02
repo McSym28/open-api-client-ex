@@ -8,6 +8,15 @@ defmodule OpenAPIClient.Generator.Utils do
   @operation_method_pattern_rank_any 0
   @operation_method_pattern_rank_exact 1
 
+  @schema_module_pattern_rank_multiplicand 10
+
+  @schema_module_pattern_rank_any 0
+  @schema_module_pattern_rank_regex 1
+  @schema_module_pattern_rank_exact 2
+
+  @schema_type_pattern_rank_any 0
+  @schema_type_pattern_rank_exact 1
+
   @spec operation_config(
           OpenAPI.Processor.State.t(),
           String.t() | URI.t(),
@@ -23,6 +32,30 @@ defmodule OpenAPIClient.Generator.Utils do
       case operation_pattern_rank(pattern, url, method) do
         {:ok, {url_rank, method_rank}} ->
           [{url_rank * @operation_url_pattern_rank_multiplicand + method_rank, config}]
+
+        :error ->
+          []
+      end
+    end)
+    |> Enum.sort_by(fn {rank, _config} -> rank end)
+    |> Enum.reduce([], fn {_rank, config}, acc ->
+      OpenAPIClient.Utils.config_merge(acc, config)
+    end)
+  end
+
+  @spec schema_config(
+          OpenAPI.Processor.State.t(),
+          String.t() | atom(),
+          atom() | String.t()
+        ) ::
+          keyword()
+  def schema_config(state, module, type) do
+    state
+    |> get_config(:schemas, [])
+    |> Enum.flat_map(fn {pattern, config} ->
+      case schema_pattern_rank(pattern, module, type) do
+        {:ok, {module_rank, type_rank}} ->
+          [{module_rank * @schema_module_pattern_rank_multiplicand + type_rank, config}]
 
         :error ->
           []
@@ -137,4 +170,77 @@ defmodule OpenAPIClient.Generator.Utils do
     do: {:ok, @operation_method_pattern_rank_exact}
 
   defp operation_method_pattern_rank(_pattern, _method), do: :error
+
+  defp schema_pattern_rank(:*, _module, _type),
+    do: {:ok, {@schema_module_pattern_rank_any, @schema_type_pattern_rank_any}}
+
+  defp schema_pattern_rank({module_pattern, type_pattern}, module, type) do
+    case {schema_module_pattern_rank(module_pattern, module),
+          schema_type_pattern_rank(type_pattern, type)} do
+      {{:ok, module_rank}, {:ok, type_rank}} -> {:ok, {module_rank, type_rank}}
+      _ -> :error
+    end
+  end
+
+  defp schema_module_pattern_rank([], _module), do: :error
+  defp schema_module_pattern_rank(:*, _module), do: {:ok, @schema_module_pattern_rank_any}
+
+  defp schema_module_pattern_rank([pattern | rest], module) do
+    case schema_module_pattern_rank(pattern, module) do
+      {:ok, rank} -> {:ok, rank}
+      :error -> schema_module_pattern_rank(rest, module)
+    end
+  end
+
+  defp schema_module_pattern_rank(%Regex{} = regex, module) when is_atom(module),
+    do: schema_module_pattern_rank(regex, atom_to_string(module))
+
+  defp schema_module_pattern_rank(%Regex{} = regex, module) do
+    if Regex.match?(regex, module) do
+      {:ok, @schema_module_pattern_rank_regex}
+    else
+      :error
+    end
+  end
+
+  defp schema_module_pattern_rank(module, module), do: {:ok, @schema_module_pattern_rank_exact}
+
+  defp schema_module_pattern_rank(pattern, module) when is_binary(pattern) and is_atom(module),
+    do: schema_module_pattern_rank(pattern, atom_to_string(module))
+
+  defp schema_module_pattern_rank(pattern, module) when is_atom(pattern) and is_binary(module),
+    do: schema_module_pattern_rank(atom_to_string(pattern), module)
+
+  defp schema_module_pattern_rank(_pattern, _module), do: :error
+
+  defp schema_type_pattern_rank([], _type), do: :error
+  defp schema_type_pattern_rank(:*, _type), do: {:ok, @schema_type_pattern_rank_any}
+
+  defp schema_type_pattern_rank([pattern | rest], type) do
+    case schema_type_pattern_rank(pattern, type) do
+      {:ok, rank} -> {:ok, rank}
+      :error -> schema_type_pattern_rank(rest, type)
+    end
+  end
+
+  defp schema_type_pattern_rank(type, type),
+    do: {:ok, @schema_type_pattern_rank_exact}
+
+  defp schema_type_pattern_rank(pattern, type) when is_binary(pattern) and is_atom(type),
+    do: schema_type_pattern_rank(pattern, atom_to_string(type))
+
+  defp schema_type_pattern_rank(pattern, type) when is_atom(pattern) and is_binary(type),
+    do: schema_type_pattern_rank(atom_to_string(pattern), type)
+
+  defp schema_type_pattern_rank(_pattern, _type), do: :error
+
+  defp atom_to_string(atom) do
+    if Macro.classify_atom(atom) == :alias do
+      atom
+      |> Module.split()
+      |> Enum.join(".")
+    else
+      Atom.to_string(atom)
+    end
+  end
 end

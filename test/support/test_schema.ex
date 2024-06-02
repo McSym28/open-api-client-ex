@@ -8,7 +8,7 @@ defmodule OpenAPIClient.TestSchema do
   @type t :: %__MODULE__{
           boolean: boolean,
           date_time: DateTime.t(),
-          enum: :enum_1 | :enum_2 | String.t(),
+          enum: :enum1 | :enum2 | String.t(),
           integer: integer,
           number: number,
           string: String.t()
@@ -28,7 +28,7 @@ defmodule OpenAPIClient.TestSchema do
     [
       boolean: {"Boolean", :boolean},
       date_time: {"DateTime", {:string, :date_time}},
-      enum: {"Enum", {:enum, [{:enum_1, "ENUM_1"}, {:enum_2, "ENUM_2"}, :not_strict]}},
+      enum: {"Enum", {:enum, [{:enum1, "ENUM_1"}, {:enum2, "ENUM_2"}, :not_strict]}},
       integer: {"Integer", :integer},
       number: {"Number", :number},
       string: {"String", {:string, :generic}}
