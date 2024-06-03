@@ -28,12 +28,12 @@ defmodule OpenAPIClient.Client.Steps.RequestBodyTypedEncoder do
         OpenAPIClient.Utils.get_config(operation, :typed_encoder, TypedEncoder)
       end)
 
-    type = get_type(operation)
+    {content_type, type} = get_type(operation)
 
     case typed_encoder.encode(
            request_body,
            type,
-           [type, {operation.request_url, operation.request_method}],
+           [{:request_body, content_type}, {operation.request_url, operation.request_method}],
            typed_encoder
          ) do
       {:ok, encoded_body} ->
@@ -48,11 +48,9 @@ defmodule OpenAPIClient.Client.Steps.RequestBodyTypedEncoder do
   end
 
   defp get_type(%Operation{request_types: types} = operation) do
-    with {:ok, content_type} <- Operation.get_request_header(operation, "Content-Type"),
-         {_, type} <- List.keyfind(types, content_type, 0) do
-      type
-    else
-      _ -> :unknown
+    case Operation.get_request_header(operation, "Content-Type") do
+      {:ok, content_type} -> List.keyfind(types, content_type, 0, {content_type, :unknown})
+      :error -> {nil, :unknown}
     end
   end
 end

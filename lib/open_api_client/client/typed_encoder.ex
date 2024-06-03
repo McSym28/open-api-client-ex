@@ -7,28 +7,18 @@ defmodule OpenAPIClient.Client.TypedEncoder do
           list(
             String.t()
             | nonempty_list(non_neg_integer())
+            | {:request_body, OpenAPIClient.Client.Operation.content_type() | nil}
+            | {:response_body, OpenAPIClient.Client.Operation.response_status_code(),
+               OpenAPIClient.Client.Operation.content_type() | nil}
             | {OpenAPIClient.Client.Operation.url(), OpenAPIClient.Client.Operation.method()}
           )
 
-  @callback encode(value :: term(), type :: OpenAPIClient.Schema.type()) :: result()
   @callback encode(
               value :: term(),
               type :: OpenAPIClient.Schema.type(),
               path :: path(),
               caller_module :: module()
             ) :: result()
-
-  @doc false
-  defmacro __using__(_opts) do
-    quote do
-      @behaviour OpenAPIClient.Client.TypedEncoder
-
-      @impl OpenAPIClient.Client.TypedEncoder
-      def encode(value, type) do
-        encode(value, type, [type], __MODULE__)
-      end
-    end
-  end
 
   @behaviour __MODULE__
 
@@ -37,25 +27,20 @@ defmodule OpenAPIClient.Client.TypedEncoder do
 
   ## Examples
 
-      iex> #{__MODULE__}.encode(1, :integer)
+      iex> #{__MODULE__}.encode(1, :integer, [], #{__MODULE__})
       {:ok, 1}
-      iex> #{__MODULE__}.encode(1, :number)
+      iex> #{__MODULE__}.encode(1, :number, [], #{__MODULE__})
       {:ok, 1}
-      iex> #{__MODULE__}.encode(1.0, :number)
+      iex> #{__MODULE__}.encode(1.0, :number, [], #{__MODULE__})
       {:ok, 1.0}
-      iex> #{__MODULE__}.encode(~D[2024-02-03], {:string, :date})
+      iex> #{__MODULE__}.encode(~D[2024-02-03], {:string, :date}, [], #{__MODULE__})
       {:ok, ~D[2024-02-03]}
-      iex> #{__MODULE__}.encode("string", {:string, :generic})
+      iex> #{__MODULE__}.encode("string", {:string, :generic}, [], #{__MODULE__})
       {:ok, "string"}
 
   Base implementation is copied from [GitHub REST API Client for Elixir library](https://github.com/aj-foster/open-api-github)
 
   """
-  @impl __MODULE__
-  def encode(value, type) do
-    encode(value, type, [type], __MODULE__)
-  end
-
   @impl __MODULE__
   def encode(nil, _, _, _), do: {:ok, nil}
 

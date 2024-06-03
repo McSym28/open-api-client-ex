@@ -64,7 +64,7 @@ defmodule OpenAPIClient.Client.TypedEncoderTest do
     |> Enum.map(fn {type, test_suffix, value, expected_value} ->
       test "successfully encodes #{test_suffix}" do
         assert {:ok, unquote(expected_value)} ==
-                 TypedEncoder.encode(unquote(value), unquote(type))
+                 TypedEncoder.encode(unquote(value), unquote(type), [], TypedEncoder)
       end
     end)
 
@@ -76,7 +76,7 @@ defmodule OpenAPIClient.Client.TypedEncoderTest do
     |> Enum.map(fn {type, test_suffix, value, error_reason} ->
       test "failed encoding #{test_suffix}" do
         assert {:error, %Error{reason: unquote(error_reason)}} =
-                 TypedEncoder.encode(unquote(value), unquote(type))
+                 TypedEncoder.encode(unquote(value), unquote(type), [], TypedEncoder)
       end
     end)
 
@@ -99,7 +99,9 @@ defmodule OpenAPIClient.Client.TypedEncoderTest do
                    date_time: ~U[2024-01-02T01:23:45Z],
                    enum: :enum1
                  },
-                 {TestSchema, :t}
+                 {TestSchema, :t},
+                 [],
+                 TypedEncoder
                )
     end
 
@@ -142,7 +144,9 @@ defmodule OpenAPIClient.Client.TypedEncoderTest do
                      enum: "ENUM_3"
                    }
                  ],
-                 [{TestSchema, :t}]
+                 [{TestSchema, :t}],
+                 [],
+                 TypedEncoder
                )
     end
   end
