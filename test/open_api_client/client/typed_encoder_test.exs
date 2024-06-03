@@ -55,7 +55,7 @@ defmodule OpenAPIClient.Client.TypedEncoderTest do
     {:map, "map as integer", 2, :invalid_map}
   ]
 
-  describe "encode/2" do
+  describe "encode/4" do
     @successful_conversions
     |> Enum.map(fn
       {type, value, expected_value} -> {type, to_string(type), value, expected_value}

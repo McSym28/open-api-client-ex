@@ -31,6 +31,28 @@ defmodule OpenAPIClient.Generator.ExampleGenerator do
 
   @behaviour __MODULE__
 
+  @doc """
+  Generate example value for a specific type
+
+  ## Examples
+
+      iex> integer = #{__MODULE__}.generate(:integer, [], #{__MODULE__})
+      iex> is_integer(integer)
+      true
+      iex> number = #{__MODULE__}.generate(:number, [], #{__MODULE__})
+      iex> is_number(number)
+      true
+      iex> list = #{__MODULE__}.generate({:array, :boolean}, [], #{__MODULE__})
+      iex> is_list(list)
+      true
+      iex> {:ok, date_time, _} = {:string, :date_time} |> #{__MODULE__}.generate([], #{__MODULE__}) |> DateTime.from_iso8601()
+      iex> match?(%DateTime{}, date_time)
+      true
+      iex> string = #{__MODULE__}.generate({:string, :generic}, [], #{__MODULE__})
+      iex> is_binary(string)
+      true
+
+  """
   @impl __MODULE__
   def generate(:null, _path, _caller_module), do: nil
   def generate(:boolean, _path, _caller_module), do: true
