@@ -288,10 +288,6 @@ defmodule OpenAPIClient.Generator.Renderer do
 
       typed_decoder = Utils.get_config(state, :typed_decoder, TypedDecoder)
 
-      stub(ExampleTypedDecoder, :decode, fn value, type ->
-        apply(ExampleTypedDecoder, :decode, [value, type, [], ExampleTypedDecoder])
-      end)
-
       stub(ExampleTypedDecoder, :decode, fn
         value, {module, type}, path, _caller_module
         when is_atom(module) and is_atom(type) and is_map(value) ->
@@ -1242,14 +1238,14 @@ defmodule OpenAPIClient.Generator.Renderer do
     end)
   end
 
-  defp generate_schema_example(:null, _state, _example_generator, _example_generator_path),
+  defp generate_schema_example(:null, _state, _example_generator, _path),
     do: {nil, nil}
 
   defp generate_schema_example(
          schema_ref,
          %OpenAPI.Renderer.State{schemas: schemas} = state,
          example_generator,
-         example_generator_path
+         path
        )
        when is_reference(schema_ref) do
     [{_, generator_schema}] = :ets.lookup(:schemas, schema_ref)
@@ -1261,24 +1257,31 @@ defmodule OpenAPIClient.Generator.Renderer do
       example_generator.generate(
         generator_schema,
         state,
-        example_generator_path,
+        path,
         example_generator
       )
 
     module = generate_module_name(module, state)
 
     {:ok, example_decoded} =
-      apply(ExampleTypedDecoder, :decode, [example_encoded, {module, type}])
+      apply(ExampleTypedDecoder, :decode, [
+        example_encoded,
+        {module, type},
+        path,
+        ExampleTypedDecoder
+      ])
 
     example_encoded = sort_encoded_example(example_encoded)
     {example_encoded, example_decoded}
   end
 
-  defp generate_schema_example(type, state, example_generator, example_generator_path) do
+  defp generate_schema_example(type, state, example_generator, path) do
     example_encoded =
-      example_generator.generate(type, state, example_generator_path, example_generator)
+      example_generator.generate(type, state, path, example_generator)
 
-    {:ok, example_decoded} = apply(ExampleTypedDecoder, :decode, [example_encoded, type])
+    {:ok, example_decoded} =
+      apply(ExampleTypedDecoder, :decode, [example_encoded, type, path, ExampleTypedDecoder])
+
     example_encoded = sort_encoded_example(example_encoded)
     {example_encoded, example_decoded}
   end

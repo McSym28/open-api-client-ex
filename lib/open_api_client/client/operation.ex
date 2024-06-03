@@ -100,7 +100,7 @@ defmodule OpenAPIClient.Client.Operation do
   end
 
   @spec get_response_type(t()) ::
-          {:ok, {response_status_code(), OpenAPIClient.Schema.type()}}
+          {:ok, {response_status_code(), content_type() | nil, OpenAPIClient.Schema.type()}}
           | {:error, Error.t()}
   def get_response_type(
         %__MODULE__{response_types: types, response_status_code: status_code} = operation
@@ -126,14 +126,14 @@ defmodule OpenAPIClient.Client.Operation do
     |> elem(1)
     |> case do
       {status_code, :null} ->
-        {:ok, {status_code, :null}}
+        {:ok, {status_code, nil, :null}}
 
       {status_code, schemas} ->
         case get_response_header(operation, "Content-Type") do
           {:ok, content_type} ->
             case List.keyfind(schemas, content_type, 0) do
               {_, type} ->
-                {:ok, {status_code, type}}
+                {:ok, {status_code, content_type, type}}
 
               _ ->
                 {:error,

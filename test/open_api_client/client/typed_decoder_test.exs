@@ -54,7 +54,7 @@ defmodule OpenAPIClient.Client.TypedDecoderTest do
     {:map, "map as integer", 2, :invalid_map}
   ]
 
-  describe "decode/2" do
+  describe "decode/4" do
     @successful_conversions
     |> Enum.map(fn
       {type, value, expected_value} -> {type, to_string(type), value, expected_value}
@@ -63,7 +63,7 @@ defmodule OpenAPIClient.Client.TypedDecoderTest do
     |> Enum.map(fn {type, test_suffix, value, expected_value} ->
       test "successfully decodes #{test_suffix}" do
         assert {:ok, unquote(expected_value)} ==
-                 TypedDecoder.decode(unquote(value), unquote(type))
+                 TypedDecoder.decode(unquote(value), unquote(type), [], TypedDecoder)
       end
     end)
 
@@ -75,7 +75,7 @@ defmodule OpenAPIClient.Client.TypedDecoderTest do
     |> Enum.map(fn {type, test_suffix, value, error_reason} ->
       test "failed decoding #{test_suffix}" do
         assert {:error, %Error{reason: unquote(error_reason)}} =
-                 TypedDecoder.decode(unquote(value), unquote(type))
+                 TypedDecoder.decode(unquote(value), unquote(type), [], TypedDecoder)
       end
     end)
 
@@ -99,7 +99,9 @@ defmodule OpenAPIClient.Client.TypedDecoderTest do
                    "Enum" => "ENUM_1",
                    "Extra" => "some_data"
                  },
-                 {TestSchema, :t}
+                 {TestSchema, :t},
+                 [],
+                 TypedDecoder
                )
     end
 
@@ -144,7 +146,9 @@ defmodule OpenAPIClient.Client.TypedDecoderTest do
                      "OtherExtra" => "some_other_data"
                    }
                  ],
-                 [{TestSchema, :t}]
+                 [{TestSchema, :t}],
+                 [],
+                 TypedDecoder
                )
     end
   end

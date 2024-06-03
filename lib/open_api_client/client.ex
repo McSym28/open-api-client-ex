@@ -23,7 +23,7 @@ defmodule OpenAPIClient.Client do
 
       %Operation{response_body: response_body} = operation ->
         case Operation.get_response_type(operation) do
-          {:ok, {response_status_code, type}} ->
+          {:ok, {response_status_code, _content_type, type}} ->
             is_success =
               case response_status_code do
                 status_code when is_integer(status_code) ->
