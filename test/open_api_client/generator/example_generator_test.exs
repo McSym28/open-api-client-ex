@@ -24,14 +24,14 @@ defmodule OpenAPIClient.Generator.ExampleGeneratorTest do
   @enum_field %GeneratorField{
     field: %Field{name: "enum", type: {:enum, ["ENUM1", "ENUM2"]}},
     old_name: "Enum",
-    type: {:enum, [enum1: "ENUM1", enum2: "ENUM2"]},
+    type: {:enum, ["enum1", "enum2"]},
     enum_options: [enum1: "ENUM1", enum2: "ENUM2"],
     examples: ["ENUM1", "ENUM2"]
   }
   @array_enum_field %GeneratorField{
     field: %Field{name: "array_enum", type: {:array, {:enum, ["ENUM1", "ENUM2"]}}},
     old_name: "ArrayEnum",
-    type: {:array, {:enum, [enum1: "ENUM1", enum2: "ENUM2"]}},
+    type: {:array, {:enum, ["enum1", "enum2"]}},
     enum_options: [enum1: "ENUM1", enum2: "ENUM2"],
     examples: [["ENUM1", "ENUM2"]]
   }

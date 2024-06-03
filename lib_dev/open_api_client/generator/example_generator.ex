@@ -8,9 +8,9 @@ defmodule OpenAPIClient.Generator.ExampleGenerator do
   @type type ::
           OpenAPIClient.Schema.type()
           | reference()
-          | %GeneratorParam{}
-          | %GeneratorSchema{}
-          | %GeneratorField{}
+          | GeneratorParam.t()
+          | GeneratorSchema.t()
+          | GeneratorField.t()
   @type path ::
           list(
             String.t()
