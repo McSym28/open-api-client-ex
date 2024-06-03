@@ -1017,7 +1017,6 @@ defmodule OpenAPIClient.Generator.Renderer do
               param_example =
                 example_generator.generate(
                   param,
-                  state,
                   [{:parameters, old_name}, {request_path, request_method}],
                   example_generator
                 )
@@ -1256,7 +1255,6 @@ defmodule OpenAPIClient.Generator.Renderer do
     example_encoded =
       example_generator.generate(
         generator_schema,
-        state,
         path,
         example_generator
       )
@@ -1275,9 +1273,9 @@ defmodule OpenAPIClient.Generator.Renderer do
     {example_encoded, example_decoded}
   end
 
-  defp generate_schema_example(type, state, example_generator, path) do
+  defp generate_schema_example(type, _state, example_generator, path) do
     example_encoded =
-      example_generator.generate(type, state, path, example_generator)
+      example_generator.generate(type, path, example_generator)
 
     {:ok, example_decoded} =
       apply(ExampleTypedDecoder, :decode, [example_encoded, type, path, ExampleTypedDecoder])
