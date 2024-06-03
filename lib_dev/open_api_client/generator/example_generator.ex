@@ -22,7 +22,6 @@ defmodule OpenAPIClient.Generator.ExampleGenerator do
             | {OpenAPIClient.Client.Operation.url(), OpenAPIClient.Client.Operation.method()}
           )
 
-  @callback generate(type :: type(), state :: OpenAPI.Renderer.State.t()) :: term()
   @callback generate(
               type :: type(),
               state :: OpenAPI.Renderer.State.t(),
@@ -31,24 +30,7 @@ defmodule OpenAPIClient.Generator.ExampleGenerator do
             ) ::
               term()
 
-  @doc false
-  defmacro __using__(_opts) do
-    quote do
-      @behaviour OpenAPIClient.Generator.ExampleGenerator
-
-      @impl OpenAPIClient.Generator.ExampleGenerator
-      def generate(type, state) do
-        generate(type, state, [], __MODULE__)
-      end
-    end
-  end
-
   @behaviour __MODULE__
-
-  @impl __MODULE__
-  def generate(type, state) do
-    generate(type, state, [], __MODULE__)
-  end
 
   @impl __MODULE__
   def generate(:null, _state, _path, _caller_module), do: nil
