@@ -9,7 +9,7 @@ config :oapi_generator,
     renderer: OpenAPIClient.Generator.Renderer,
     output: [
       base_module: OpenAPIClient,
-      location: "test/support/generator",
+      location: "test/support/__generated__",
       schema_subdirectory: "schemas"
     ]
   ]
@@ -27,7 +27,7 @@ config :open_api_client_ex,
   ],
   test: [
     base_url: "https://example.com",
-    test_location: "test/open_api_client/generator",
+    test_location: "test/open_api_client/__generated__",
     schemas: [
       {{"TestSchema", :t},
        [
