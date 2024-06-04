@@ -4,10 +4,50 @@ info:
   version: 1
 paths:
   "/test":
+    post:
+      description: "Test endpoint"
+      operationId: set_test
+      summary: "Test endpoint"
+      requestBody: 
+        content:
+          "application/json":
+            schema:
+              "$ref": "#/components/schemas/TestRequestSchema"
+            example:
+              StrictEnum: STRICT_ENUM_3
+            examples:
+              StrictEnum1:
+                StrictEnum: STRICT_ENUM_1
+              StrictEnum2:
+                StrictEnum: STRICT_ENUM_2
+      responses:
+        "2XX":
+          description: "Success"
+        "default":
+          description: "Default result"
+        "400":
+          description: "Error"
     get:
       description: "Test endpoint"
-      operationId: test
+      operationId: getTest
       summary: "Test endpoint"
+      parameters: 
+        - in: header
+          name: X-Required-Header
+          required: true
+          schema:
+            type: string
+          example: required_header
+        - in: header
+          name: X-Optional-Header
+          schema:
+            type: string
+          example: optional_header
+        - in: query
+          name: optional_query
+          schema:
+            type: string
+          example: optional-query
       responses:
         "200":
           description: "Success"
@@ -15,6 +55,13 @@ paths:
             "application/json":
               schema:
                 "$ref": "#/components/schemas/TestSchema"
+              example:
+                Boolean: true
+                Integer: 5
+                Number: 7.0
+                String: another_string
+                DateTime: "2024-01-23T01:23:45Z"
+                Enum: ENUM_2
 components:
   schemas:
     TestSchema:
@@ -22,20 +69,26 @@ components:
       properties:
         Boolean:
           type: boolean
+          example: false
         Integer:
           type: integer
+          example: 6
         Number:
           type: number
+          example: 9.0
         String:
           type: string
+          example: some_string
         DateTime:
           type: string
           format: date-time
+          example: "2024-02-03T12:34:56Z"
         Enum:
           type: string
           enum: 
-            - "ENUM_1"
-            - "ENUM_2"
+            - ENUM_1
+            - ENUM_2
+          example: ENUM_1
       required:
         - Boolean
         - Integer
@@ -43,3 +96,44 @@ components:
         - String
         - DateTime
         - Enum
+      example:
+        Boolean: false
+        Integer: 4
+        Number: 5.0
+        String: some_other_string
+        DateTime: "2024-11-22T00:11:22Z"
+        Enum: ENUM_1
+    TestRequestSchema:
+      type: object
+      properties:
+        StrictEnum:
+          type: string
+          enum: 
+            - STRICT_ENUM_1
+            - STRICT_ENUM_2
+            - STRICT_ENUM_3
+          example: STRICT_ENUM_1
+        ArrayEnum:
+          type: array
+          items:
+            type: string
+            enum: 
+              - DYNAMIC_ENUM_1
+              - DYNAMIC_ENUM_2
+        NumberEnum:
+          type: number
+          enum: 
+            - 1
+            - 2.0
+            - 3.0
+          example: 2.0
+        Child:
+          type: object
+          properties:
+            String:
+              type: string
+              example: nested_string_value
+      required:
+        - StrictEnum
+      example:
+        StrictEnum: STRICT_ENUM_1

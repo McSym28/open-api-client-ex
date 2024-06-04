@@ -6,17 +6,21 @@ defmodule OpenAPIClient.OperationsTest do
 
   setup :verify_on_exit!
 
-  describe "test/1" do
+  describe "get_test/2" do
     test "[200] performs a request and encodes OpenAPIClient.TestSchema from response's body" do
-      expect(@httpoison, :request, fn :get, "https://example.com/test", _, _, _ ->
+      expect(@httpoison, :request, fn :get, "https://example.com/test", _, headers, options ->
+        assert {_, "string"} = List.keyfind(options[:params], "optional_query", 0)
+        assert {_, "string"} = List.keyfind(headers, "x-optional-header", 0)
+        assert {_, "string"} = List.keyfind(headers, "x-required-header", 0)
+
         assert {:ok, body_encoded} =
                  Jason.encode(%{
                    "Boolean" => true,
-                   "DateTime" => "2024-01-02T01:23:45Z",
-                   "Enum" => "ENUM_1",
-                   "Integer" => 1,
-                   "Number" => 1.0,
-                   "String" => "string"
+                   "DateTime" => "2024-01-23T01:23:45Z",
+                   "Enum" => "ENUM_2",
+                   "Integer" => 5,
+                   "Number" => 7.0,
+                   "String" => "another_string"
                  })
 
         {:ok,
@@ -30,12 +34,100 @@ defmodule OpenAPIClient.OperationsTest do
       assert {:ok,
               %OpenAPIClient.TestSchema{
                 boolean: true,
-                date_time: ~U[2024-01-02 01:23:45Z],
-                enum: :enum1,
-                integer: 1,
-                number: 1.0,
-                string: "string"
-              }} == OpenAPIClient.Operations.test(base_url: "https://example.com")
+                date_time: ~U[2024-01-23 01:23:45Z],
+                enum: :enum2,
+                integer: 5,
+                number: 7.0,
+                string: "another_string"
+              }} ==
+               OpenAPIClient.Operations.get_test("string",
+                 optional_header: "string",
+                 optional_query: "string",
+                 base_url: "https://example.com"
+               )
+    end
+  end
+
+  describe "set_test/2" do
+    test "[298] performs a request and encodes OpenAPIClient.TestRequestSchema from request's body" do
+      expect(@httpoison, :request, fn :post, "https://example.com/test", body, headers, _ ->
+        assert {_, "application/json"} = List.keyfind(headers, "content-type", 0)
+
+        assert {:ok,
+                %{
+                  "ArrayEnum" => ["DYNAMIC_ENUM_1"],
+                  "Child" => %{"String" => "nested_string_value"},
+                  "NumberEnum" => 2.0,
+                  "StrictEnum" => "STRICT_ENUM_3"
+                }} == Jason.decode(body)
+
+        {:ok, %HTTPoison.Response{status_code: 298}}
+      end)
+
+      assert :ok ==
+               OpenAPIClient.Operations.set_test(
+                 %OpenAPIClient.TestRequestSchema{
+                   array_enum: ["DYNAMIC_ENUM_1"],
+                   child: %OpenAPIClient.TestRequestSchema.Child{string: "nested_string_value"},
+                   number_enum: 2.0,
+                   strict_enum: :strict_enum_3
+                 },
+                 base_url: "https://example.com"
+               )
+    end
+
+    test "[299] performs a request and encodes OpenAPIClient.TestRequestSchema from request's body" do
+      expect(@httpoison, :request, fn :post, "https://example.com/test", body, headers, _ ->
+        assert {_, "application/json"} = List.keyfind(headers, "content-type", 0)
+
+        assert {:ok,
+                %{
+                  "ArrayEnum" => ["DYNAMIC_ENUM_1"],
+                  "Child" => %{"String" => "nested_string_value"},
+                  "NumberEnum" => 2.0,
+                  "StrictEnum" => "STRICT_ENUM_3"
+                }} == Jason.decode(body)
+
+        {:ok, %HTTPoison.Response{status_code: 299}}
+      end)
+
+      assert :ok ==
+               OpenAPIClient.Operations.set_test(
+                 %OpenAPIClient.TestRequestSchema{
+                   array_enum: ["DYNAMIC_ENUM_1"],
+                   child: %OpenAPIClient.TestRequestSchema.Child{string: "nested_string_value"},
+                   number_enum: 2.0,
+                   strict_enum: :strict_enum_3
+                 },
+                 base_url: "https://example.com"
+               )
+    end
+
+    test "[400] performs a request and encodes OpenAPIClient.TestRequestSchema from request's body" do
+      expect(@httpoison, :request, fn :post, "https://example.com/test", body, headers, _ ->
+        assert {_, "application/json"} = List.keyfind(headers, "content-type", 0)
+
+        assert {:ok,
+                %{
+                  "ArrayEnum" => ["DYNAMIC_ENUM_1"],
+                  "Child" => %{"String" => "nested_string_value"},
+                  "NumberEnum" => 2.0,
+                  "StrictEnum" => "STRICT_ENUM_3"
+                }} == Jason.decode(body)
+
+        {:ok, %HTTPoison.Response{status_code: 400}}
+      end)
+
+      assert :error ==
+               OpenAPIClient.Operations.set_test(
+                 %OpenAPIClient.TestRequestSchema{
+                   array_enum: ["DYNAMIC_ENUM_1"],
+                   child: %OpenAPIClient.TestRequestSchema.Child{string: "nested_string_value"},
+                   number_enum: 2.0,
+                   strict_enum: :strict_enum_3
+                 },
+                 base_url: "https://example.com"
+               )
     end
   end
 end
