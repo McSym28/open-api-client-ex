@@ -36,8 +36,8 @@ defmodule OpenAPIClient.MixProject do
       {:pluggable, "~> 1.1"},
       {:oapi_generator,
        git: "../../../open-api-generator", branch: "behaviour_impl", only: [:dev, :test]},
-      {:jason, "~> 1.4", only: [:dev, :test]},
-      {:httpoison, "~> 2.2", only: [:dev, :test]},
+      {:jason, "~> 1.4", optional: true, only: [:dev, :test]},
+      {:httpoison, "~> 2.2", optional: true, only: [:dev, :test]},
       {:mox, "~> 1.1", only: [:dev, :test]},
       {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false},
       {:excoveralls, "~> 0.18", only: :test}
