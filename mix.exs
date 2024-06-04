@@ -12,8 +12,10 @@ defmodule OpenAPIClient.MixProject do
       test_coverage: [tool: ExCoveralls],
       preferred_cli_env: [
         coveralls: :test,
-        "coveralls.html": :test
-      ]
+        "coveralls.html": :test,
+        "test.generate": :test
+      ],
+      aliases: aliases()
     ]
   end
 
@@ -39,6 +41,12 @@ defmodule OpenAPIClient.MixProject do
       {:mox, "~> 1.1", only: [:dev, :test]},
       {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false},
       {:excoveralls, "~> 0.18", only: :test}
+    ]
+  end
+
+  defp aliases do
+    [
+      "test.generate": "api.gen test test/fixture/test.yaml"
     ]
   end
 end
