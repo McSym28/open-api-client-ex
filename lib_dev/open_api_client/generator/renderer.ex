@@ -242,11 +242,8 @@ defmodule OpenAPIClient.Generator.Renderer do
            ]}
         ]
 
-      {:def, _, [{:__fields__, _, [{:\\, _, [_, :t]}]}]} = fields_default_declaration ->
-        [
-          quote(do: @spec(__fields__() :: keyword(OpenAPIClient.Schema.schema_type()))),
-          fields_default_declaration
-        ]
+      {:def, _, [{:__fields__, _, [{:\\, _, _}]}]} = _fields_default_declaration ->
+        []
 
       expression ->
         [expression]
