@@ -292,7 +292,8 @@ defmodule OpenAPIClient.Generator.Processor do
         :ets.insert(schemas_table, {ref, generator_schema_new})
 
       [] ->
-        %SchemaSpec{} = schema_spec = Map.get(schema_specs_by_ref, ref)
+        %SchemaSpec{properties: schema_properties} =
+          schema_spec = Map.get(schema_specs_by_ref, ref)
 
         schema_config = Utils.schema_config(state, module_name, type_name)
         field_configs = Keyword.get(schema_config, :fields, [])
@@ -300,16 +301,15 @@ defmodule OpenAPIClient.Generator.Processor do
         generator_fields =
           Enum.map(fields, fn %Field{name: name} = field ->
             {_, config} = List.keyfind(field_configs, name, 0, {name, []})
-            process_field(field, config)
+            process_field(field, config, Map.get(schema_properties, name), state)
           end)
 
         extra_fields =
           state
           |> Utils.get_oapi_generator_config(:extra_fields, [])
-          |> Enum.map(fn {key, type} ->
+          |> Enum.map(fn {key, _type} ->
             %GeneratorField{
               old_name: key,
-              type: type,
               enforce: true,
               extra: true
             }
@@ -325,16 +325,26 @@ defmodule OpenAPIClient.Generator.Processor do
     end
   end
 
-  defp process_field(%Field{type: {:enum, enum_values}} = field, config) do
+  defp process_field(%Field{type: {:enum, enum_values}} = field, config, schema_spec, state) do
     %GeneratorField{field: field_new} =
-      generator_field = process_field(%Field{field | type: {:string, :generic}}, config)
+      generator_field =
+      process_field(%Field{field | type: {:string, :generic}}, config, schema_spec, state)
 
     enum_config = Keyword.get(config, :enum, [])
     enum_options = Keyword.get(enum_config, :options, [])
     enum_strict = Keyword.get(enum_config, :strict, false)
 
-    {enum_values_new, {enum_type, enum_options}} =
-      Enum.map_reduce(enum_values, {:unknown, []}, &process_enum_value(&1, &2, enum_options))
+    enum_type =
+      with %SchemaSpec{} <- schema_spec,
+           {_state, enum_type} <-
+             OpenAPI.Processor.Type.from_schema(state, %SchemaSpec{schema_spec | enum: nil}) do
+        enum_type
+      else
+        _ -> :unknown
+      end
+
+    {enum_values_new, enum_options} =
+      Enum.map_reduce(enum_values, [], &process_enum_value(&1, &2, enum_options))
 
     type_new = {:enum, enum_values_new}
     field_new = %Field{field_new | type: type_new}
@@ -342,36 +352,39 @@ defmodule OpenAPIClient.Generator.Processor do
     %GeneratorField{
       generator_field
       | field: field_new,
-        type:
-          if(enum_type == :unknown or enum_strict,
-            do: type_new,
-            else: {:union, [type_new, enum_type]}
-          ),
         enum_options:
           Enum.sort_by(enum_options, fn
             {atom, _string} -> {0, atom}
             value -> {1, value}
           end),
-        enum_strict: enum_strict
-    }
-  end
-
-  defp process_field(%Field{type: {:array, {:enum, _} = enum_type}} = field, config) do
-    %GeneratorField{
-      field: %Field{type: type_new} = field_new,
-      type: generator_field_type
-    } = generator_field = process_field(%Field{field | type: enum_type}, config)
-
-    %GeneratorField{
-      generator_field
-      | field: %Field{field_new | type: {:array, type_new}},
-        type: {:array, generator_field_type}
+        enum_strict: enum_strict,
+        enum_type: enum_type
     }
   end
 
   defp process_field(
-         %Field{name: name, required: required, nullable: nullable, type: type} = field,
-         config
+         %Field{type: {:array, {:enum, _} = enum_type}} = field,
+         config,
+         schema_spec,
+         state
+       ) do
+    items_spec =
+      case schema_spec do
+        %SchemaSpec{type: "array", items: %SchemaSpec{} = items_spec} -> items_spec
+        _ -> nil
+      end
+
+    %GeneratorField{field: %Field{type: type_new} = field_new} =
+      generator_field = process_field(%Field{field | type: enum_type}, config, items_spec, state)
+
+    %GeneratorField{generator_field | field: %Field{field_new | type: {:array, type_new}}}
+  end
+
+  defp process_field(
+         %Field{name: name, required: required, nullable: nullable} = field,
+         config,
+         _schema_spec,
+         _state
        ) do
     name_new = Keyword.get_lazy(config, :name, fn -> snakesize_name(name) end)
     field_new = %Field{field | name: name_new}
@@ -387,39 +400,26 @@ defmodule OpenAPIClient.Generator.Processor do
     %GeneratorField{
       field: field_new,
       old_name: name,
-      type: type,
       enforce: required and not nullable,
       examples: examples
     }
   end
 
-  defp process_enum_value(value, {type, acc}, options) do
+  defp process_enum_value(value, acc, options) do
     {_, config} = List.keyfind(options, value, 0, {value, []})
 
-    type_new =
-      cond do
-        is_binary(value) -> {:string, :generic}
-        is_number(value) and type in [:integer, :boolean, :unknown] -> :number
-        is_integer(value) and type in [:boolean, :unknown] -> :integer
-        is_boolean(value) and type in [:unknown] -> :boolean
-        :else -> type
-      end
-
-    {new_value, acc_new} =
-      value
-      |> is_binary()
-      |> if do
-        {:ok,
-         Keyword.get_lazy(config, :value, fn -> value |> snakesize_name() |> String.to_atom() end)}
-      else
-        Keyword.fetch(config, :value)
-      end
-      |> case do
-        {:ok, new_value} -> {new_value, [{new_value, value} | acc]}
-        :error -> {value, [value | acc]}
-      end
-
-    {new_value, {type_new, acc_new}}
+    value
+    |> is_binary()
+    |> if do
+      {:ok,
+       Keyword.get_lazy(config, :value, fn -> value |> snakesize_name() |> String.to_atom() end)}
+    else
+      Keyword.fetch(config, :value)
+    end
+    |> case do
+      {:ok, new_value} -> {new_value, [{new_value, value} | acc]}
+      :error -> {value, [value | acc]}
+    end
   end
 
   defp append_field_examples(field, [], _state), do: field

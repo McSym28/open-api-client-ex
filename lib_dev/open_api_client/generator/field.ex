@@ -5,18 +5,18 @@ defmodule OpenAPIClient.Generator.Field do
           enforce: boolean(),
           enum_options: [OpenAPIClient.Schema.enum_option()],
           enum_strict: boolean(),
-          type: OpenAPI.Processor.Type.t(),
+          enum_type: OpenAPI.Processor.Type.t(),
           extra: boolean(),
           examples: list()
         }
 
-  @enforce_keys [:old_name, :type]
+  @enforce_keys [:old_name]
   defstruct field: nil,
             old_name: nil,
             enforce: false,
             enum_options: [],
             enum_strict: false,
-            type: nil,
+            enum_type: nil,
             extra: false,
             examples: []
 end

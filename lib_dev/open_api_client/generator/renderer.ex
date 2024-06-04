@@ -157,7 +157,7 @@ defmodule OpenAPIClient.Generator.Renderer do
         fields_new =
           Enum.flat_map(all_fields, fn
             %GeneratorField{field: nil} -> []
-            %GeneratorField{field: field, type: type} -> [%Field{field | type: type}]
+            %GeneratorField{} = generator_field -> [prepare_field_type(generator_field)]
           end)
 
         {%Schema{schema | fields: fields_new}, [{:const, type} | types]}
@@ -905,6 +905,46 @@ defmodule OpenAPIClient.Generator.Renderer do
 
   defp field_to_type(%GeneratorField{field: %Field{type: type}}, state),
     do: Util.to_readable_type(state, type)
+
+  defp prepare_field_type(%GeneratorField{
+         field: %Field{type: {:enum, enum_options}} = field,
+         enum_strict: enum_strict,
+         enum_type: enum_type
+       }) do
+    enum_options_new =
+      enum_options
+      |> Enum.map(fn
+        number when is_number(number) and not is_integer(number) -> :number
+        string when is_binary(string) -> {:string, :generic}
+        other -> {:const, other}
+      end)
+
+    union_types =
+      if not enum_strict && enum_type do
+        if enum_type == :number do
+          enum_options_new ++ [:number]
+        else
+          enum_options_new ++ [enum_type]
+        end
+      else
+        enum_options_new
+      end
+
+    %Field{field | type: {:union, union_types}}
+  end
+
+  defp prepare_field_type(
+         %GeneratorField{field: %Field{type: {:array, {:enum, _} = enum_type}} = field} =
+           generator_field
+       ) do
+    %Field{type: type_new} =
+      field_new =
+      prepare_field_type(%GeneratorField{generator_field | field: %Field{field | type: enum_type}})
+
+    %Field{field_new | type: {:array, type_new}}
+  end
+
+  defp prepare_field_type(%GeneratorField{field: field}), do: field
 
   defp generate_operation_test_functions(%Operation{responses: []}, _state), do: []
 

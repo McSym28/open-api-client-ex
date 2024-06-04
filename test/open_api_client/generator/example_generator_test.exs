@@ -12,30 +12,28 @@ defmodule OpenAPIClient.Generator.ExampleGeneratorTest do
   @integer_field %GeneratorField{
     field: %Field{name: "integer", type: :integer},
     old_name: "Integer",
-    type: :integer,
     examples: [2, 3]
   }
   @string_field %GeneratorField{
     field: %Field{name: "string", type: {:string, :generic}},
     old_name: "String",
-    type: {:string, :generic},
     examples: ["string1", "string1"]
   }
   @enum_field %GeneratorField{
     field: %Field{name: "enum", type: {:enum, ["ENUM1", "ENUM2"]}},
     old_name: "Enum",
-    type: {:enum, ["enum1", "enum2"]},
     enum_options: [enum1: "ENUM1", enum2: "ENUM2"],
+    enum_type: {:string, :generic},
     examples: ["ENUM1", "ENUM2"]
   }
   @array_enum_field %GeneratorField{
     field: %Field{name: "array_enum", type: {:array, {:enum, ["ENUM1", "ENUM2"]}}},
     old_name: "ArrayEnum",
-    type: {:array, {:enum, ["enum1", "enum2"]}},
     enum_options: [enum1: "ENUM1", enum2: "ENUM2"],
+    enum_type: {:string, :generic},
     examples: [["ENUM1", "ENUM2"]]
   }
-  @extra_field %GeneratorField{old_name: "Extra", type: :integer}
+  @extra_field %GeneratorField{old_name: "Extra"}
 
   @schema %GeneratorSchema{
     fields: [@integer_field, @string_field, @enum_field, @array_enum_field, @extra_field]
