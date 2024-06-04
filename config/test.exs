@@ -9,7 +9,8 @@ config :oapi_generator,
     renderer: OpenAPIClient.Generator.Renderer,
     output: [
       base_module: OpenAPIClient,
-      location: "test/support"
+      location: "test/support",
+      schema_subdirectory: "schemas"
     ]
   ]
 
