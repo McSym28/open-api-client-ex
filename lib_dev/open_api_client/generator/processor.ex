@@ -331,6 +331,7 @@ defmodule OpenAPIClient.Generator.Processor do
 
     enum_config = Keyword.get(config, :enum, [])
     enum_options = Keyword.get(enum_config, :options, [])
+    enum_strict = Keyword.get(enum_config, :strict, false)
 
     {enum_values_new, {enum_type, enum_options}} =
       Enum.map_reduce(enum_values, {:unknown, []}, &process_enum_value(&1, &2, enum_options))
@@ -341,13 +342,17 @@ defmodule OpenAPIClient.Generator.Processor do
     %GeneratorField{
       generator_field
       | field: field_new,
-        type: if(enum_type == :unknown, do: type_new, else: {:union, [type_new, enum_type]}),
+        type:
+          if(enum_type == :unknown or enum_strict,
+            do: type_new,
+            else: {:union, [type_new, enum_type]}
+          ),
         enum_options:
           Enum.sort_by(enum_options, fn
             {atom, _string} -> {0, atom}
             value -> {1, value}
           end),
-        enum_strict: Keyword.get(enum_config, :strict, false)
+        enum_strict: enum_strict
     }
   end
 
