@@ -668,8 +668,10 @@ defmodule OpenAPIClient.Generator.Renderer do
             end)
             |> render_params_parse()
 
+          operation_profile = Utils.get_config(state, :aliased_profile, state.profile)
+
           {operation_assigns, private_assigns} =
-            Enum.flat_map_reduce(map_arguments, %{__profile__: state.profile}, fn
+            Enum.flat_map_reduce(map_arguments, %{__profile__: operation_profile}, fn
               {:url, value}, acc ->
                 {[{:request_url, value}], acc}
 
@@ -769,7 +771,11 @@ defmodule OpenAPIClient.Generator.Renderer do
               quote do
                 unquote(operation)
                 |> OpenAPIClient.Client.Operation.put_private(
-                  unquote(Map.to_list(private_assigns))
+                  unquote(
+                    private_assigns
+                    |> Map.to_list()
+                    |> Enum.sort_by(fn {key, _} -> key end)
+                  )
                 )
               end
             else
