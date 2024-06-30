@@ -20,7 +20,6 @@ defmodule OpenAPIClient.MixProject do
   end
 
   defp elixirc_paths(:test), do: ["test/support" | elixirc_paths(:dev)]
-  defp elixirc_paths(:dev), do: ["lib_dev" | elixirc_paths(:prod)]
   defp elixirc_paths(_), do: ["lib"]
 
   # Run "mix help compile.app" to learn about applications.
