@@ -1,6 +1,10 @@
 # OpenAPIClient
 
-OpenAPI generator AND client. Based on/uses the great package [open-api-generator](https://github.com/aj-foster/open-api-generator) and inspired by [open-api-github](https://github.com/aj-foster/open-api-github) (both projects created by [
+_OpenAPI generator AND client for Elixir._
+
+---
+
+Based on/uses the great package [open-api-generator](https://github.com/aj-foster/open-api-generator) and inspired by [open-api-github](https://github.com/aj-foster/open-api-github) (both projects created by [
 AJ Foster](https://github.com/aj-foster))
 
 ## Differences from [open-api-generator](https://github.com/aj-foster/open-api-generator):
