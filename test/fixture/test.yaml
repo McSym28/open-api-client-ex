@@ -34,20 +34,29 @@ paths:
       parameters: 
         - in: header
           name: X-Required-Header
+          description: Required header parameter
           required: true
           schema:
             type: string
           example: required_header
         - in: header
           name: X-Optional-Header
+          description: Optional header parameter
           schema:
             type: string
           example: optional_header
         - in: query
           name: optional_query
+          description: Optional query parameter
           schema:
             type: string
           example: optional-query
+        - in: query
+          name: datetime_query
+          description: DateTime query parameter
+          schema:
+            type: string
+            format: date-time
       responses:
         "200":
           description: "Success"

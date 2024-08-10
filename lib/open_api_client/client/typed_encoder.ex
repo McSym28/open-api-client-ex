@@ -35,7 +35,7 @@ defmodule OpenAPIClient.Client.TypedEncoder do
       iex> #{__MODULE__}.encode(1.0, :number, [], #{__MODULE__})
       {:ok, 1.0}
       iex> #{__MODULE__}.encode(~D[2024-02-03], {:string, :date}, [], #{__MODULE__})
-      {:ok, ~D[2024-02-03]}
+      {:ok, "2024-02-03"}
       iex> #{__MODULE__}.encode("string", {:string, :generic}, [], #{__MODULE__})
       {:ok, "string"}
 
@@ -78,11 +78,18 @@ defmodule OpenAPIClient.Client.TypedEncoder do
          source: path
        )}
 
-  def encode(%Date{} = value, {:string, :date}, _, _), do: {:ok, value}
-  def encode(%DateTime{} = value, {:string, :date}, _, _), do: {:ok, DateTime.to_date(value)}
-  def encode(%DateTime{} = value, {:string, :date_time}, _, _), do: {:ok, value}
-  def encode(%Time{} = value, {:string, :time}, _, _), do: {:ok, value}
-  def encode(%DateTime{} = value, {:string, :time}, _, _), do: {:ok, DateTime.to_time(value)}
+  def encode(%Date{} = value, {:string, :date}, _, _), do: {:ok, Date.to_iso8601(value)}
+
+  def encode(%DateTime{} = value, {:string, :date} = type, path, caller_module),
+    do: encode(DateTime.to_date(value), type, path, caller_module)
+
+  def encode(%DateTime{} = value, {:string, :date_time}, _, _),
+    do: {:ok, DateTime.to_iso8601(value)}
+
+  def encode(%Time{} = value, {:string, :time}, _, _), do: {:ok, Time.to_iso8601(value)}
+
+  def encode(%DateTime{} = value, {:string, :time} = type, path, caller_module),
+    do: encode(DateTime.to_time(value), type, path, caller_module)
 
   def encode(_value, {:string, string_format}, path, _)
       when string_format in [:date, :date_time, :time],

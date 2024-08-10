@@ -7,6 +7,7 @@ defmodule OpenAPIClient.Client.TypedDecoder do
           list(
             String.t()
             | nonempty_list(non_neg_integer())
+            | {:parameter, atom(), String.t()}
             | {:request_body, OpenAPIClient.Client.Operation.content_type() | nil}
             | {:response_body, OpenAPIClient.Client.Operation.response_status_code(),
                OpenAPIClient.Client.Operation.content_type() | nil}

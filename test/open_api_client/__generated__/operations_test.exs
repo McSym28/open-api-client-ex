@@ -9,6 +9,7 @@ defmodule OpenAPIClient.OperationsTest do
   describe "get_test/2" do
     test "[200] performs a request and encodes OpenAPIClient.TestSchema from response's body" do
       expect(@httpoison, :request, fn :get, "https://example.com/test", _, headers, options ->
+        assert {_, "2024-01-02T01:23:45Z"} = List.keyfind(options[:params], "datetime_query", 0)
         assert {_, "string"} = List.keyfind(options[:params], "optional_query", 0)
         assert {_, "string"} = List.keyfind(headers, "x-optional-header", 0)
         assert {_, "string"} = List.keyfind(headers, "x-required-header", 0)
@@ -43,6 +44,7 @@ defmodule OpenAPIClient.OperationsTest do
                OpenAPIClient.Operations.get_test("string",
                  optional_header: "string",
                  optional_query: "string",
+                 datetime_query: ~U[2024-01-02 01:23:45Z],
                  base_url: "https://example.com"
                )
     end

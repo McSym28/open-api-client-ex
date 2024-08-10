@@ -12,15 +12,20 @@ defmodule OpenAPIClient.Operations do
 
   ## Arguments
 
-    * `required_header`: ["X-Required-Header"]
-    * `optional_query`
-    * `optional_header`: ["X-Optional-Header"]. Default value obtained through a call to `Application.get_env(:open_api_client_ex, :required_header)`
+    * `required_header`: ["X-Required-Header"] Required header parameter
+
+  ## Options
+
+    * `datetime_query`: DateTime query parameter
+    * `optional_query`: Optional query parameter
+    * `optional_header`: ["X-Optional-Header"] Optional header parameter. Default value obtained through a call to `Application.get_env(:open_api_client_ex, :required_header)`
     * `base_url`: Request's base URL. Default value is taken from `@base_url`
     * `client_pipeline`: Client pipeline for making a request. Default value obtained through a call to `OpenAPIClient.Utils.get_config(__operation__, :client_pipeline)}
 
   """
   @spec get_test(String.t(), [
-          {:optional_query, String.t()}
+          {:datetime_query, DateTime.t()}
+          | {:optional_query, String.t()}
           | {:optional_header, String.t()}
           | {:base_url, String.t() | URI.t()}
           | {:client_pipeline, OpenAPIClient.Client.pipeline()}
@@ -51,17 +56,29 @@ defmodule OpenAPIClient.Operations do
 
     query_params =
       opts
-      |> Keyword.take([:optional_query])
-      |> Enum.map(fn {:optional_query, value} ->
-        {:ok, value_new} =
-          typed_encoder.encode(
-            value,
-            {:string, :generic},
-            [{:parameter, :query, "optional_query"}, [{"/test", :get}]],
-            typed_encoder
-          )
+      |> Keyword.take([:datetime_query, :optional_query])
+      |> Enum.map(fn
+        {:optional_query, value} ->
+          {:ok, value_new} =
+            typed_encoder.encode(
+              value,
+              {:string, :generic},
+              [{:parameter, :query, "optional_query"}, [{"/test", :get}]],
+              typed_encoder
+            )
 
-        {"optional_query", value_new}
+          {"optional_query", value_new}
+
+        {:datetime_query, value} ->
+          {:ok, value_new} =
+            typed_encoder.encode(
+              value,
+              {:string, :date_time},
+              [{:parameter, :query, "datetime_query"}, [{"/test", :get}]],
+              typed_encoder
+            )
+
+          {"datetime_query", value_new}
       end)
       |> Map.new()
 

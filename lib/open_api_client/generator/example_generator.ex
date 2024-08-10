@@ -17,7 +17,7 @@ if Mix.env() in [:dev, :test] do
             list(
               String.t()
               | nonempty_list(non_neg_integer())
-              | {:parameters, String.t()}
+              | {:parameter, atom(), String.t()}
               | {:request_body, OpenAPIClient.Client.Operation.content_type()}
               | {:response_body, OpenAPIClient.Client.Operation.response_status_code(),
                  OpenAPIClient.Client.Operation.content_type()}

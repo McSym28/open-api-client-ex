@@ -1113,6 +1113,10 @@ if Mix.env() in [:dev, :test] do
 
       example_generator = Utils.get_config(state, :example_generator, ExampleGenerator)
 
+      operation_profile = Utils.get_config(state, :aliased_profile, state.profile)
+      typed_decoder = OpenAPIClient.Utils.get_config(operation_profile, :typed_decoder)
+      typed_decoder_path = [{request_path, request_method}]
+
       {request_content_type, request_schema} =
         select_example_schema(request_body, :decoders, state)
 
@@ -1207,23 +1211,40 @@ if Mix.env() in [:dev, :test] do
             fn
               {:param,
                %GeneratorParam{
-                 param: %Param{name: name, location: location},
+                 param: %Param{name: name, location: location, value_type: type},
                  old_name: old_name,
-                 static: static
+                 static: static,
+                 schema_type: schema_type
                } = param},
               acc ->
+                path_new = [{:parameter, location, old_name} | typed_decoder_path]
+
+                type_new = schema_type_to_readable_type(type, schema_type, state)
+
                 param_example =
                   example_generator.generate(
                     param,
-                    [{:parameters, old_name}, {request_path, request_method}],
+                    path_new,
                     example_generator
+                  )
+
+                {:ok, param_example_decoded} =
+                  typed_decoder.decode(
+                    param_example,
+                    type_new,
+                    path_new,
+                    typed_decoder
                   )
 
                 acc_new =
                   if static do
-                    Map.update!(acc, :call_arguments, &[param_example | &1])
+                    Map.update!(acc, :call_arguments, &[param_example_decoded | &1])
                   else
-                    Map.update!(acc, :call_opts, &[{String.to_atom(name), param_example} | &1])
+                    Map.update!(
+                      acc,
+                      :call_opts,
+                      &[{String.to_atom(name), param_example_decoded} | &1]
+                    )
                   end
 
                 case location do
