@@ -1,5 +1,46 @@
 if Mix.env() in [:dev, :test] do
   defmodule OpenAPIClient.Generator.Renderer do
+    defmacro __using__(_opts) do
+      quote do
+        use OpenAPI.Renderer
+
+        @impl OpenAPI.Renderer
+        defdelegate render(state, file), to: OpenAPIClient.Generator.Renderer
+
+        @impl OpenAPI.Renderer
+        defdelegate render_default_client(state, file), to: OpenAPIClient.Generator.Renderer
+
+        @impl OpenAPI.Renderer
+        defdelegate render_schema(state, file), to: OpenAPIClient.Generator.Renderer
+
+        @impl OpenAPI.Renderer
+        defdelegate render_schema_field_function(state, schemas),
+          to: OpenAPIClient.Generator.Renderer
+
+        @impl OpenAPI.Renderer
+        defdelegate render_schema_struct(state, schemas), to: OpenAPIClient.Generator.Renderer
+
+        @impl OpenAPI.Renderer
+        defdelegate render_schema_types(state, schemas), to: OpenAPIClient.Generator.Renderer
+
+        @impl OpenAPI.Renderer
+        defdelegate render_operations(state, file), to: OpenAPIClient.Generator.Renderer
+
+        @impl OpenAPI.Renderer
+        defdelegate render_operation_function(state, operation),
+          to: OpenAPIClient.Generator.Renderer
+
+        defoverridable render: 2,
+                       render_default_client: 2,
+                       render_operations: 2,
+                       render_operation_function: 2,
+                       render_schema: 2,
+                       render_schema_field_function: 2,
+                       render_schema_struct: 2,
+                       render_schema_types: 2
+      end
+    end
+
     use OpenAPI.Renderer
     alias OpenAPI.Renderer.{File, Util}
     alias OpenAPI.Processor.{Operation, Schema}
