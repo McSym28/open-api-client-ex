@@ -27,12 +27,16 @@ if Mix.env() in [:dev, :test] do
         defdelegate render_operations(state, file), to: OpenAPIClient.Generator.Renderer
 
         @impl OpenAPI.Renderer
+        defdelegate render_operation_spec(state, operation), to: OpenAPIClient.Generator.Renderer
+
+        @impl OpenAPI.Renderer
         defdelegate render_operation_function(state, operation),
           to: OpenAPIClient.Generator.Renderer
 
         defoverridable render: 2,
                        render_default_client: 2,
                        render_operations: 2,
+                       render_operation_spec: 2,
                        render_operation_function: 2,
                        render_schema: 2,
                        render_schema_field_function: 2,
