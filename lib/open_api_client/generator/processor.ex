@@ -359,22 +359,22 @@ if Mix.env() in [:dev, :test] do
     end
 
     defp process_field(%Field{type: {:enum, enum_values}} = field, config, schema_spec, state) do
-      %GeneratorField{field: field_new} =
-        generator_field =
-        process_field(%Field{field | type: {:string, :generic}}, config, schema_spec, state)
-
-      enum_config = Keyword.get(config, :enum, [])
-      enum_options = Keyword.get(enum_config, :options, [])
-      enum_strict = Keyword.get(enum_config, :strict, false)
-
       enum_type =
         with %SchemaSpec{} <- schema_spec,
              {_state, enum_type} <-
                OpenAPI.Processor.Type.from_schema(state, %SchemaSpec{schema_spec | enum: nil}) do
           enum_type
         else
-          _ -> :unknown
+          _ -> {:string, :generic}
         end
+
+      %GeneratorField{field: field_new, default: default} =
+        generator_field =
+        process_field(%Field{field | type: enum_type}, config, schema_spec, state)
+
+      enum_config = Keyword.get(config, :enum, [])
+      enum_options = Keyword.get(enum_config, :options, [])
+      enum_strict = Keyword.get(enum_config, :strict, false)
 
       {enum_values_new, enum_options} =
         Enum.map_reduce(enum_values, [], &process_enum_value(&1, &2, enum_options))
@@ -382,16 +382,24 @@ if Mix.env() in [:dev, :test] do
       type_new = {:enum, enum_values_new}
       field_new = %Field{field_new | type: type_new}
 
+      enum_options_new =
+        Enum.sort_by(enum_options, fn
+          {atom, _string} -> {0, atom}
+          value -> {1, value}
+        end)
+
+      typed_decoder = Utils.get_config(state, :typed_decoder, OpenAPIClient.Client.TypedDecoder)
+
+      {:ok, default_new} =
+        typed_decoder.decode(default, {:enum, enum_options_new}, [], typed_decoder)
+
       %GeneratorField{
         generator_field
         | field: field_new,
-          enum_options:
-            Enum.sort_by(enum_options, fn
-              {atom, _string} -> {0, atom}
-              value -> {1, value}
-            end),
+          enum_options: enum_options_new,
           enum_strict: enum_strict,
-          enum_type: enum_type
+          enum_type: enum_type,
+          default: default_new
       }
     end
 
@@ -407,21 +415,45 @@ if Mix.env() in [:dev, :test] do
           _ -> nil
         end
 
-      %GeneratorField{field: %Field{type: type_new} = field_new} =
+      %GeneratorField{field: %Field{type: type_new} = field_new, default: default} =
         generator_field =
         process_field(%Field{field | type: enum_type}, config, items_spec, state)
 
-      %GeneratorField{generator_field | field: %Field{field_new | type: {:array, type_new}}}
+      default_new =
+        if default do
+          [default]
+        else
+          default
+        end
+
+      %GeneratorField{
+        generator_field
+        | field: %Field{field_new | type: {:array, type_new}},
+          default: default_new
+      }
     end
 
     defp process_field(
-           %Field{name: name, required: required, nullable: nullable} = field,
+           %Field{name: name, required: required, nullable: nullable, type: type} = field,
            config,
-           _schema_spec,
-           _state
+           schema_spec,
+           state
          ) do
       name_new = Keyword.get_lazy(config, :name, fn -> snakesize_name(name) end)
       field_new = %Field{field | name: name_new}
+
+      default =
+        case schema_spec do
+          %SchemaSpec{default: default} when not is_nil(default) ->
+            typed_decoder =
+              Utils.get_config(state, :typed_decoder, OpenAPIClient.Client.TypedDecoder)
+
+            {:ok, default_new} = typed_decoder.decode(default, type, [], typed_decoder)
+            default_new
+
+          _ ->
+            nil
+        end
 
       examples =
         config
@@ -435,7 +467,8 @@ if Mix.env() in [:dev, :test] do
         field: field_new,
         old_name: name,
         enforce: required and not nullable,
-        examples: examples
+        examples: examples,
+        default: default
       }
     end
 

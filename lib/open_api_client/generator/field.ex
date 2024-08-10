@@ -8,7 +8,8 @@ if Mix.env() in [:dev, :test] do
             enum_strict: boolean(),
             enum_type: OpenAPI.Processor.Type.t(),
             extra: boolean(),
-            examples: list()
+            examples: list(),
+            default: term()
           }
 
     @enforce_keys [:old_name]
@@ -19,6 +20,7 @@ if Mix.env() in [:dev, :test] do
               enum_strict: false,
               enum_type: nil,
               extra: false,
-              examples: []
+              examples: [],
+              default: nil
   end
 end
