@@ -54,6 +54,7 @@ if Mix.env() in [:dev, :test] do
     alias OpenAPIClient.Client.TypedDecoder
     alias OpenAPI.Spec.Path.Operation, as: OperationSpec
     alias OpenAPIClient.Generator.ExampleGenerator
+    alias OpenAPIClient.Generator.SchemaType
     require Logger
     import Mox
 
@@ -234,7 +235,11 @@ if Mix.env() in [:dev, :test] do
             [{_, %GeneratorSchema{fields: all_fields}}] = :ets.lookup(:schemas, ref)
 
             Enum.reduce(all_fields, struct_fields, fn
-              %GeneratorField{field: %Field{name: name}, enforce: true, default: default},
+              %GeneratorField{
+                field: %Field{name: name},
+                enforce: true,
+                schema_type: %SchemaType{default: default}
+              },
               struct_fields ->
                 name_atom = String.to_atom(name)
                 List.keyreplace(struct_fields, name_atom, 0, {name_atom, {true, default}})
@@ -676,7 +681,10 @@ if Mix.env() in [:dev, :test] do
             param_assignments =
               all_params
               |> Enum.flat_map(fn
-                %GeneratorParam{default: default, param: %Param{name: name}}
+                %GeneratorParam{
+                  param: %Param{name: name},
+                  schema_type: %SchemaType{default: default}
+                }
                 when not is_nil(default) ->
                   atom = String.to_atom(name)
                   variable = Macro.var(atom, nil)
@@ -872,7 +880,10 @@ if Mix.env() in [:dev, :test] do
     defp render_params_parse(params) do
       {static_params, dynamic_params} =
         params
-        |> Enum.group_by(fn %GeneratorParam{static: static, default: default} ->
+        |> Enum.group_by(fn %GeneratorParam{
+                              static: static,
+                              schema_type: %SchemaType{default: default}
+                            } ->
           static or not is_nil(default)
         end)
         |> then(fn map -> {Map.get(map, true, []), Map.get(map, false, [])} end)
@@ -944,15 +955,17 @@ if Mix.env() in [:dev, :test] do
     defp field_to_type(
            %GeneratorField{
              field: %Field{type: {:enum, _}},
-             enum_options: enum_options,
-             enum_strict: true
+             schema_type: %SchemaType{enum: %SchemaType.Enum{options: enum_options, strict: true}}
            },
            _state
          ),
          do: {:enum, enum_options}
 
     defp field_to_type(
-           %GeneratorField{field: %Field{type: {:enum, _}}, enum_options: enum_options},
+           %GeneratorField{
+             field: %Field{type: {:enum, _}},
+             schema_type: %SchemaType{enum: %SchemaType.Enum{options: enum_options}}
+           },
            _state
          ),
          do: {:enum, enum_options ++ [:not_strict]}
@@ -971,8 +984,7 @@ if Mix.env() in [:dev, :test] do
 
     defp prepare_field_type(%GeneratorField{
            field: %Field{type: {:enum, enum_options}} = field,
-           enum_strict: enum_strict,
-           enum_type: enum_type
+           schema_type: %SchemaType{enum: %SchemaType.Enum{strict: enum_strict, type: enum_type}}
          }) do
       enum_options_new =
         enum_options

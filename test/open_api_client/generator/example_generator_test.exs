@@ -6,32 +6,35 @@ defmodule OpenAPIClient.Generator.ExampleGeneratorTest do
   alias OpenAPIClient.Generator.Param, as: GeneratorParam
   alias OpenAPIClient.Generator.Schema, as: GeneratorSchema
   alias OpenAPIClient.Generator.Field, as: GeneratorField
+  alias OpenAPIClient.Generator.SchemaType
 
   doctest ExampleGenerator
 
   @integer_field %GeneratorField{
     field: %Field{name: "integer", type: :integer},
     old_name: "Integer",
-    examples: [2, 3]
+    schema_type: %SchemaType{examples: [2, 3]}
   }
   @string_field %GeneratorField{
     field: %Field{name: "string", type: {:string, :generic}},
     old_name: "String",
-    examples: ["string1", "string1"]
+    schema_type: %SchemaType{examples: ["string1", "string1"]}
   }
   @enum_field %GeneratorField{
     field: %Field{name: "enum", type: {:enum, ["ENUM1", "ENUM2"]}},
     old_name: "Enum",
-    enum_options: [enum1: "ENUM1", enum2: "ENUM2"],
-    enum_type: {:string, :generic},
-    examples: ["ENUM1", "ENUM2"]
+    schema_type: %SchemaType{
+      enum: %SchemaType.Enum{options: [enum1: "ENUM1", enum2: "ENUM2"], type: {:string, :generic}},
+      examples: ["ENUM1", "ENUM2"]
+    }
   }
   @array_enum_field %GeneratorField{
     field: %Field{name: "array_enum", type: {:array, {:enum, ["ENUM1", "ENUM2"]}}},
     old_name: "ArrayEnum",
-    enum_options: [enum1: "ENUM1", enum2: "ENUM2"],
-    enum_type: {:string, :generic},
-    examples: [["ENUM1", "ENUM2"]]
+    schema_type: %SchemaType{
+      enum: %SchemaType.Enum{options: [enum1: "ENUM1", enum2: "ENUM2"], type: {:string, :generic}},
+      examples: [["ENUM1", "ENUM2"]]
+    }
   }
   @extra_field %GeneratorField{old_name: "Extra"}
 
@@ -42,7 +45,7 @@ defmodule OpenAPIClient.Generator.ExampleGeneratorTest do
   @integer_param %GeneratorParam{
     param: %Param{name: "integer", location: :header, value_type: :integer},
     old_name: "Integer",
-    examples: [2, 3]
+    schema_type: %SchemaType{examples: [2, 3]}
   }
 
   @clauses [
@@ -69,12 +72,13 @@ defmodule OpenAPIClient.Generator.ExampleGeneratorTest do
     {:any, {:pipe, quote(do: is_map())}},
     {quote(do: @integer_field), "integer field", {:pipe, quote(do: is_integer())}},
     {quote(do: @string_field), "string field", {:pipe, quote(do: is_binary())}},
-    {quote(do: %GeneratorField{@integer_field | examples: []}), "integer field without examples",
-     {:pipe, quote(do: is_integer())}},
-    {quote(do: %GeneratorField{@enum_field | examples: []}), "enum field",
-     {:pipe, quote(do: is_binary())}},
-    {quote(do: %GeneratorField{@array_enum_field | examples: []}), "array of enums field",
-     {:pipe, quote(do: Enum.all?(&is_binary/1))}},
+    {quote(do: put_in(@integer_field, [Access.key!(:schema_type), Access.key!(:examples)], [])),
+     "integer field without examples", {:pipe, quote(do: is_integer())}},
+    {quote(do: put_in(@enum_field, [Access.key!(:schema_type), Access.key!(:examples)], [])),
+     "enum field", {:pipe, quote(do: is_binary())}},
+    {quote(
+       do: put_in(@array_enum_field, [Access.key!(:schema_type), Access.key!(:examples)], [])
+     ), "array of enums field", {:pipe, quote(do: Enum.all?(&is_binary/1))}},
     {quote(do: @schema), "schema", {:pipe, quote(do: is_map())}},
     {quote(do: @integer_param), "integer param", {:pipe, quote(do: is_integer())}}
   ]

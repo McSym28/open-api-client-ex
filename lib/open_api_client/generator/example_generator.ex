@@ -1,5 +1,6 @@
 if Mix.env() in [:dev, :test] do
   defmodule OpenAPIClient.Generator.ExampleGenerator do
+    alias OpenAPIClient.Generator.SchemaType
     alias OpenAPI.Processor.Schema.Field
     alias OpenAPI.Processor.Operation.Param
     alias OpenAPIClient.Generator.Param, as: GeneratorParam
@@ -72,17 +73,29 @@ if Mix.env() in [:dev, :test] do
     def generate({:enum, [{_atom, value} | _]}, _path, _caller_module), do: value
     def generate({:enum, [value | _]}, _path, _caller_module), do: value
     def generate(type, _path, _caller_module) when type in [:any, :map], do: %{"a" => "b"}
-    def generate(%GeneratorField{examples: [value | _]}, _path, _caller_module), do: value
 
     def generate(
-          %GeneratorField{field: %Field{type: {:array, {:enum, _}}}, enum_options: enum_options},
+          %GeneratorField{schema_type: %SchemaType{examples: [value | _]}},
+          _path,
+          _caller_module
+        ),
+        do: value
+
+    def generate(
+          %GeneratorField{
+            field: %Field{type: {:array, {:enum, _}}},
+            schema_type: %SchemaType{enum: %SchemaType.Enum{options: enum_options}}
+          },
           path,
           caller_module
         ),
         do: caller_module.generate({:array, {:enum, enum_options}}, path, caller_module)
 
     def generate(
-          %GeneratorField{field: %Field{type: {:enum, _}}, enum_options: enum_options},
+          %GeneratorField{
+            field: %Field{type: {:enum, _}},
+            schema_type: %SchemaType{enum: %SchemaType.Enum{options: enum_options}}
+          },
           path,
           caller_module
         ),

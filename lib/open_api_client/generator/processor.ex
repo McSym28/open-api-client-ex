@@ -32,6 +32,7 @@ if Mix.env() in [:dev, :test] do
     alias OpenAPIClient.Generator.Param, as: GeneratorParam
     alias OpenAPIClient.Generator.Schema, as: GeneratorSchema
     alias OpenAPIClient.Generator.Field, as: GeneratorField
+    alias OpenAPIClient.Generator.SchemaType
     require Logger
 
     @impl true
@@ -54,28 +55,18 @@ if Mix.env() in [:dev, :test] do
         {all_params, param_renamings} =
           (params_from_path ++ params_from_operation)
           |> Enum.reverse()
-          |> Enum.map_reduce(%{}, fn %ParamSpec{required: required} = param_spec,
+          |> Enum.map_reduce(%{}, fn %ParamSpec{required: required, schema: param_schema} =
+                                       param_spec,
                                      param_renamings ->
-            {_state, %Param{name: name, location: location, description: description} = param} =
+            {_state,
+             %Param{name: name, location: location, description: description, value_type: type} =
+               param} =
               Param.from_spec(state, param_spec)
 
             {_, config} = List.keyfind(param_configs, {name, location}, 0, {name, []})
 
-            name_new =
-              Keyword.get_lazy(config, :name, fn -> snakesize_name(name) end)
-
-            default =
-              config
-              |> Keyword.get(:default)
-              |> generate_function_call(state)
-
-            examples =
-              config
-              |> Keyword.fetch(:example)
-              |> case do
-                {:ok, value} -> [value]
-                :error -> []
-              end
+            {name_new, type_new, %SchemaType{default: default} = schema_type} =
+              process_schema_type(name, type, config, param_schema, state)
 
             description_new =
               if name_new == name do
@@ -86,19 +77,33 @@ if Mix.env() in [:dev, :test] do
                 |> Enum.join(" ")
               end
 
-            description_new =
-              if default do
-                [
-                  description_new,
+            description_suffix =
+              cond do
+                is_tuple(default) ->
                   "Default value obtained through a call to `#{Macro.to_string(default)}`"
-                ]
+
+                is_nil(default) ->
+                  nil
+
+                :else ->
+                  "Default value is `#{inspect(default)}`"
+              end
+
+            description_new =
+              if description_suffix do
+                [description_new, description_suffix]
                 |> Enum.reject(&is_nil/1)
                 |> Enum.join(". ")
               else
                 description_new
               end
 
-            param_new = %Param{param | name: name_new, description: description_new}
+            param_new = %Param{
+              param
+              | name: name_new,
+                description: description_new,
+                value_type: type_new
+            }
 
             param_renamings_new = Map.put(param_renamings, {name, location}, name_new)
 
@@ -106,10 +111,9 @@ if Mix.env() in [:dev, :test] do
               %GeneratorParam{
                 param: param_new,
                 old_name: name,
-                default: default,
                 config: config,
                 static: is_nil(default) and (required or location == :path),
-                examples: examples
+                schema_type: schema_type
               }
               |> append_param_example(param_spec, state)
 
@@ -350,15 +354,35 @@ if Mix.env() in [:dev, :test] do
     end
 
     defp process_field(
-           %Field{type: {:const, value}} = field,
+           %Field{name: name, required: required, nullable: nullable, type: type} = field,
+           config,
+           schema_spec,
+           state
+         ) do
+      {name_new, type_new, schema_type} =
+        process_schema_type(name, type, config, schema_spec, state)
+
+      field_new = %Field{field | name: name_new, type: type_new}
+
+      %GeneratorField{
+        field: field_new,
+        old_name: name,
+        enforce: required and not nullable,
+        schema_type: schema_type
+      }
+    end
+
+    defp process_schema_type(
+           name,
+           {:const, value} = _type,
            config,
            %SchemaSpec{enum: [_]} = schema_spec,
            state
          ) do
-      process_field(%Field{field | type: {:enum, [value]}}, config, schema_spec, state)
+      process_schema_type(name, {:enum, [value]}, config, schema_spec, state)
     end
 
-    defp process_field(%Field{type: {:enum, enum_values}} = field, config, schema_spec, state) do
+    defp process_schema_type(name, {:enum, enum_values}, config, schema_spec, state) do
       enum_type =
         with %SchemaSpec{} <- schema_spec,
              {_state, enum_type} <-
@@ -368,9 +392,8 @@ if Mix.env() in [:dev, :test] do
           _ -> {:string, :generic}
         end
 
-      %GeneratorField{field: field_new, default: default} =
-        generator_field =
-        process_field(%Field{field | type: enum_type}, config, schema_spec, state)
+      {name_new, _type, %SchemaType{default: default} = schema_type} =
+        process_schema_type(name, enum_type, config, schema_spec, state)
 
       enum_config = Keyword.get(config, :enum, [])
       enum_options = Keyword.get(enum_config, :options, [])
@@ -380,7 +403,6 @@ if Mix.env() in [:dev, :test] do
         Enum.map_reduce(enum_values, [], &process_enum_value(&1, &2, enum_options))
 
       type_new = {:enum, enum_values_new}
-      field_new = %Field{field_new | type: type_new}
 
       enum_options_new =
         Enum.sort_by(enum_options, fn
@@ -388,23 +410,31 @@ if Mix.env() in [:dev, :test] do
           value -> {1, value}
         end)
 
-      typed_decoder = Utils.get_config(state, :typed_decoder, OpenAPIClient.Client.TypedDecoder)
+      default_new =
+        if default && not is_tuple(default) do
+          typed_decoder =
+            Utils.get_config(state, :typed_decoder, OpenAPIClient.Client.TypedDecoder)
 
-      {:ok, default_new} =
-        typed_decoder.decode(default, {:enum, enum_options_new}, [], typed_decoder)
+          {:ok, default_new} =
+            typed_decoder.decode(default, {:enum, enum_options_new}, [], typed_decoder)
 
-      %GeneratorField{
-        generator_field
-        | field: field_new,
-          enum_options: enum_options_new,
-          enum_strict: enum_strict,
-          enum_type: enum_type,
-          default: default_new
+          default_new
+        else
+          default
+        end
+
+      schema_type_new = %SchemaType{
+        schema_type
+        | default: default_new,
+          enum: %SchemaType.Enum{type: enum_type, options: enum_options_new, strict: enum_strict}
       }
+
+      {name_new, type_new, schema_type_new}
     end
 
-    defp process_field(
-           %Field{type: {:array, {:enum, _} = enum_type}} = field,
+    defp process_schema_type(
+           name,
+           {:array, {:enum, _} = enum_type},
            config,
            schema_spec,
            state
@@ -415,32 +445,28 @@ if Mix.env() in [:dev, :test] do
           _ -> nil
         end
 
-      %GeneratorField{field: %Field{type: type_new} = field_new, default: default} =
-        generator_field =
-        process_field(%Field{field | type: enum_type}, config, items_spec, state)
+      {name_new, type_new, %SchemaType{default: default} = schema_type} =
+        process_schema_type(name, enum_type, config, items_spec, state)
 
       default_new =
         if default do
           [default]
         else
-          default
+          nil
         end
 
-      %GeneratorField{
-        generator_field
-        | field: %Field{field_new | type: {:array, type_new}},
-          default: default_new
-      }
+      schema_type_new = %SchemaType{schema_type | default: default_new}
+      {name_new, {:array, type_new}, schema_type_new}
     end
 
-    defp process_field(
-           %Field{name: name, required: required, nullable: nullable, type: type} = field,
+    defp process_schema_type(
+           name,
+           type,
            config,
            schema_spec,
            state
          ) do
       name_new = Keyword.get_lazy(config, :name, fn -> snakesize_name(name) end)
-      field_new = %Field{field | name: name_new}
 
       default =
         case schema_spec do
@@ -452,7 +478,9 @@ if Mix.env() in [:dev, :test] do
             default_new
 
           _ ->
-            nil
+            config
+            |> Keyword.get(:default)
+            |> generate_function_call(state)
         end
 
       examples =
@@ -463,13 +491,8 @@ if Mix.env() in [:dev, :test] do
           :error -> []
         end
 
-      %GeneratorField{
-        field: field_new,
-        old_name: name,
-        enforce: required and not nullable,
-        examples: examples,
-        default: default
-      }
+      schema_type = %SchemaType{examples: examples, default: default}
+      {name_new, type, schema_type}
     end
 
     defp process_enum_value(value, acc, options) do
@@ -533,11 +556,13 @@ if Mix.env() in [:dev, :test] do
     end
 
     defp append_field_examples(
-           %GeneratorField{examples: examples} = field,
+           %GeneratorField{schema_type: %SchemaType{examples: examples} = schema_type} = field,
            [example | rest],
            state
          ) do
-      %GeneratorField{field | examples: [example | examples]}
+      schema_type_new = %SchemaType{schema_type | examples: [example | examples]}
+
+      %GeneratorField{field | schema_type: schema_type_new}
       |> append_field_examples(rest, state)
     end
 
@@ -595,8 +620,13 @@ if Mix.env() in [:dev, :test] do
       param
     end
 
-    defp append_param_example(%GeneratorParam{examples: examples} = param, example, _state) do
-      %GeneratorParam{param | examples: [example | examples]}
+    defp append_param_example(
+           %GeneratorParam{schema_type: %SchemaType{examples: examples} = schema_type} = param,
+           example,
+           _state
+         ) do
+      schema_type_new = %SchemaType{schema_type | examples: [example | examples]}
+      %GeneratorParam{param | schema_type: schema_type_new}
     end
 
     defp snakesize_name(name), do: Macro.underscore(name)
@@ -612,6 +642,10 @@ if Mix.env() in [:dev, :test] do
       quote do
         unquote(module).unquote(function)(unquote_splicing(args))
       end
+    end
+
+    defp generate_function_call({:const, value}, _state) do
+      value
     end
 
     defp generate_function_call(nil, _state), do: nil

@@ -18,11 +18,18 @@ if Mix.env() in [:dev, :test] do
     @schema_type_pattern_rank_any 0
     @schema_type_pattern_rank_exact 1
 
-    @type operation_param_config :: [
-            {:name, String.t()}
-            | {:default, {:profile_config, atom()} | {module(), atom(), list()}}
-            | {:example, term()}
+    @type schema_type_enum_config :: [
+            {:strict, boolean()} | {:options, [{term(), [{:value, atom()}]}]}
           ]
+    @type schema_type_config :: [
+            {:name, String.t()}
+            | {:default,
+               {:const, term()} | {:profile_config, atom()} | {module(), atom(), list()}}
+            | {:example, term()}
+            | {:enum, schema_type_enum_config()}
+          ]
+
+    @type operation_param_config :: schema_type_config()
     @type operation_config :: [
             {:params,
              [
@@ -31,12 +38,7 @@ if Mix.env() in [:dev, :test] do
              ]}
           ]
 
-    @type schema_field_enum_config :: [
-            {:strict, boolean()} | {:options, [{term(), [{:value, atom()}]}]}
-          ]
-    @type schema_field_config :: [
-            {:name, String.t()} | {:example, term()} | {:enum, schema_field_enum_config()}
-          ]
+    @type schema_field_config :: schema_type_config()
     @type schema_config :: [{:fields, [{String.t(), schema_field_config()}]}]
 
     @spec operation_config(
