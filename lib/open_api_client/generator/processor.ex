@@ -349,6 +349,15 @@ if Mix.env() in [:dev, :test] do
       end
     end
 
+    defp process_field(
+           %Field{type: {:const, value}} = field,
+           config,
+           %SchemaSpec{enum: [_]} = schema_spec,
+           state
+         ) do
+      process_field(%Field{field | type: {:enum, [value]}}, config, schema_spec, state)
+    end
+
     defp process_field(%Field{type: {:enum, enum_values}} = field, config, schema_spec, state) do
       %GeneratorField{field: field_new} =
         generator_field =
