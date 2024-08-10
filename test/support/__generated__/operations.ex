@@ -28,16 +28,41 @@ defmodule OpenAPIClient.Operations do
   def get_test(required_header, opts \\ []) do
     client_pipeline = Keyword.get(opts, :client_pipeline)
     base_url = opts[:base_url] || @base_url
+    typed_encoder = OpenAPIClient.Utils.get_config(:test, :typed_encoder)
 
-    optional_header =
-      Keyword.get_lazy(opts, :optional_header, fn ->
+    {:ok, optional_header} =
+      opts
+      |> Keyword.get_lazy(:optional_header, fn ->
         Application.get_env(:open_api_client_ex, :required_header)
       end)
+      |> typed_encoder.encode(
+        {:string, :generic},
+        [{:parameter, :header, "X-Optional-Header"}, {"/test", :get}],
+        typed_encoder
+      )
+
+    {:ok, required_header} =
+      typed_encoder.encode(
+        required_header,
+        {:string, :generic},
+        [{:parameter, :header, "X-Required-Header"}, {"/test", :get}],
+        typed_encoder
+      )
 
     query_params =
       opts
       |> Keyword.take([:optional_query])
-      |> Enum.map(fn {:optional_query, value} -> {"optional_query", value} end)
+      |> Enum.map(fn {:optional_query, value} ->
+        {:ok, value_new} =
+          typed_encoder.encode(
+            value,
+            {:string, :generic},
+            [{:parameter, :query, "optional_query"}, [{"/test", :get}]],
+            typed_encoder
+          )
+
+        {"optional_query", value_new}
+      end)
       |> Map.new()
 
     headers = %{"X-Optional-Header" => optional_header, "X-Required-Header" => required_header}

@@ -100,8 +100,13 @@ if Mix.env() in [:dev, :test] do
           schema_fields =
             generator_fields
             |> Enum.flat_map(fn
-              %GeneratorField{field: %Field{name: new_name}, old_name: old_name} = generator_field ->
-                [{String.to_atom(new_name), {old_name, field_to_type(generator_field, state)}}]
+              %GeneratorField{
+                field: %Field{name: new_name, type: type},
+                old_name: old_name,
+                schema_type: schema_type
+              } = _generator_field ->
+                type_new = schema_type_to_readable_type(type, schema_type, state)
+                [{String.to_atom(new_name), {old_name, type_new}}]
 
               _ ->
                 []
@@ -669,11 +674,15 @@ if Mix.env() in [:dev, :test] do
 
       operation_new = %Operation{operation | request_path_parameters: static_params}
 
+      operation_profile = Utils.get_config(state, :aliased_profile, state.profile)
+
       {:def, def_metadata,
        [
          {^function_name, _, _} = function_header,
          [do: {do_tag, do_metadata, do_expressions}]
        ]} = OpenAPI.Renderer.Operation.render_function(state, operation_new)
+
+      typed_encoder_path = [{request_path, request_method}]
 
       do_expressions_new =
         Enum.flat_map(do_expressions, fn
@@ -682,20 +691,57 @@ if Mix.env() in [:dev, :test] do
               all_params
               |> Enum.flat_map(fn
                 %GeneratorParam{
-                  param: %Param{name: name},
-                  schema_type: %SchemaType{default: default}
+                  param: %Param{name: name, location: location, value_type: type},
+                  schema_type: %SchemaType{default: default} = schema_type,
+                  old_name: old_name
                 }
                 when not is_nil(default) ->
                   atom = String.to_atom(name)
                   variable = Macro.var(atom, nil)
+                  type_new = schema_type_to_readable_type(type, schema_type, state)
 
                   [
                     quote(
                       do:
-                        unquote(variable) =
-                          Keyword.get_lazy(opts, unquote(atom), fn ->
+                        {:ok, unquote(variable)} =
+                          opts
+                          |> Keyword.get_lazy(unquote(atom), fn ->
                             unquote(default)
                           end)
+                          |> typed_encoder.encode(
+                            unquote(type_new),
+                            [
+                              {:parameter, unquote(location), unquote(old_name)},
+                              {unquote(request_path), unquote(request_method)}
+                            ],
+                            typed_encoder
+                          )
+                    )
+                  ]
+
+                %GeneratorParam{
+                  param: %Param{name: name, location: location, value_type: type},
+                  schema_type: schema_type,
+                  static: true,
+                  old_name: old_name
+                } ->
+                  atom = String.to_atom(name)
+                  variable = Macro.var(atom, nil)
+                  type_new = schema_type_to_readable_type(type, schema_type, state)
+
+                  [
+                    quote(
+                      do:
+                        {:ok, unquote(variable)} =
+                          typed_encoder.encode(
+                            unquote(variable),
+                            unquote(type_new),
+                            [
+                              {:parameter, unquote(location), unquote(old_name)},
+                              {unquote(request_path), unquote(request_method)}
+                            ],
+                            typed_encoder
+                          )
                     )
                   ]
 
@@ -711,7 +757,21 @@ if Mix.env() in [:dev, :test] do
             base_url_expression =
               quote do: base_url = opts[:base_url] || @base_url
 
-            [client_pipeline_expression, base_url_expression | param_assignments]
+            param_assignments_new =
+              if Enum.empty?(all_params) do
+                param_assignments
+              else
+                [
+                  quote(
+                    do:
+                      typed_encoder =
+                        OpenAPIClient.Utils.get_config(unquote(operation_profile), :typed_encoder)
+                  )
+                  | param_assignments
+                ]
+              end
+
+            [client_pipeline_expression, base_url_expression | param_assignments_new]
 
           {:=, _, [{:query, _, _} | _]} = _query_expression ->
             query_value =
@@ -719,7 +779,7 @@ if Mix.env() in [:dev, :test] do
               |> Enum.filter(fn %GeneratorParam{param: %Param{location: location}} ->
                 location == :query
               end)
-              |> render_params_parse()
+              |> render_params_parse(typed_encoder_path, state)
 
             if query_value do
               [quote(do: query_params = unquote(query_value))]
@@ -736,9 +796,7 @@ if Mix.env() in [:dev, :test] do
               |> Enum.filter(fn %GeneratorParam{param: %Param{location: location}} ->
                 location == :header
               end)
-              |> render_params_parse()
-
-            operation_profile = Utils.get_config(state, :aliased_profile, state.profile)
+              |> render_params_parse(typed_encoder_path, state)
 
             {operation_assigns, private_assigns} =
               Enum.flat_map_reduce(map_arguments, %{__profile__: operation_profile}, fn
@@ -875,9 +933,9 @@ if Mix.env() in [:dev, :test] do
        ]}
     end
 
-    defp render_params_parse([]), do: nil
+    defp render_params_parse([], _typed_encoder_path, _state), do: nil
 
-    defp render_params_parse(params) do
+    defp render_params_parse(params, typed_encoder_path, state) do
       {static_params, dynamic_params} =
         params
         |> Enum.group_by(fn %GeneratorParam{
@@ -895,16 +953,36 @@ if Mix.env() in [:dev, :test] do
 
       {dynamic_params, param_renamings} =
         Enum.map_reduce(dynamic_params, [], fn %GeneratorParam{
-                                                 param: %Param{name: name},
-                                                 old_name: old_name
+                                                 param: %Param{
+                                                   name: name,
+                                                   location: location,
+                                                   value_type: type
+                                                 },
+                                                 old_name: old_name,
+                                                 schema_type: schema_type
                                                },
                                                param_renamings ->
+          type_new = schema_type_to_readable_type(type, schema_type, state)
+
           param_renamings_new =
             [
               {:->, [],
                [
                  [{String.to_atom(name), Macro.var(:value, nil)}],
-                 {old_name, Macro.var(:value, nil)}
+                 quote do
+                   {:ok, value_new} =
+                     typed_encoder.encode(
+                       value,
+                       unquote(type_new),
+                       [
+                         {:parameter, unquote(location), unquote(old_name)},
+                         unquote(typed_encoder_path)
+                       ],
+                       typed_encoder
+                     )
+
+                   {unquote(old_name), value_new}
+                 end
                ]}
               | param_renamings
             ]
@@ -952,34 +1030,28 @@ if Mix.env() in [:dev, :test] do
 
     defp parse_spec_return_type(type, acc), do: Enum.reverse([type | acc])
 
-    defp field_to_type(
-           %GeneratorField{
-             field: %Field{type: {:enum, _}},
-             schema_type: %SchemaType{enum: %SchemaType.Enum{options: enum_options, strict: true}}
-           },
+    defp schema_type_to_readable_type(
+           {:enum, _},
+           %SchemaType{enum: %SchemaType.Enum{options: enum_options, strict: true}},
            _state
          ),
          do: {:enum, enum_options}
 
-    defp field_to_type(
-           %GeneratorField{
-             field: %Field{type: {:enum, _}},
-             schema_type: %SchemaType{enum: %SchemaType.Enum{options: enum_options}}
-           },
+    defp schema_type_to_readable_type(
+           {:enum, _},
+           %SchemaType{enum: %SchemaType.Enum{options: enum_options}},
            _state
          ),
          do: {:enum, enum_options ++ [:not_strict]}
 
-    defp field_to_type(
-           %GeneratorField{field: %Field{type: {:array, {:enum, _} = enum}} = inner_field} =
-             field,
+    defp schema_type_to_readable_type(
+           {:array, {:enum, _} = enum},
+           schema_type,
            state
          ),
-         do:
-           {:array,
-            field_to_type(%GeneratorField{field | field: %Field{inner_field | type: enum}}, state)}
+         do: {:array, schema_type_to_readable_type(enum, schema_type, state)}
 
-    defp field_to_type(%GeneratorField{field: %Field{type: type}}, state),
+    defp schema_type_to_readable_type(type, _schema_type, state),
       do: Util.to_readable_type(state, type)
 
     defp prepare_field_type(%GeneratorField{
