@@ -10,6 +10,20 @@ import Config
 # Configures Elixir's Logger
 config :logger, :console, format: "$time [$level] $message\n"
 
+config :open_api_client_ex,
+  "$base": [
+    client_pipeline: OpenAPIClient.BasicHTTPoisonPipeline,
+    httpoison: OpenAPIClient.HTTPoisonMock,
+    typed_decoder: OpenAPIClient.Client.TypedDecoder,
+    typed_encoder: OpenAPIClient.Client.TypedEncoder,
+    decoders: [
+      {"application/json", {Jason, :decode, []}}
+    ],
+    encoders: [
+      {"application/json", {Jason, :encode, []}}
+    ]
+  ]
+
 # Import environment specific config. This must remain at the bottom
 # of this file so it overrides the configuration defined above.
 if config_env() != :prod, do: import_config("#{config_env()}.exs")

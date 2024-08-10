@@ -353,7 +353,7 @@ if Mix.env() in [:dev, :test] do
               pid
           end
 
-        typed_decoder = Utils.get_config(state, :typed_decoder, TypedDecoder)
+        typed_decoder = Utils.get_config(state, :typed_decoder)
 
         stub(ExampleTypedDecoder, :decode, fn
           value, {module, type}, path, _caller_module

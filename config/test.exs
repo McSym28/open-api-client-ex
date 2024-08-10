@@ -20,16 +20,6 @@ config :oapi_generator,
   ]
 
 config :open_api_client_ex,
-  "$base": [
-    client_pipeline: OpenAPIClient.BasicHTTPoisonPipeline,
-    httpoison: OpenAPIClient.HTTPoisonMock,
-    decoders: [
-      {"application/json", {Jason, :decode, []}}
-    ],
-    encoders: [
-      {"application/json", {Jason, :encode, []}}
-    ]
-  ],
   test: [
     base_url: "https://example.com",
     test_location: "test/open_api_client/__generated__",

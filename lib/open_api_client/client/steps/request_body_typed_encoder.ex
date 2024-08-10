@@ -3,13 +3,13 @@ defmodule OpenAPIClient.Client.Steps.RequestBodyTypedEncoder do
   `Pluggable` step implementation for encoding `Operation.request_body` using types provided by the `oapi_generator` library
 
   Accepts the following `opts`:
-  * `:typed_encoder` - Module that implements `OpenAPIClient.Client.TypedEncoder` behaviour. Default value obtained through a call to `OpenAPIClient.Utils.get_config(operation, :typed_encoder, OpenAPIClient.Client.TypedEncoder)`
+  * `:typed_encoder` - Module that implements `OpenAPIClient.Client.TypedEncoder` behaviour. Default value obtained through a call to `OpenAPIClient.Utils.get_config(operation, :typed_encoder)`
 
   """
 
   @behaviour Pluggable
 
-  alias OpenAPIClient.Client.{Error, Operation, TypedEncoder}
+  alias OpenAPIClient.Client.{Error, Operation}
 
   @type option :: [{:typed_encoder, module()}]
   @type options :: [option()]
@@ -25,7 +25,7 @@ defmodule OpenAPIClient.Client.Steps.RequestBodyTypedEncoder do
   def call(%Operation{request_body: request_body} = operation, opts) do
     typed_encoder =
       Keyword.get_lazy(opts, :typed_encoder, fn ->
-        OpenAPIClient.Utils.get_config(operation, :typed_encoder, TypedEncoder)
+        OpenAPIClient.Utils.get_config(operation, :typed_encoder)
       end)
 
     {content_type, type} = get_type(operation)

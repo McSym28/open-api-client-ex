@@ -5,13 +5,13 @@ defmodule OpenAPIClient.Client.Steps.ResponseBodyTypedDecoder do
   The response type is selected based on the `Operation.response_status_code` and `Operation.response_types`
 
   Accepts the following `opts`:
-  * `:typed_decoder` - Module that implements `OpenAPIClient.Client.TypedDecoder` behaviour. Default value obtained through a call to `OpenAPIClient.Utils.get_config(operation, :typed_decoder, OpenAPIClient.Client.TypedDecoder)`
+  * `:typed_decoder` - Module that implements `OpenAPIClient.Client.TypedDecoder` behaviour. Default value obtained through a call to `OpenAPIClient.Utils.get_config(operation, :typed_decoder)`
 
   """
 
   @behaviour Pluggable
 
-  alias OpenAPIClient.Client.{Error, Operation, TypedDecoder}
+  alias OpenAPIClient.Client.{Error, Operation}
 
   @type option :: [{:typed_decoder, module()}]
   @type options :: [option()]
@@ -27,7 +27,7 @@ defmodule OpenAPIClient.Client.Steps.ResponseBodyTypedDecoder do
   def call(%Operation{response_body: body} = operation, opts) do
     typed_decoder =
       Keyword.get_lazy(opts, :typed_decoder, fn ->
-        OpenAPIClient.Utils.get_config(operation, :typed_decoder, TypedDecoder)
+        OpenAPIClient.Utils.get_config(operation, :typed_decoder)
       end)
 
     case Operation.get_response_type(operation) do
