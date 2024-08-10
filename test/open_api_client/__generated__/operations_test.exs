@@ -57,6 +57,7 @@ defmodule OpenAPIClient.OperationsTest do
                 %{
                   "ArrayEnum" => ["DYNAMIC_ENUM_1"],
                   "Child" => %{"String" => "nested_string_value"},
+                  "EnumWithDefault" => "DEFAULT_ENUM",
                   "NumberEnum" => 2.0,
                   "StrictEnum" => "STRICT_ENUM_3"
                 }} == Jason.decode(body)
@@ -69,6 +70,7 @@ defmodule OpenAPIClient.OperationsTest do
                  %OpenAPIClient.TestRequestSchema{
                    array_enum: ["DYNAMIC_ENUM_1"],
                    child: %OpenAPIClient.TestRequestSchema.Child{string: "nested_string_value"},
+                   enum_with_default: :default_enum,
                    number_enum: 2.0,
                    strict_enum: :strict_enum_3
                  },
@@ -84,6 +86,7 @@ defmodule OpenAPIClient.OperationsTest do
                 %{
                   "ArrayEnum" => ["DYNAMIC_ENUM_1"],
                   "Child" => %{"String" => "nested_string_value"},
+                  "EnumWithDefault" => "DEFAULT_ENUM",
                   "NumberEnum" => 2.0,
                   "StrictEnum" => "STRICT_ENUM_3"
                 }} == Jason.decode(body)
@@ -96,6 +99,7 @@ defmodule OpenAPIClient.OperationsTest do
                  %OpenAPIClient.TestRequestSchema{
                    array_enum: ["DYNAMIC_ENUM_1"],
                    child: %OpenAPIClient.TestRequestSchema.Child{string: "nested_string_value"},
+                   enum_with_default: :default_enum,
                    number_enum: 2.0,
                    strict_enum: :strict_enum_3
                  },
@@ -111,6 +115,7 @@ defmodule OpenAPIClient.OperationsTest do
                 %{
                   "ArrayEnum" => ["DYNAMIC_ENUM_1"],
                   "Child" => %{"String" => "nested_string_value"},
+                  "EnumWithDefault" => "DEFAULT_ENUM",
                   "NumberEnum" => 2.0,
                   "StrictEnum" => "STRICT_ENUM_3"
                 }} == Jason.decode(body)
@@ -123,6 +128,7 @@ defmodule OpenAPIClient.OperationsTest do
                  %OpenAPIClient.TestRequestSchema{
                    array_enum: ["DYNAMIC_ENUM_1"],
                    child: %OpenAPIClient.TestRequestSchema.Child{string: "nested_string_value"},
+                   enum_with_default: :default_enum,
                    number_enum: 2.0,
                    strict_enum: :strict_enum_3
                  },

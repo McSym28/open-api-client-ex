@@ -223,36 +223,56 @@ if Mix.env() in [:dev, :test] do
 
     @impl true
     def render_schema_struct(state, schemas) do
-      struct_result = OpenAPI.Renderer.render_schema_struct(state, schemas)
+      {:defstruct, defstruct_metadata, [struct_fields]} =
+        _struct_result = OpenAPI.Renderer.render_schema_struct(state, schemas)
 
-      enforced_keys_expression =
-        Enum.reduce_while(schemas, nil, fn
-          %Schema{ref: ref, output_format: :struct}, _acc ->
+      struct_fields = Enum.map(struct_fields, &{&1, {false, nil}})
+
+      struct_fields_new =
+        Enum.reduce(schemas, struct_fields, fn
+          %Schema{ref: ref, output_format: :struct}, struct_fields ->
             [{_, %GeneratorSchema{fields: all_fields}}] = :ets.lookup(:schemas, ref)
 
-            enforced_keys =
-              Enum.flat_map(all_fields, fn
-                %GeneratorField{field: %Field{name: name}, enforce: true} ->
-                  [String.to_atom(name)]
+            Enum.reduce(all_fields, struct_fields, fn
+              %GeneratorField{field: %Field{name: name}, enforce: true, default: default},
+              struct_fields ->
+                name_atom = String.to_atom(name)
+                List.keyreplace(struct_fields, name_atom, 0, {name_atom, {true, default}})
 
-                _ ->
-                  []
-              end)
+              _, struct_fields ->
+                struct_fields
+            end)
 
-            enforced_keys_expression =
-              if length(enforced_keys) > 0 do
-                quote do: @enforce_keys(unquote(Enum.sort(enforced_keys)))
-              end
+          _schema, struct_fields ->
+            struct_fields
+        end)
 
-            {:halt, enforced_keys_expression}
+      enforced_keys_expression =
+        struct_fields_new
+        |> Enum.flat_map(fn
+          {field, {true, nil}} -> [field]
+          {_field, _} -> []
+        end)
+        |> case do
+          [] -> nil
+          list -> quote do: @enforce_keys(unquote(list))
+        end
 
-          _schema, acc ->
-            {:cont, acc}
+      defstruct_fields =
+        struct_fields_new
+        |> Enum.map(fn
+          {field, {_, nil}} -> field
+          {field, {false, _default}} -> field
+          {field, {true, default}} -> {field, default}
+        end)
+        |> Enum.sort_by(fn
+          field when is_atom(field) -> false
+          {_field, _default} -> true
         end)
 
       Util.clean_list([
         enforced_keys_expression,
-        struct_result
+        {:defstruct, defstruct_metadata, [defstruct_fields]}
       ])
     end
 

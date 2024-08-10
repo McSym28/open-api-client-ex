@@ -133,7 +133,16 @@ components:
             String:
               type: string
               example: nested_string_value
+        EnumWithDefault:
+          type: string
+          enum: 
+            - DEFAULT_ENUM
+            - SOME_ENUM
+            - ANOTHER_ENUM
+          default: DEFAULT_ENUM
+          example: DEFAULT_ENUM
       required:
         - StrictEnum
+        - EnumWithDefault
       example:
         StrictEnum: STRICT_ENUM_1
