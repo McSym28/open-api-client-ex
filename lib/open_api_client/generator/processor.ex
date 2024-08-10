@@ -420,7 +420,8 @@ if Mix.env() in [:dev, :test] do
 
       default_new =
         if default && not is_tuple(default) do
-          typed_decoder = Utils.get_config(state, :typed_decoder)
+          typed_decoder =
+            Utils.get_config(state, :typed_decoder, OpenAPIClient.Client.TypedDecoder)
 
           {:ok, default_new} =
             typed_decoder.decode(default, {:enum, enum_options_new}, path, typed_decoder)
@@ -480,7 +481,8 @@ if Mix.env() in [:dev, :test] do
       default =
         case schema_spec do
           %SchemaSpec{default: default} when not is_nil(default) ->
-            typed_decoder = Utils.get_config(state, :typed_decoder)
+            typed_decoder =
+              Utils.get_config(state, :typed_decoder, OpenAPIClient.Client.TypedDecoder)
 
             {:ok, default_new} = typed_decoder.decode(default, type, path, typed_decoder)
             default_new

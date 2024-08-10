@@ -20,6 +20,9 @@ config :oapi_generator,
   ]
 
 config :open_api_client_ex,
+  "$base": [
+    httpoison: OpenAPIClient.HTTPoisonMock
+  ],
   test: [
     base_url: "https://example.com",
     test_location: "test/open_api_client/__generated__",

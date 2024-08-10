@@ -37,7 +37,9 @@ defmodule OpenAPIClient.Operations do
   def get_test(required_header, opts \\ []) do
     client_pipeline = Keyword.get(opts, :client_pipeline)
     base_url = opts[:base_url] || @base_url
-    typed_encoder = OpenAPIClient.Utils.get_config(:test, :typed_encoder)
+
+    typed_encoder =
+      OpenAPIClient.Utils.get_config(:test, :typed_encoder, OpenAPIClient.Client.TypedEncoder)
 
     {:ok, date_query_with_default} =
       opts

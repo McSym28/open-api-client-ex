@@ -13,9 +13,6 @@ config :logger, :console, format: "$time [$level] $message\n"
 config :open_api_client_ex,
   "$base": [
     client_pipeline: OpenAPIClient.BasicHTTPoisonPipeline,
-    httpoison: OpenAPIClient.HTTPoisonMock,
-    typed_decoder: OpenAPIClient.Client.TypedDecoder,
-    typed_encoder: OpenAPIClient.Client.TypedEncoder,
     decoders: [
       {"application/json", {Jason, :decode, []}}
     ],

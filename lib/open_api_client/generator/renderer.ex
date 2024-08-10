@@ -358,7 +358,7 @@ if Mix.env() in [:dev, :test] do
               pid
           end
 
-        typed_decoder = Utils.get_config(state, :typed_decoder)
+        typed_decoder = Utils.get_config(state, :typed_decoder, OpenAPIClient.Client.TypedDecoder)
 
         stub(ExampleTypedDecoder, :decode, fn
           value, {module, type}, path, _caller_module
@@ -765,7 +765,11 @@ if Mix.env() in [:dev, :test] do
                   quote(
                     do:
                       typed_encoder =
-                        OpenAPIClient.Utils.get_config(unquote(operation_profile), :typed_encoder)
+                        OpenAPIClient.Utils.get_config(
+                          unquote(operation_profile),
+                          :typed_encoder,
+                          OpenAPIClient.Client.TypedEncoder
+                        )
                   )
                   | param_assignments
                 ]
@@ -1114,7 +1118,14 @@ if Mix.env() in [:dev, :test] do
       example_generator = Utils.get_config(state, :example_generator, ExampleGenerator)
 
       operation_profile = Utils.get_config(state, :aliased_profile, state.profile)
-      typed_decoder = OpenAPIClient.Utils.get_config(operation_profile, :typed_decoder)
+
+      typed_decoder =
+        OpenAPIClient.Utils.get_config(
+          operation_profile,
+          :typed_decoder,
+          OpenAPIClient.Client.TypedDecoder
+        )
+
       path = [{request_path, request_method}]
 
       {request_content_type, request_schema} =
