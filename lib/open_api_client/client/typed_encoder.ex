@@ -81,7 +81,7 @@ defmodule OpenAPIClient.Client.TypedEncoder do
   def encode(%Date{} = value, {:string, :date}, _, _), do: {:ok, Date.to_iso8601(value)}
 
   def encode(%DateTime{} = value, {:string, :date} = type, path, caller_module),
-    do: encode(DateTime.to_date(value), type, path, caller_module)
+    do: caller_module.encode(DateTime.to_date(value), type, path, caller_module)
 
   def encode(%DateTime{} = value, {:string, :date_time}, _, _),
     do: {:ok, DateTime.to_iso8601(value)}
@@ -89,7 +89,7 @@ defmodule OpenAPIClient.Client.TypedEncoder do
   def encode(%Time{} = value, {:string, :time}, _, _), do: {:ok, Time.to_iso8601(value)}
 
   def encode(%DateTime{} = value, {:string, :time} = type, path, caller_module),
-    do: encode(DateTime.to_time(value), type, path, caller_module)
+    do: caller_module.encode(DateTime.to_time(value), type, path, caller_module)
 
   def encode(_value, {:string, string_format}, path, _)
       when string_format in [:date, :date_time, :time],
