@@ -682,7 +682,7 @@ if Mix.env() in [:dev, :test] do
          [do: {do_tag, do_metadata, do_expressions}]
        ]} = OpenAPI.Renderer.Operation.render_function(state, operation_new)
 
-      typed_encoder_path = [{request_path, request_method}]
+      path = [{request_path, request_method}]
 
       do_expressions_new =
         Enum.flat_map(do_expressions, fn
@@ -779,7 +779,7 @@ if Mix.env() in [:dev, :test] do
               |> Enum.filter(fn %GeneratorParam{param: %Param{location: location}} ->
                 location == :query
               end)
-              |> render_params_parse(typed_encoder_path, state)
+              |> render_params_parse(path, state)
 
             if query_value do
               [quote(do: query_params = unquote(query_value))]
@@ -796,7 +796,7 @@ if Mix.env() in [:dev, :test] do
               |> Enum.filter(fn %GeneratorParam{param: %Param{location: location}} ->
                 location == :header
               end)
-              |> render_params_parse(typed_encoder_path, state)
+              |> render_params_parse(path, state)
 
             {operation_assigns, private_assigns} =
               Enum.flat_map_reduce(map_arguments, %{__profile__: operation_profile}, fn
@@ -935,7 +935,7 @@ if Mix.env() in [:dev, :test] do
 
     defp render_params_parse([], _typed_encoder_path, _state), do: nil
 
-    defp render_params_parse(params, typed_encoder_path, state) do
+    defp render_params_parse(params, path, state) do
       {static_params, dynamic_params} =
         params
         |> Enum.group_by(fn %GeneratorParam{
@@ -976,7 +976,7 @@ if Mix.env() in [:dev, :test] do
                        unquote(type_new),
                        [
                          {:parameter, unquote(location), unquote(old_name)},
-                         unquote(typed_encoder_path)
+                         unquote(path)
                        ],
                        typed_encoder
                      )
@@ -1115,7 +1115,7 @@ if Mix.env() in [:dev, :test] do
 
       operation_profile = Utils.get_config(state, :aliased_profile, state.profile)
       typed_decoder = OpenAPIClient.Utils.get_config(operation_profile, :typed_decoder)
-      typed_decoder_path = [{request_path, request_method}]
+      path = [{request_path, request_method}]
 
       {request_content_type, request_schema} =
         select_example_schema(request_body, :decoders, state)
@@ -1217,7 +1217,7 @@ if Mix.env() in [:dev, :test] do
                  schema_type: schema_type
                } = param},
               acc ->
-                path_new = [{:parameter, location, old_name} | typed_decoder_path]
+                path_new = [{:parameter, location, old_name} | path]
 
                 type_new = schema_type_to_readable_type(type, schema_type, state)
 

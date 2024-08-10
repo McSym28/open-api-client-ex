@@ -66,7 +66,14 @@ if Mix.env() in [:dev, :test] do
             {_, config} = List.keyfind(param_configs, {name, location}, 0, {name, []})
 
             {name_new, type_new, %SchemaType{default: default} = schema_type} =
-              process_schema_type(name, type, config, param_schema, state)
+              process_schema_type(
+                name,
+                type,
+                config,
+                param_schema,
+                [{:parameter, location, name}, {request_path, request_method}],
+                state
+              )
 
             description_new =
               if name_new == name do
@@ -360,7 +367,7 @@ if Mix.env() in [:dev, :test] do
            state
          ) do
       {name_new, type_new, schema_type} =
-        process_schema_type(name, type, config, schema_spec, state)
+        process_schema_type(name, type, config, schema_spec, [name], state)
 
       field_new = %Field{field | name: name_new, type: type_new}
 
@@ -377,12 +384,13 @@ if Mix.env() in [:dev, :test] do
            {:const, value} = _type,
            config,
            %SchemaSpec{enum: [_]} = schema_spec,
+           path,
            state
          ) do
-      process_schema_type(name, {:enum, [value]}, config, schema_spec, state)
+      process_schema_type(name, {:enum, [value]}, config, schema_spec, path, state)
     end
 
-    defp process_schema_type(name, {:enum, enum_values}, config, schema_spec, state) do
+    defp process_schema_type(name, {:enum, enum_values}, config, schema_spec, path, state) do
       enum_type =
         with %SchemaSpec{} <- schema_spec,
              {_state, enum_type} <-
@@ -393,7 +401,7 @@ if Mix.env() in [:dev, :test] do
         end
 
       {name_new, _type, %SchemaType{default: default} = schema_type} =
-        process_schema_type(name, enum_type, config, schema_spec, state)
+        process_schema_type(name, enum_type, config, schema_spec, path, state)
 
       enum_config = Keyword.get(config, :enum, [])
       enum_options = Keyword.get(enum_config, :options, [])
@@ -415,7 +423,7 @@ if Mix.env() in [:dev, :test] do
           typed_decoder = Utils.get_config(state, :typed_decoder)
 
           {:ok, default_new} =
-            typed_decoder.decode(default, {:enum, enum_options_new}, [], typed_decoder)
+            typed_decoder.decode(default, {:enum, enum_options_new}, path, typed_decoder)
 
           default_new
         else
@@ -436,6 +444,7 @@ if Mix.env() in [:dev, :test] do
            {:array, {:enum, _} = enum_type},
            config,
            schema_spec,
+           path,
            state
          ) do
       items_spec =
@@ -445,7 +454,7 @@ if Mix.env() in [:dev, :test] do
         end
 
       {name_new, type_new, %SchemaType{default: default} = schema_type} =
-        process_schema_type(name, enum_type, config, items_spec, state)
+        process_schema_type(name, enum_type, config, items_spec, path, state)
 
       default_new =
         if default do
@@ -463,6 +472,7 @@ if Mix.env() in [:dev, :test] do
            type,
            config,
            schema_spec,
+           path,
            state
          ) do
       name_new = Keyword.get_lazy(config, :name, fn -> snakesize_name(name) end)
@@ -472,7 +482,7 @@ if Mix.env() in [:dev, :test] do
           %SchemaSpec{default: default} when not is_nil(default) ->
             typed_decoder = Utils.get_config(state, :typed_decoder)
 
-            {:ok, default_new} = typed_decoder.decode(default, type, [], typed_decoder)
+            {:ok, default_new} = typed_decoder.decode(default, type, path, typed_decoder)
             default_new
 
           _ ->
