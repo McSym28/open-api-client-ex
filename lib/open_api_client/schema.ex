@@ -9,10 +9,13 @@ defmodule OpenAPIClient.Schema do
           :null
           | :binary
           | :boolean
+          | {:boolean, String.t()}
           | :integer
-          | :map
+          | {:integer, String.t()}
           | :number
-          | {:string, atom()}
+          | {:number, String.t()}
+          | {:string, atom() | String.t()}
+          | :map
           | :unknown
           | {:union, [type()]}
           | {:enum, [enum_option | :not_strict]}
