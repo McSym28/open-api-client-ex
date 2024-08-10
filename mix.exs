@@ -34,7 +34,9 @@ defmodule OpenAPIClient.MixProject do
     [
       {:pluggable, "~> 1.1"},
       {:oapi_generator,
-       github: "McSym28/open-api-generator", ref: "bd0361ccb00f61307d11278785326151de5ef536", only: [:dev, :test]},
+       github: "McSym28/open-api-generator",
+       ref: "bd0361ccb00f61307d11278785326151de5ef536",
+       only: [:dev, :test]},
       {:jason, "~> 1.4", optional: true},
       {:httpoison, "~> 2.2", optional: true},
       {:mox, "~> 1.1", only: [:dev, :test]},

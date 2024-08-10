@@ -1,5 +1,25 @@
 if Mix.env() in [:dev, :test] do
   defmodule OpenAPIClient.Generator.Processor do
+    defmacro __using__(_opts) do
+      quote do
+        use OpenAPI.Processor
+
+        @impl OpenAPI.Processor
+        defdelegate ignore_operation?(state, operation), to: OpenAPIClient.Generator.Processor
+
+        @impl OpenAPI.Processor
+        defdelegate operation_docstring(state, operation_spec, params),
+          to: OpenAPIClient.Generator.Processor
+
+        @impl OpenAPI.Processor
+        defdelegate schema_module_and_type(state, schema), to: OpenAPIClient.Generator.Processor
+
+        defoverridable ignore_operation?: 2,
+                       operation_docstring: 3,
+                       schema_module_and_type: 2
+      end
+    end
+
     use OpenAPI.Processor
     alias OpenAPI.Processor.{Operation.Param, Schema}
     alias Schema.Field
