@@ -45,6 +45,12 @@ paths:
           schema:
             type: string
           example: optional_header
+        - in: header
+          name: X-Date-Header-With-Default
+          description: Date header parameter with default
+          schema:
+            type: string
+            format: date
         - in: query
           name: optional_query
           description: Optional query parameter
@@ -57,6 +63,13 @@ paths:
           schema:
             type: string
             format: date-time
+        - in: query
+          name: date_query_with_default
+          description: Date query parameter with default
+          schema:
+            type: string
+            format: date
+            default: "2022-12-15"
       responses:
         "200":
           description: "Success"

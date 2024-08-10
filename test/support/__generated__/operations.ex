@@ -16,16 +16,20 @@ defmodule OpenAPIClient.Operations do
 
   ## Options
 
+    * `date_query_with_default`: Date query parameter with default. Default value is `~D[2022-12-15]`
     * `datetime_query`: DateTime query parameter
     * `optional_query`: Optional query parameter
+    * `date_header_with_default`: ["X-Date-Header-With-Default"] Date header parameter with default. Default value is `"2024-01-23"`
     * `optional_header`: ["X-Optional-Header"] Optional header parameter. Default value obtained through a call to `Application.get_env(:open_api_client_ex, :required_header)`
     * `base_url`: Request's base URL. Default value is taken from `@base_url`
     * `client_pipeline`: Client pipeline for making a request. Default value obtained through a call to `OpenAPIClient.Utils.get_config(__operation__, :client_pipeline)}
 
   """
   @spec get_test(String.t(), [
-          {:datetime_query, DateTime.t()}
+          {:date_query_with_default, Date.t()}
+          | {:datetime_query, DateTime.t()}
           | {:optional_query, String.t()}
+          | {:date_header_with_default, Date.t()}
           | {:optional_header, String.t()}
           | {:base_url, String.t() | URI.t()}
           | {:client_pipeline, OpenAPIClient.Client.pipeline()}
@@ -34,6 +38,24 @@ defmodule OpenAPIClient.Operations do
     client_pipeline = Keyword.get(opts, :client_pipeline)
     base_url = opts[:base_url] || @base_url
     typed_encoder = OpenAPIClient.Utils.get_config(:test, :typed_encoder)
+
+    {:ok, date_query_with_default} =
+      opts
+      |> Keyword.get_lazy(:date_query_with_default, fn -> ~D[2022-12-15] end)
+      |> typed_encoder.encode(
+        {:string, :date},
+        [{:parameter, :query, "date_query_with_default"}, {"/test", :get}],
+        typed_encoder
+      )
+
+    {:ok, date_header_with_default} =
+      opts
+      |> Keyword.get_lazy(:date_header_with_default, fn -> "2024-01-23" end)
+      |> typed_encoder.encode(
+        {:string, :date},
+        [{:parameter, :header, "X-Date-Header-With-Default"}, {"/test", :get}],
+        typed_encoder
+      )
 
     {:ok, optional_header} =
       opts
@@ -81,8 +103,13 @@ defmodule OpenAPIClient.Operations do
           {"datetime_query", value_new}
       end)
       |> Map.new()
+      |> Map.merge(%{"date_query_with_default" => date_query_with_default})
 
-    headers = %{"X-Optional-Header" => optional_header, "X-Required-Header" => required_header}
+    headers = %{
+      "X-Date-Header-With-Default" => date_header_with_default,
+      "X-Optional-Header" => optional_header,
+      "X-Required-Header" => required_header
+    }
 
     %OpenAPIClient.Client.Operation{
       request_base_url: base_url,

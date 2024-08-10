@@ -36,6 +36,11 @@ config :open_api_client_ex,
               name: "optional_header",
               default: {Application, :get_env, [:open_api_client_ex, :required_header]},
               example: "some_optional_header"
+            ]},
+           {{"X-Date-Header-With-Default", :header},
+            [
+              name: "date_header_with_default",
+              default: {:const, "2024-01-23"}
             ]}
          ]
        ]}
