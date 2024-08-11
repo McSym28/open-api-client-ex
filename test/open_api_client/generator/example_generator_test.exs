@@ -51,8 +51,11 @@ defmodule OpenAPIClient.Generator.ExampleGeneratorTest do
   @clauses [
     {:null, {:pipe, quote(do: is_nil())}},
     {:boolean, {:pipe, quote(do: is_boolean())}},
+    {{:boolean, "custom"}, "boolean with custom format", {:pipe, quote(do: is_boolean())}},
     {:integer, {:pipe, quote(do: is_integer())}},
+    {{:integer, "int64"}, "integer with int64 format", {:pipe, quote(do: is_integer())}},
     {:number, {:pipe, quote(do: is_number())}},
+    {{:number, "float"}, "number with float format", {:pipe, quote(do: is_number())}},
     {{:string, :date}, "date",
      {:pattern_pipe, quote(do: %Date{}), quote(do: Date.from_iso8601!())}},
     {{:string, :time}, "time",

@@ -56,6 +56,9 @@ defmodule OpenAPIClient.Client.TypedEncoder do
          source: path
        )}
 
+  def encode(value, {:boolean, _}, path, caller_module),
+    do: caller_module.encode(value, :boolean, path, caller_module)
+
   def encode(value, :integer, _, _) when is_integer(value), do: {:ok, value}
 
   def encode(_value, :integer, path, _),
@@ -67,6 +70,9 @@ defmodule OpenAPIClient.Client.TypedEncoder do
          source: path
        )}
 
+  def encode(value, {:integer, _}, path, caller_module),
+    do: caller_module.encode(value, :integer, path, caller_module)
+
   def encode(value, :number, _, _) when is_number(value), do: {:ok, value}
 
   def encode(_value, :number, path, _),
@@ -77,6 +83,9 @@ defmodule OpenAPIClient.Client.TypedEncoder do
          reason: :invalid_number,
          source: path
        )}
+
+  def encode(value, {:number, _}, path, caller_module),
+    do: caller_module.encode(value, :number, path, caller_module)
 
   def encode(%Date{} = value, {:string, :date}, _, _), do: {:ok, Date.to_iso8601(value)}
 

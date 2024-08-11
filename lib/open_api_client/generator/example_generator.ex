@@ -58,8 +58,20 @@ if Mix.env() in [:dev, :test] do
     @impl __MODULE__
     def generate(:null, _path, _caller_module), do: nil
     def generate(:boolean, _path, _caller_module), do: true
+
+    def generate({:boolean, _}, path, caller_module),
+      do: caller_module.generate(:boolean, path, caller_module)
+
     def generate(:integer, _path, _caller_module), do: 1
+
+    def generate({:integer, _}, path, caller_module),
+      do: caller_module.generate(:integer, path, caller_module)
+
     def generate(:number, _path, _caller_module), do: 1.0
+
+    def generate({:number, _}, path, caller_module),
+      do: caller_module.generate(:number, path, caller_module)
+
     def generate({:string, :date}, _path, _caller_module), do: "2024-01-02"
     def generate({:string, :date_time}, _path, _caller_module), do: "2024-01-02T01:23:45Z"
     def generate({:string, :time}, _path, _caller_module), do: "01:23:45"

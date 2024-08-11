@@ -62,6 +62,9 @@ defmodule OpenAPIClient.Client.TypedDecoder do
          source: path
        )}
 
+  def decode(value, {:boolean, _}, path, caller_module),
+    do: caller_module.decode(value, :boolean, path, caller_module)
+
   def decode(value, :integer, _, _) when is_integer(value), do: {:ok, value}
 
   def decode(value, :integer, path, _) when is_binary(value) do
@@ -88,6 +91,9 @@ defmodule OpenAPIClient.Client.TypedDecoder do
          source: path
        )}
 
+  def decode(value, {:integer, _}, path, caller_module),
+    do: caller_module.decode(value, :integer, path, caller_module)
+
   def decode(value, :number, _, _) when is_number(value), do: {:ok, value}
 
   def decode(value, :number, path, _) when is_binary(value) do
@@ -113,6 +119,9 @@ defmodule OpenAPIClient.Client.TypedDecoder do
          reason: :invalid_number,
          source: path
        )}
+
+  def decode(value, {:number, _}, path, caller_module),
+    do: caller_module.decode(value, :number, path, caller_module)
 
   def decode(%Date{} = value, {:string, :date}, _, _), do: {:ok, value}
   def decode(%DateTime{} = value, {:string, :date}, _, _), do: {:ok, DateTime.to_date(value)}
