@@ -52,7 +52,7 @@ defmodule OpenAPIClient.Operations do
         typed_encoder
       )
 
-    x_static_flag = opts |> Keyword.get_lazy(:x_static_flag, fn -> true end)
+    x_static_flag = Keyword.get_lazy(opts, :x_static_flag, fn -> true end)
 
     {:ok, date_header_with_default} =
       opts
@@ -64,8 +64,7 @@ defmodule OpenAPIClient.Operations do
       )
 
     optional_header =
-      opts
-      |> Keyword.get_lazy(:optional_header, fn ->
+      Keyword.get_lazy(opts, :optional_header, fn ->
         Application.get_env(:open_api_client_ex, :required_header)
       end)
 

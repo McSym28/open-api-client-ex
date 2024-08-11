@@ -704,15 +704,6 @@ if Mix.env() in [:dev, :test] do
                   atom = String.to_atom(name)
                   variable = Macro.var(atom, nil)
 
-                  keyword_call =
-                    quote(
-                      do:
-                        opts
-                        |> Keyword.get_lazy(unquote(atom), fn ->
-                          unquote(default)
-                        end)
-                    )
-
                   if type_needs_typed_encoding?(type, schema_type) do
                     type_new = schema_type_to_readable_type(type, schema_type, state)
 
@@ -720,7 +711,10 @@ if Mix.env() in [:dev, :test] do
                        quote(
                          do:
                            {:ok, unquote(variable)} =
-                             unquote(keyword_call)
+                             opts
+                             |> Keyword.get_lazy(unquote(atom), fn ->
+                               unquote(default)
+                             end)
                              |> typed_encoder.encode(
                                unquote(type_new),
                                [
@@ -732,7 +726,13 @@ if Mix.env() in [:dev, :test] do
                        )
                      ], true}
                   else
-                    {[quote(do: unquote(variable) = unquote(keyword_call))], use_typed_encoder}
+                    {[
+                       quote(
+                         do:
+                           unquote(variable) =
+                             Keyword.get_lazy(opts, unquote(atom), fn -> unquote(default) end)
+                       )
+                     ], use_typed_encoder}
                   end
 
                 %GeneratorParam{
