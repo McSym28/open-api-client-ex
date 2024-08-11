@@ -59,39 +59,18 @@ defmodule OpenAPIClient.Operations do
         typed_encoder
       )
 
-    {:ok, optional_header} =
+    optional_header =
       opts
       |> Keyword.get_lazy(:optional_header, fn ->
         Application.get_env(:open_api_client_ex, :required_header)
       end)
-      |> typed_encoder.encode(
-        {:string, :generic},
-        [{:parameter, :header, "X-Optional-Header"}, {"/test", :get}],
-        typed_encoder
-      )
-
-    {:ok, required_header} =
-      typed_encoder.encode(
-        required_header,
-        {:string, :generic},
-        [{:parameter, :header, "X-Required-Header"}, {"/test", :get}],
-        typed_encoder
-      )
 
     query_params =
       opts
       |> Keyword.take([:datetime_query, :optional_query])
       |> Enum.map(fn
         {:optional_query, value} ->
-          {:ok, value_new} =
-            typed_encoder.encode(
-              value,
-              {:string, :generic},
-              [{:parameter, :query, "optional_query"}, [{"/test", :get}]],
-              typed_encoder
-            )
-
-          {"optional_query", value_new}
+          {"optional_query", value}
 
         {:datetime_query, value} ->
           {:ok, value_new} =
@@ -140,22 +119,32 @@ defmodule OpenAPIClient.Operations do
 
   ## Options
 
+    * `string_header`: ["X-String-Header"] String header parameter
     * `base_url`: Request's base URL. Default value is taken from `@base_url`
     * `client_pipeline`: Client pipeline for making a request. Default value obtained through a call to `OpenAPIClient.Utils.get_config(__operation__, :client_pipeline)}
 
   """
   @spec set_test(OpenAPIClient.TestRequestSchema.t(), [
-          {:base_url, String.t() | URI.t()} | {:client_pipeline, OpenAPIClient.Client.pipeline()}
+          {:string_header, String.t()}
+          | {:base_url, String.t() | URI.t()}
+          | {:client_pipeline, OpenAPIClient.Client.pipeline()}
         ]) :: :ok | :error | {:error, OpenAPIClient.Client.Error.t()}
   def set_test(body, opts \\ []) do
     client_pipeline = Keyword.get(opts, :client_pipeline)
     base_url = opts[:base_url] || @base_url
+
+    headers =
+      opts
+      |> Keyword.take([:string_header])
+      |> Enum.map(fn {:string_header, value} -> {"X-String-Header", value} end)
+      |> Map.new()
 
     %OpenAPIClient.Client.Operation{
       request_base_url: base_url,
       request_url: "/test",
       request_body: body,
       request_method: :post,
+      request_headers: headers,
       request_types: [{"application/json", {OpenAPIClient.TestRequestSchema, :t}}],
       response_types: [{"2XX", :null}, {:default, :null}, {400, :null}]
     }

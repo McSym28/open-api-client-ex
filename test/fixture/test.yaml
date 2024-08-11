@@ -8,6 +8,13 @@ paths:
       description: "Test endpoint"
       operationId: set_test
       summary: "Test endpoint"
+      parameters: 
+        - in: header
+          name: X-String-Header
+          description: String header parameter
+          schema:
+            type: string
+          example: string_header
       requestBody: 
         content:
           "application/json":

@@ -691,66 +691,93 @@ if Mix.env() in [:dev, :test] do
       do_expressions_new =
         Enum.flat_map(do_expressions, fn
           {:=, _, [{:client, _, _} | _]} = _client_expression ->
-            param_assignments =
+            {param_assignments, use_typed_encoder} =
               all_params
-              |> Enum.flat_map(fn
+              |> Enum.flat_map_reduce(false, fn
                 %GeneratorParam{
                   param: %Param{name: name, location: location, value_type: type},
                   schema_type: %SchemaType{default: default} = schema_type,
                   old_name: old_name
-                }
+                },
+                use_typed_encoder
                 when not is_nil(default) ->
                   atom = String.to_atom(name)
                   variable = Macro.var(atom, nil)
                   type_new = schema_type_to_readable_type(type, schema_type, state)
 
-                  [
+                  keyword_call =
                     quote(
                       do:
-                        {:ok, unquote(variable)} =
-                          opts
-                          |> Keyword.get_lazy(unquote(atom), fn ->
-                            unquote(default)
-                          end)
-                          |> typed_encoder.encode(
-                            unquote(type_new),
-                            [
-                              {:parameter, unquote(location), unquote(old_name)},
-                              {unquote(request_path), unquote(request_method)}
-                            ],
-                            typed_encoder
-                          )
+                        opts
+                        |> Keyword.get_lazy(unquote(atom), fn ->
+                          unquote(default)
+                        end)
                     )
-                  ]
+
+                  if type_needs_typed_encoding?(type_new) do
+                    {[
+                       quote(
+                         do:
+                           {:ok, unquote(variable)} =
+                             unquote(keyword_call)
+                             |> typed_encoder.encode(
+                               unquote(type_new),
+                               [
+                                 {:parameter, unquote(location), unquote(old_name)},
+                                 {unquote(request_path), unquote(request_method)}
+                               ],
+                               typed_encoder
+                             )
+                       )
+                     ], true}
+                  else
+                    {[quote(do: unquote(variable) = unquote(keyword_call))], use_typed_encoder}
+                  end
 
                 %GeneratorParam{
                   param: %Param{name: name, location: location, value_type: type},
                   schema_type: schema_type,
                   static: true,
                   old_name: old_name
-                } ->
-                  atom = String.to_atom(name)
-                  variable = Macro.var(atom, nil)
+                },
+                use_typed_encoder ->
                   type_new = schema_type_to_readable_type(type, schema_type, state)
 
-                  [
-                    quote(
-                      do:
-                        {:ok, unquote(variable)} =
-                          typed_encoder.encode(
-                            unquote(variable),
-                            unquote(type_new),
-                            [
-                              {:parameter, unquote(location), unquote(old_name)},
-                              {unquote(request_path), unquote(request_method)}
-                            ],
-                            typed_encoder
-                          )
-                    )
-                  ]
+                  if type_needs_typed_encoding?(type_new) do
+                    atom = String.to_atom(name)
+                    variable = Macro.var(atom, nil)
 
-                _ ->
-                  []
+                    {[
+                       quote(
+                         do:
+                           {:ok, unquote(variable)} =
+                             typed_encoder.encode(
+                               unquote(variable),
+                               unquote(type_new),
+                               [
+                                 {:parameter, unquote(location), unquote(old_name)},
+                                 {unquote(request_path), unquote(request_method)}
+                               ],
+                               typed_encoder
+                             )
+                       )
+                     ], true}
+                  else
+                    {[], use_typed_encoder}
+                  end
+
+                %GeneratorParam{
+                  param: %Param{value_type: type},
+                  schema_type: schema_type
+                },
+                use_typed_encoder ->
+                  type_new = schema_type_to_readable_type(type, schema_type, state)
+
+                  if type_needs_typed_encoding?(type_new) do
+                    {[], true}
+                  else
+                    {[], use_typed_encoder}
+                  end
               end)
 
             client_pipeline_expression =
@@ -762,9 +789,7 @@ if Mix.env() in [:dev, :test] do
               quote do: base_url = opts[:base_url] || @base_url
 
             param_assignments_new =
-              if Enum.empty?(all_params) do
-                param_assignments
-              else
+              if use_typed_encoder do
                 [
                   quote(
                     do:
@@ -777,6 +802,8 @@ if Mix.env() in [:dev, :test] do
                   )
                   | param_assignments
                 ]
+              else
+                param_assignments
               end
 
             [client_pipeline_expression, base_url_expression | param_assignments_new]
@@ -977,19 +1004,23 @@ if Mix.env() in [:dev, :test] do
               {:->, [],
                [
                  [{String.to_atom(name), Macro.var(:value, nil)}],
-                 quote do
-                   {:ok, value_new} =
-                     typed_encoder.encode(
-                       value,
-                       unquote(type_new),
-                       [
-                         {:parameter, unquote(location), unquote(old_name)},
-                         unquote(path)
-                       ],
-                       typed_encoder
-                     )
+                 if type_needs_typed_encoding?(type_new) do
+                   quote do
+                     {:ok, value_new} =
+                       typed_encoder.encode(
+                         value,
+                         unquote(type_new),
+                         [
+                           {:parameter, unquote(location), unquote(old_name)},
+                           unquote(path)
+                         ],
+                         typed_encoder
+                       )
 
-                   {unquote(old_name), value_new}
+                     {unquote(old_name), value_new}
+                   end
+                 else
+                   {old_name, Macro.var(:value, nil)}
                  end
                ]}
               | param_renamings
@@ -1032,6 +1063,12 @@ if Mix.env() in [:dev, :test] do
           end
       end
     end
+
+    defp type_needs_typed_encoding?(:boolean), do: false
+    defp type_needs_typed_encoding?(:integer), do: false
+    defp type_needs_typed_encoding?(:number), do: false
+    defp type_needs_typed_encoding?({:string, :generic}), do: false
+    defp type_needs_typed_encoding?(_type), do: true
 
     defp parse_spec_return_type({:|, _, [type, next]}, acc),
       do: parse_spec_return_type(next, [type | acc])

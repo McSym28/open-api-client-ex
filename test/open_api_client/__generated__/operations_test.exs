@@ -57,6 +57,7 @@ defmodule OpenAPIClient.OperationsTest do
   describe "set_test/2" do
     test "[298] performs a request and encodes OpenAPIClient.TestRequestSchema from request's body" do
       expect(@httpoison, :request, fn :post, "https://example.com/test", body, headers, _ ->
+        assert {_, "string"} = List.keyfind(headers, "x-string-header", 0)
         assert {_, "application/json"} = List.keyfind(headers, "content-type", 0)
 
         assert {:ok,
@@ -80,12 +81,14 @@ defmodule OpenAPIClient.OperationsTest do
                    number_enum: 2.0,
                    strict_enum: :strict_enum_3
                  },
+                 string_header: "string",
                  base_url: "https://example.com"
                )
     end
 
     test "[299] performs a request and encodes OpenAPIClient.TestRequestSchema from request's body" do
       expect(@httpoison, :request, fn :post, "https://example.com/test", body, headers, _ ->
+        assert {_, "string"} = List.keyfind(headers, "x-string-header", 0)
         assert {_, "application/json"} = List.keyfind(headers, "content-type", 0)
 
         assert {:ok,
@@ -109,12 +112,14 @@ defmodule OpenAPIClient.OperationsTest do
                    number_enum: 2.0,
                    strict_enum: :strict_enum_3
                  },
+                 string_header: "string",
                  base_url: "https://example.com"
                )
     end
 
     test "[400] performs a request and encodes OpenAPIClient.TestRequestSchema from request's body" do
       expect(@httpoison, :request, fn :post, "https://example.com/test", body, headers, _ ->
+        assert {_, "string"} = List.keyfind(headers, "x-string-header", 0)
         assert {_, "application/json"} = List.keyfind(headers, "content-type", 0)
 
         assert {:ok,
@@ -138,6 +143,7 @@ defmodule OpenAPIClient.OperationsTest do
                    number_enum: 2.0,
                    strict_enum: :strict_enum_3
                  },
+                 string_header: "string",
                  base_url: "https://example.com"
                )
     end

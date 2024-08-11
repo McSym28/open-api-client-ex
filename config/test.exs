@@ -46,6 +46,12 @@ config :open_api_client_ex,
               default: {:const, "2024-01-23"}
             ]}
          ]
+       ]},
+      {{"/test", :post},
+       [
+         params: [
+           {{"X-String-Header", :header}, [name: "string_header"]}
+         ]
        ]}
     ],
     schemas: [
