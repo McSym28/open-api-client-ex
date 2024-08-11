@@ -155,7 +155,7 @@ if Mix.env() in [:dev, :test] do
         end)
       end)
 
-      OpenAPI.Renderer.Module.render(state, file)
+      OpenAPI.Renderer.render(state, file)
     end
 
     @impl true
@@ -526,7 +526,7 @@ if Mix.env() in [:dev, :test] do
       end
 
       file_new = %File{file | operations: operations_new}
-      OpenAPI.Renderer.Operation.render_all(state, file_new)
+      OpenAPI.Renderer.render_operations(state, file_new)
     end
 
     @impl true
@@ -604,7 +604,7 @@ if Mix.env() in [:dev, :test] do
                return_type
              ]}
           ]}
-       ]} = OpenAPI.Renderer.Operation.render_spec(state, operation_new)
+       ]} = OpenAPI.Renderer.render_operation_spec(state, operation_new)
 
       return_types = parse_spec_return_type(return_type, [])
 
@@ -684,7 +684,7 @@ if Mix.env() in [:dev, :test] do
        [
          {^function_name, _, _} = function_header,
          [do: {do_tag, do_metadata, do_expressions}]
-       ]} = OpenAPI.Renderer.Operation.render_function(state, operation_new)
+       ]} = OpenAPI.Renderer.render_operation_function(state, operation_new)
 
       path = [{request_path, request_method}]
 

@@ -44,7 +44,7 @@ if Mix.env() in [:dev, :test] do
             parameters: params_from_operation
           } = operation_spec
         ) do
-      if OpenAPI.Processor.Ignore.ignore_operation?(state, operation_spec) do
+      if OpenAPI.Processor.ignore_operation?(state, operation_spec) do
         true
       else
         request_method = OpenAPI.Processor.Operation.request_method(state, operation_spec)
@@ -215,7 +215,7 @@ if Mix.env() in [:dev, :test] do
           dynamic_params = dynamic_params ++ additional_dynamic_params
 
           result =
-            OpenAPI.Processor.Operation.docstring(
+            OpenAPI.Processor.operation_docstring(
               state,
               operation_spec,
               static_params ++ dynamic_params
@@ -232,7 +232,7 @@ if Mix.env() in [:dev, :test] do
           end
 
         [] ->
-          OpenAPI.Processor.Operation.docstring(
+          OpenAPI.Processor.operation_docstring(
             state,
             operation_spec,
             query_params
