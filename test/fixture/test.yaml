@@ -77,6 +77,14 @@ paths:
             type: string
             format: date
             default: "2022-12-15"
+        - in: query
+          name: X-Static-Flag
+          description: Static flag query parameter
+          required: true
+          schema:
+            type: boolean
+            enum: [true]
+            default: true
       responses:
         "200":
           description: "Success"

@@ -12,6 +12,7 @@ defmodule OpenAPIClient.OperationsTest do
         assert {_, "2024-01-02"} = List.keyfind(options[:params], "date_query_with_default", 0)
         assert {_, "2024-01-02T01:23:45Z"} = List.keyfind(options[:params], "datetime_query", 0)
         assert {_, "string"} = List.keyfind(options[:params], "optional_query", 0)
+        assert {_, true} = List.keyfind(options[:params], "X-Static-Flag", 0)
         assert {_, "2024-01-02"} = List.keyfind(headers, "x-date-header-with-default", 0)
         assert {_, "string"} = List.keyfind(headers, "x-optional-header", 0)
         assert {_, "string"} = List.keyfind(headers, "x-required-header", 0)
@@ -46,6 +47,7 @@ defmodule OpenAPIClient.OperationsTest do
                OpenAPIClient.Operations.get_test("string",
                  optional_header: "string",
                  date_header_with_default: ~D[2024-01-02],
+                 x_static_flag: true,
                  optional_query: "string",
                  datetime_query: ~U[2024-01-02 01:23:45Z],
                  date_query_with_default: ~D[2024-01-02],

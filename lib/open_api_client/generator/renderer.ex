@@ -703,7 +703,6 @@ if Mix.env() in [:dev, :test] do
                 when not is_nil(default) ->
                   atom = String.to_atom(name)
                   variable = Macro.var(atom, nil)
-                  type_new = schema_type_to_readable_type(type, schema_type, state)
 
                   keyword_call =
                     quote(
@@ -714,7 +713,9 @@ if Mix.env() in [:dev, :test] do
                         end)
                     )
 
-                  if type_needs_typed_encoding?(type_new) do
+                  if type_needs_typed_encoding?(type, schema_type) do
+                    type_new = schema_type_to_readable_type(type, schema_type, state)
+
                     {[
                        quote(
                          do:
@@ -741,11 +742,10 @@ if Mix.env() in [:dev, :test] do
                   old_name: old_name
                 },
                 use_typed_encoder ->
-                  type_new = schema_type_to_readable_type(type, schema_type, state)
-
-                  if type_needs_typed_encoding?(type_new) do
+                  if type_needs_typed_encoding?(type, schema_type) do
                     atom = String.to_atom(name)
                     variable = Macro.var(atom, nil)
+                    type_new = schema_type_to_readable_type(type, schema_type, state)
 
                     {[
                        quote(
@@ -771,9 +771,7 @@ if Mix.env() in [:dev, :test] do
                   schema_type: schema_type
                 },
                 use_typed_encoder ->
-                  type_new = schema_type_to_readable_type(type, schema_type, state)
-
-                  if type_needs_typed_encoding?(type_new) do
+                  if type_needs_typed_encoding?(type, schema_type) do
                     {[], true}
                   else
                     {[], use_typed_encoder}
@@ -997,14 +995,14 @@ if Mix.env() in [:dev, :test] do
                                                  schema_type: schema_type
                                                },
                                                param_renamings ->
-          type_new = schema_type_to_readable_type(type, schema_type, state)
-
           param_renamings_new =
             [
               {:->, [],
                [
                  [{String.to_atom(name), Macro.var(:value, nil)}],
-                 if type_needs_typed_encoding?(type_new) do
+                 if type_needs_typed_encoding?(type, schema_type) do
+                   type_new = schema_type_to_readable_type(type, schema_type, state)
+
                    quote do
                      {:ok, value_new} =
                        typed_encoder.encode(
@@ -1064,11 +1062,26 @@ if Mix.env() in [:dev, :test] do
       end
     end
 
-    defp type_needs_typed_encoding?(:boolean), do: false
-    defp type_needs_typed_encoding?(:integer), do: false
-    defp type_needs_typed_encoding?(:number), do: false
-    defp type_needs_typed_encoding?({:string, :generic}), do: false
-    defp type_needs_typed_encoding?(_type), do: true
+    defp type_needs_typed_encoding?(:boolean, _schema_type), do: false
+    defp type_needs_typed_encoding?(:integer, _schema_type), do: false
+    defp type_needs_typed_encoding?(:number, _schema_type), do: false
+    defp type_needs_typed_encoding?({:string, :generic}, _schema_type), do: false
+
+    defp type_needs_typed_encoding?({:enum, enum_values}, %SchemaType{
+           enum: %SchemaType.Enum{type: enum_type}
+         })
+         when enum_type in [:boolean, :integer, :number] do
+      check_function =
+        case enum_type do
+          :boolean -> &is_boolean/1
+          :integer -> &is_integer/1
+          :number -> &is_number/1
+        end
+
+      not Enum.all?(enum_values, check_function)
+    end
+
+    defp type_needs_typed_encoding?(_type, _schema_type), do: true
 
     defp parse_spec_return_type({:|, _, [type, next]}, acc),
       do: parse_spec_return_type(next, [type | acc])

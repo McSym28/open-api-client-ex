@@ -19,6 +19,7 @@ defmodule OpenAPIClient.Operations do
     * `date_query_with_default`: Date query parameter with default. Default value is `~D[2022-12-15]`
     * `datetime_query`: DateTime query parameter
     * `optional_query`: Optional query parameter
+    * `x_static_flag`: ["X-Static-Flag"] Static flag query parameter. Default value is `true`
     * `date_header_with_default`: ["X-Date-Header-With-Default"] Date header parameter with default. Default value is `"2024-01-23"`
     * `optional_header`: ["X-Optional-Header"] Optional header parameter. Default value obtained through a call to `Application.get_env(:open_api_client_ex, :required_header)`
     * `base_url`: Request's base URL. Default value is taken from `@base_url`
@@ -29,6 +30,7 @@ defmodule OpenAPIClient.Operations do
           {:date_query_with_default, Date.t()}
           | {:datetime_query, DateTime.t()}
           | {:optional_query, String.t()}
+          | {:x_static_flag, true}
           | {:date_header_with_default, Date.t()}
           | {:optional_header, String.t()}
           | {:base_url, String.t() | URI.t()}
@@ -49,6 +51,8 @@ defmodule OpenAPIClient.Operations do
         [{:parameter, :query, "date_query_with_default"}, {"/test", :get}],
         typed_encoder
       )
+
+    x_static_flag = opts |> Keyword.get_lazy(:x_static_flag, fn -> true end)
 
     {:ok, date_header_with_default} =
       opts
@@ -84,7 +88,10 @@ defmodule OpenAPIClient.Operations do
           {"datetime_query", value_new}
       end)
       |> Map.new()
-      |> Map.merge(%{"date_query_with_default" => date_query_with_default})
+      |> Map.merge(%{
+        "date_query_with_default" => date_query_with_default,
+        "X-Static-Flag" => x_static_flag
+      })
 
     headers = %{
       "X-Date-Header-With-Default" => date_header_with_default,
