@@ -639,7 +639,12 @@ if Mix.env() in [:dev, :test] do
       %GeneratorParam{param | schema_type: schema_type_new}
     end
 
-    defp snakesize_name(name), do: Macro.underscore(name)
+    defp snakesize_name(name),
+      do:
+        name
+        |> String.replace(~r/-([[:upper:]])/, "\\1")
+        |> String.replace("-", "_")
+        |> Macro.underscore()
 
     defp generate_function_call({:profile_config, key}, state) when is_atom(key) do
       quote do
