@@ -201,7 +201,10 @@ if Mix.env() in [:dev, :test] do
     end
 
     @impl true
-    def render_schema_types(state, schemas) do
+    def render_schema_types(
+          %OpenAPI.Renderer.State{implementation: implementation} = state,
+          schemas
+        ) do
       {schemas_new, types} =
         Enum.map_reduce(schemas, [], fn %Schema{ref: ref, type_name: type} = schema, types ->
           [{_, %GeneratorSchema{fields: all_fields}}] = :ets.lookup(:schemas, ref)
@@ -225,7 +228,9 @@ if Mix.env() in [:dev, :test] do
           end) ++
             [
               Util.put_newlines(
-                quote(do: @type(types :: unquote(Util.to_type(state, {:union, types}))))
+                quote(
+                  do: @type(types :: unquote(implementation.render_type(state, {:union, types})))
+                )
               )
             ]
       end
@@ -531,7 +536,7 @@ if Mix.env() in [:dev, :test] do
 
     @impl true
     def render_operation_spec(
-          state,
+          %OpenAPI.Renderer.State{implementation: implementation} = state,
           %Operation{
             function_name: function_name,
             responses: responses,
@@ -627,7 +632,7 @@ if Mix.env() in [:dev, :test] do
       opts_spec =
         dynamic_params
         |> Enum.map(fn %Param{name: name, value_type: type} ->
-          {String.to_atom(name), Util.to_type(state, type)}
+          {String.to_atom(name), implementation.render_type(state, type)}
         end)
         |> Kernel.++([
           {:base_url, quote(do: String.t() | URI.t())},
