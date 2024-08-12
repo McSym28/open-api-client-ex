@@ -11,9 +11,9 @@ defmodule OpenAPIClient.Schema do
           | :boolean
           | {:boolean, String.t()}
           | :integer
-          | {:integer, String.t()}
+          | {:integer, atom() | String.t()}
           | :number
-          | {:number, String.t()}
+          | {:number, atom() | String.t()}
           | {:string, atom() | String.t()}
           | :map
           | :unknown

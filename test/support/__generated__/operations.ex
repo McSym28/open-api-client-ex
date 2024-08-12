@@ -19,6 +19,8 @@ defmodule OpenAPIClient.Operations do
     * `date_query_with_default`: Date query parameter with default. Default value is `~D[2022-12-15]`
     * `datetime_query`: DateTime query parameter
     * `optional_query`: Optional query parameter
+    * `x_integer_non_standard_format_query`: ["X-Integer-Non-Standard-Format-Query"] Integer query parameter with NON-standard format
+    * `x_integer_standard_format_query`: ["X-Integer-Standard-Format-Query"] Integer query parameter with standard format
     * `x_static_flag`: ["X-Static-Flag"] Static flag query parameter. Default value is `true`
     * `date_header_with_default`: ["X-Date-Header-With-Default"] Date header parameter with default. Default value is `"2024-01-23"`
     * `optional_header`: ["X-Optional-Header"] Optional header parameter. Default value obtained through a call to `Application.get_env(:open_api_client_ex, :required_header)`
@@ -30,6 +32,8 @@ defmodule OpenAPIClient.Operations do
           {:date_query_with_default, Date.t()}
           | {:datetime_query, DateTime.t()}
           | {:optional_query, String.t()}
+          | {:x_integer_non_standard_format_query, integer}
+          | {:x_integer_standard_format_query, integer}
           | {:x_static_flag, true}
           | {:date_header_with_default, Date.t()}
           | {:optional_header, String.t()}
@@ -70,8 +74,27 @@ defmodule OpenAPIClient.Operations do
 
     query_params =
       opts
-      |> Keyword.take([:datetime_query, :optional_query])
+      |> Keyword.take([
+        :datetime_query,
+        :optional_query,
+        :x_integer_non_standard_format_query,
+        :x_integer_standard_format_query
+      ])
       |> Enum.map(fn
+        {:x_integer_standard_format_query, value} ->
+          {"X-Integer-Standard-Format-Query", value}
+
+        {:x_integer_non_standard_format_query, value} ->
+          {:ok, value_new} =
+            typed_encoder.encode(
+              value,
+              {:integer, "int69"},
+              [{:parameter, :query, "X-Integer-Non-Standard-Format-Query"}, [{"/test", :get}]],
+              typed_encoder
+            )
+
+          {"X-Integer-Non-Standard-Format-Query", value_new}
+
         {:optional_query, value} ->
           {"optional_query", value}
 

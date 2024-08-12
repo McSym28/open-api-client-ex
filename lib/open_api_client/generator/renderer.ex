@@ -1064,7 +1064,11 @@ if Mix.env() in [:dev, :test] do
 
     defp type_needs_typed_encoding?(:boolean, _schema_type), do: false
     defp type_needs_typed_encoding?(:integer, _schema_type), do: false
+    defp type_needs_typed_encoding?({:integer, :int32}, _schema_type), do: false
+    defp type_needs_typed_encoding?({:integer, :int64}, _schema_type), do: false
     defp type_needs_typed_encoding?(:number, _schema_type), do: false
+    defp type_needs_typed_encoding?({:number, :float}, _schema_type), do: false
+    defp type_needs_typed_encoding?({:number, :double}, _schema_type), do: false
     defp type_needs_typed_encoding?({:string, :generic}, _schema_type), do: false
 
     defp type_needs_typed_encoding?({:enum, enum_values}, %SchemaType{
@@ -1079,6 +1083,21 @@ if Mix.env() in [:dev, :test] do
         end
 
       not Enum.all?(enum_values, check_function)
+    end
+
+    defp type_needs_typed_encoding?(
+           {:enum, _} = type,
+           %SchemaType{enum: %SchemaType.Enum{type: {enum_base_type, _} = enum_type} = enum} =
+             schema_type
+         )
+         when enum_base_type in [:boolean, :integer, :number] do
+      if type_needs_typed_encoding?(enum_type, nil) do
+        true
+      else
+        enum_new = %SchemaType.Enum{enum | type: enum_base_type}
+        schema_type_new = %SchemaType{schema_type | enum: enum_new}
+        type_needs_typed_encoding?(type, schema_type_new)
+      end
     end
 
     defp type_needs_typed_encoding?(_type, _schema_type), do: true

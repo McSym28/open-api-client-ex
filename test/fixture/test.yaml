@@ -85,6 +85,18 @@ paths:
             type: boolean
             enum: [true]
             default: true
+        - in: query
+          name: X-Integer-Standard-Format-Query
+          description: Integer query parameter with standard format
+          schema:
+            type: integer
+            format: int32
+        - in: query
+          name: X-Integer-Non-Standard-Format-Query
+          description: Integer query parameter with NON-standard format
+          schema:
+            type: integer
+            format: int69
       responses:
         "200":
           description: "Success"
