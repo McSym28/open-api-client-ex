@@ -18,7 +18,7 @@ defmodule OpenAPIClient.Client.Steps.ResponseBodyContentTypeDecoder do
   def call(%Operation{response_body: nil} = operation, _opts), do: operation
 
   def call(%Operation{response_body: body} = operation, _opts) do
-    case Operation.get_response_header(operation, "Content-Type") do
+    case Operation.get_response_content_type_header_media_type(operation) do
       {:ok, content_type} ->
         operation
         |> OpenAPIClient.Utils.get_config(:decoders, [])
@@ -58,7 +58,7 @@ defmodule OpenAPIClient.Client.Steps.ResponseBodyContentTypeDecoder do
             )
         end
 
-      _ ->
+      {:error, _} ->
         operation
     end
   end

@@ -18,7 +18,7 @@ defmodule OpenAPIClient.Client.Steps.RequestBodyContentTypeEncoder do
   def call(%Operation{request_body: nil} = operation, _opts), do: operation
 
   def call(%Operation{request_body: body} = operation, _opts) do
-    case Operation.get_request_header(operation, "Content-Type") do
+    case Operation.get_request_content_type_header_media_type(operation) do
       {:ok, content_type} ->
         operation
         |> OpenAPIClient.Utils.get_config(:encoders, [])
@@ -58,7 +58,7 @@ defmodule OpenAPIClient.Client.Steps.RequestBodyContentTypeEncoder do
             )
         end
 
-      :error ->
+      {:error, _} ->
         operation
     end
   end

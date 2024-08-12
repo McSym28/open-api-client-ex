@@ -1400,8 +1400,15 @@ if Mix.env() in [:dev, :test] do
                     quote(
                       do:
                         assert(
-                          {_, unquote(content_type)} =
-                            List.keyfind(headers, "content-type", 0)
+                          {:ok, unquote(content_type)} ==
+                            with {_, content_type_request} <-
+                                   List.keyfind(headers, "content-type", 0),
+                                 {:ok, {media_type, media_subtype, _parameters}} =
+                                   OpenAPIClient.Client.Operation.parse_content_type_header(
+                                     content_type_request
+                                   ) do
+                              {:ok, "#{media_type}/#{media_subtype}"}
+                            end
                         )
                     )
                     | &1

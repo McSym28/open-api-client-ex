@@ -64,7 +64,15 @@ defmodule OpenAPIClient.OperationsTest do
     test "[298] performs a request and encodes OpenAPIClient.TestRequestSchema from request's body" do
       expect(@httpoison, :request, fn :post, "https://example.com/test", body, headers, _ ->
         assert {_, "string"} = List.keyfind(headers, "x-string-header", 0)
-        assert {_, "application/json"} = List.keyfind(headers, "content-type", 0)
+
+        assert {:ok, "application/json"} ==
+                 (with {_, content_type_request} <- List.keyfind(headers, "content-type", 0),
+                       {:ok, {media_type, media_subtype, _parameters}} =
+                         OpenAPIClient.Client.Operation.parse_content_type_header(
+                           content_type_request
+                         ) do
+                    {:ok, "#{media_type}/#{media_subtype}"}
+                  end)
 
         assert {:ok,
                 %{
@@ -95,7 +103,15 @@ defmodule OpenAPIClient.OperationsTest do
     test "[299] performs a request and encodes OpenAPIClient.TestRequestSchema from request's body" do
       expect(@httpoison, :request, fn :post, "https://example.com/test", body, headers, _ ->
         assert {_, "string"} = List.keyfind(headers, "x-string-header", 0)
-        assert {_, "application/json"} = List.keyfind(headers, "content-type", 0)
+
+        assert {:ok, "application/json"} ==
+                 (with {_, content_type_request} <- List.keyfind(headers, "content-type", 0),
+                       {:ok, {media_type, media_subtype, _parameters}} =
+                         OpenAPIClient.Client.Operation.parse_content_type_header(
+                           content_type_request
+                         ) do
+                    {:ok, "#{media_type}/#{media_subtype}"}
+                  end)
 
         assert {:ok,
                 %{
@@ -126,7 +142,15 @@ defmodule OpenAPIClient.OperationsTest do
     test "[400] performs a request and encodes OpenAPIClient.TestRequestSchema from request's body" do
       expect(@httpoison, :request, fn :post, "https://example.com/test", body, headers, _ ->
         assert {_, "string"} = List.keyfind(headers, "x-string-header", 0)
-        assert {_, "application/json"} = List.keyfind(headers, "content-type", 0)
+
+        assert {:ok, "application/json"} ==
+                 (with {_, content_type_request} <- List.keyfind(headers, "content-type", 0),
+                       {:ok, {media_type, media_subtype, _parameters}} =
+                         OpenAPIClient.Client.Operation.parse_content_type_header(
+                           content_type_request
+                         ) do
+                    {:ok, "#{media_type}/#{media_subtype}"}
+                  end)
 
         assert {:ok,
                 %{

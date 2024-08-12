@@ -60,6 +60,12 @@ defmodule OpenAPIClient.Client.Operation do
     get_header(headers, header_name)
   end
 
+  @spec get_request_content_type_header_media_type(t()) ::
+          {:ok, String.t()} | {:error, :not_found | :invalid_format}
+  def get_request_content_type_header_media_type(%__MODULE__{request_headers: headers}) do
+    get_content_type_header_media_type(headers)
+  end
+
   @spec put_request_header(t(), String.t(), String.t()) :: t()
   def put_request_header(operation, header_name, header_value) do
     put_request_headers(operation, [{header_name, header_value}])
@@ -73,6 +79,12 @@ defmodule OpenAPIClient.Client.Operation do
   @spec get_response_header(t(), String.t()) :: {:ok, String.t()} | :error
   def get_response_header(%__MODULE__{response_headers: headers}, header_name) do
     get_header(headers, header_name)
+  end
+
+  @spec get_response_content_type_header_media_type(t()) ::
+          {:ok, String.t()} | {:error, :not_found | :invalid_format}
+  def get_response_content_type_header_media_type(%__MODULE__{response_headers: headers}) do
+    get_content_type_header_media_type(headers)
   end
 
   @spec put_response_header(t(), String.t(), String.t()) :: t()
@@ -129,7 +141,7 @@ defmodule OpenAPIClient.Client.Operation do
         {:ok, {status_code, nil, :null}}
 
       {status_code, schemas} ->
-        case get_response_header(operation, "Content-Type") do
+        case get_response_content_type_header_media_type(operation) do
           {:ok, content_type} ->
             case List.keyfind(schemas, content_type, 0) do
               {_, type} ->
@@ -144,12 +156,20 @@ defmodule OpenAPIClient.Client.Operation do
                  )}
             end
 
-          :error ->
+          {:error, :not_found} ->
             {:error,
              Error.new(
                message: "Missing `Content-Type` HTTP header",
                operation: operation,
                reason: :missing_content_type
+             )}
+
+          {:error, :invalid_format} ->
+            {:error,
+             Error.new(
+               message: "`Content-Type` HTTP header invalid format",
+               operation: operation,
+               reason: :content_type_invalid_format
              )}
         end
 
@@ -174,5 +194,74 @@ defmodule OpenAPIClient.Client.Operation do
       end)
 
     Map.merge(headers, new_headers_map)
+  end
+
+  defp get_content_type_header_media_type(headers) do
+    with {:get, {:ok, content_type}} <- {:get, get_header(headers, "Content-Type")},
+         {:parse, {:ok, {type, subtype, _parameters}}} <-
+           {:parse, parse_content_type_header(content_type)} do
+      media_type = "#{type}/#{subtype}"
+      {:ok, media_type}
+    else
+      {:get, :error} -> {:error, :not_found}
+      {:parse, _} -> {:error, :invalid_format}
+    end
+  end
+
+  @spec parse_content_type_header(String.t()) ::
+          {:ok, {String.t(), String.t(), %{String.t() => String.t()}}}
+          | {:error,
+             :empty_string
+             | {:invalid_media_type_format, String.t()}
+             | {:invalid_parameter_format, String.t()}}
+  def parse_content_type_header(value) do
+    with {:initial_split, [media_type | rest]} <-
+           {:initial_split, String.split(value, ";", trim: true)},
+         {:parse_media_type, {:ok, {type, subtype}}} <-
+           {:parse_media_type, media_type |> String.trim() |> parse_content_type_media_type()},
+         {:parse_parameters, {:ok, parameter_map}} <-
+           {:parse_parameters,
+            Enum.reduce_while(rest, {:ok, %{}}, fn parameter, {:ok, parameter_map} ->
+              parameter
+              |> String.trim()
+              |> parse_content_type_parameter()
+              |> case do
+                {:ok, :empty_string} ->
+                  {:cont, {:ok, parameter_map}}
+
+                {:ok, {key, value}} ->
+                  {:cont, {:ok, Map.put(parameter_map, key, value)}}
+
+                error ->
+                  {:halt, error}
+              end
+            end)} do
+      {:ok, {type, subtype, parameter_map}}
+    else
+      {:initial_split, []} -> {:error, :empty_string}
+      {_tag, error} -> error
+    end
+  end
+
+  defp parse_content_type_media_type(""), do: {:error, :empty_string}
+
+  defp parse_content_type_media_type(value) do
+    value
+    |> String.split("/")
+    |> case do
+      [type, subtype] -> {:ok, {type, subtype}}
+      _ -> {:error, {:invalid_media_type_format, value}}
+    end
+  end
+
+  defp parse_content_type_parameter(""), do: {:ok, :empty_string}
+
+  defp parse_content_type_parameter(value) do
+    value
+    |> String.split("=")
+    |> case do
+      [key, value] -> {:ok, {key, value}}
+      _ -> {:error, {:invalid_parameter_format, value}}
+    end
   end
 end
