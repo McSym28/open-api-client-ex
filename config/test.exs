@@ -75,7 +75,8 @@ config :open_api_client_ex,
                 "schema" => %{"type" => "string"},
                 "description" => "Optional additional parameter"
               },
-              default: {:const, "new_param_value"}
+              default: {:const, "new_param_value"},
+              example: "new_param_value"
             ]}
          ]
        ]},

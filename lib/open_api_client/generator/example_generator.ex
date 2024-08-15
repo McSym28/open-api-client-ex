@@ -87,34 +87,11 @@ if Mix.env() in [:dev, :test] do
     def generate(type, _path, _caller_module) when type in [:any, :map], do: %{"a" => "b"}
 
     def generate(
-          %GeneratorField{schema_type: %SchemaType{examples: [value | _]}},
-          _path,
-          _caller_module
-        ),
-        do: value
-
-    def generate(
-          %GeneratorField{
-            field: %Field{type: {:array, {:enum, _}}},
-            schema_type: %SchemaType{enum: %SchemaType.Enum{options: enum_options}}
-          },
+          %GeneratorField{field: %Field{type: type}, schema_type: schema_type},
           path,
           caller_module
         ),
-        do: caller_module.generate({:array, {:enum, enum_options}}, path, caller_module)
-
-    def generate(
-          %GeneratorField{
-            field: %Field{type: {:enum, _}},
-            schema_type: %SchemaType{enum: %SchemaType.Enum{options: enum_options}}
-          },
-          path,
-          caller_module
-        ),
-        do: caller_module.generate({:enum, enum_options}, path, caller_module)
-
-    def generate(%GeneratorField{field: %Field{type: type}}, path, caller_module),
-      do: caller_module.generate(type, path, caller_module)
+        do: process_schema_type(type, schema_type, path, caller_module)
 
     def generate(%GeneratorSchema{fields: all_fields}, path, caller_module) do
       all_fields
@@ -133,7 +110,33 @@ if Mix.env() in [:dev, :test] do
       caller_module.generate(schema, path, caller_module)
     end
 
-    def generate(%GeneratorParam{param: %Param{value_type: type}}, path, caller_module),
+    def generate(
+          %GeneratorParam{param: %Param{value_type: type}, schema_type: schema_type},
+          path,
+          caller_module
+        ),
+        do: process_schema_type(type, schema_type, path, caller_module)
+
+    def process_schema_type(_type, %SchemaType{examples: [value | _]}, _path, _caller_module),
+      do: value
+
+    def process_schema_type(
+          {:array, {:enum, _}},
+          %SchemaType{enum: %SchemaType.Enum{options: enum_options}},
+          path,
+          caller_module
+        ),
+        do: caller_module.generate({:array, {:enum, enum_options}}, path, caller_module)
+
+    def process_schema_type(
+          {:enum, _},
+          %SchemaType{enum: %SchemaType.Enum{options: enum_options}},
+          path,
+          caller_module
+        ),
+        do: caller_module.generate({:enum, enum_options}, path, caller_module)
+
+    def process_schema_type(type, _schema_type, path, caller_module),
       do: caller_module.generate(type, path, caller_module)
   end
 end

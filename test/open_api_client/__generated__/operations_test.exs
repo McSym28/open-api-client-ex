@@ -14,7 +14,7 @@ defmodule OpenAPIClient.OperationsTest do
                                                     pipeline ->
         assert {_, "string"} = List.keyfind(params, :optional_header_new_param, 0)
         assert {_, "string"} = List.keyfind(params, :optional_new_param, 0)
-        assert {_, "string"} = List.keyfind(params, :optional_new_param_with_default, 0)
+        assert {_, "new_param_value"} = List.keyfind(params, :optional_new_param_with_default, 0)
         assert {_, "string"} = List.keyfind(params, :required_new_param, 0)
         OpenAPIClient.Client.perform(operation, pipeline)
       end)
@@ -22,13 +22,13 @@ defmodule OpenAPIClient.OperationsTest do
       expect(@httpoison, :request, fn :get, "https://example.com/test", _, headers, options ->
         assert {_, "2024-01-02"} = List.keyfind(options[:params], "date_query_with_default", 0)
         assert {_, "2024-01-02T01:23:45Z"} = List.keyfind(options[:params], "datetime_query", 0)
-        assert {_, "string"} = List.keyfind(options[:params], "optional_query", 0)
+        assert {_, "optional-query"} = List.keyfind(options[:params], "optional_query", 0)
         assert {_, 1} = List.keyfind(options[:params], "X-Integer-Non-Standard-Format-Query", 0)
         assert {_, 1} = List.keyfind(options[:params], "X-Integer-Standard-Format-Query", 0)
         assert {_, true} = List.keyfind(options[:params], "X-Static-Flag", 0)
         assert {_, "2024-01-02"} = List.keyfind(headers, "x-date-header-with-default", 0)
-        assert {_, "string"} = List.keyfind(headers, "x-optional-header", 0)
-        assert {_, "string"} = List.keyfind(headers, "x-required-header", 0)
+        assert {_, "optional_header"} = List.keyfind(headers, "x-optional-header", 0)
+        assert {_, "required_header"} = List.keyfind(headers, "x-required-header", 0)
 
         assert {:ok, body_encoded} =
                  Jason.encode(%{
@@ -57,16 +57,16 @@ defmodule OpenAPIClient.OperationsTest do
                 number: 7.0,
                 string: "another_string"
               }} ==
-               OpenAPIClient.Operations.get_test("string", "string",
-                 optional_new_param_with_default: "string",
+               OpenAPIClient.Operations.get_test("required_header", "string",
+                 optional_new_param_with_default: "new_param_value",
                  optional_new_param: "string",
                  optional_header_new_param: "string",
-                 optional_header: "string",
+                 optional_header: "optional_header",
                  date_header_with_default: ~D[2024-01-02],
                  x_static_flag: true,
                  x_integer_standard_format_query: 1,
                  x_integer_non_standard_format_query: 1,
-                 optional_query: "string",
+                 optional_query: "optional-query",
                  datetime_query: ~U[2024-01-02 01:23:45Z],
                  date_query_with_default: ~D[2024-01-02],
                  base_url: "https://example.com"
@@ -79,7 +79,7 @@ defmodule OpenAPIClient.OperationsTest do
       expect(OpenAPIClient.ClientMock, :perform, &OpenAPIClient.Client.perform/2)
 
       expect(@httpoison, :request, fn :post, "https://example.com/test", body, headers, _ ->
-        assert {_, "string"} = List.keyfind(headers, "x-string-header", 0)
+        assert {_, "string_header"} = List.keyfind(headers, "x-string-header", 0)
 
         assert {:ok, "application/json"} ==
                  (with {_, content_type_request} <- List.keyfind(headers, "content-type", 0),
@@ -111,7 +111,7 @@ defmodule OpenAPIClient.OperationsTest do
                    number_enum: 2.0,
                    strict_enum: :strict_enum_3
                  },
-                 string_header: "string",
+                 string_header: "string_header",
                  base_url: "https://example.com"
                )
     end
@@ -120,7 +120,7 @@ defmodule OpenAPIClient.OperationsTest do
       expect(OpenAPIClient.ClientMock, :perform, &OpenAPIClient.Client.perform/2)
 
       expect(@httpoison, :request, fn :post, "https://example.com/test", body, headers, _ ->
-        assert {_, "string"} = List.keyfind(headers, "x-string-header", 0)
+        assert {_, "string_header"} = List.keyfind(headers, "x-string-header", 0)
 
         assert {:ok, "application/json"} ==
                  (with {_, content_type_request} <- List.keyfind(headers, "content-type", 0),
@@ -152,7 +152,7 @@ defmodule OpenAPIClient.OperationsTest do
                    number_enum: 2.0,
                    strict_enum: :strict_enum_3
                  },
-                 string_header: "string",
+                 string_header: "string_header",
                  base_url: "https://example.com"
                )
     end
@@ -161,7 +161,7 @@ defmodule OpenAPIClient.OperationsTest do
       expect(OpenAPIClient.ClientMock, :perform, &OpenAPIClient.Client.perform/2)
 
       expect(@httpoison, :request, fn :post, "https://example.com/test", body, headers, _ ->
-        assert {_, "string"} = List.keyfind(headers, "x-string-header", 0)
+        assert {_, "string_header"} = List.keyfind(headers, "x-string-header", 0)
 
         assert {:ok, "application/json"} ==
                  (with {_, content_type_request} <- List.keyfind(headers, "content-type", 0),
@@ -193,7 +193,7 @@ defmodule OpenAPIClient.OperationsTest do
                    number_enum: 2.0,
                    strict_enum: :strict_enum_3
                  },
-                 string_header: "string",
+                 string_header: "string_header",
                  base_url: "https://example.com"
                )
     end
