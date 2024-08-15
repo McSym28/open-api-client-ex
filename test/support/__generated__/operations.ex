@@ -13,6 +13,7 @@ defmodule OpenAPIClient.Operations do
   ## Arguments
 
     * `required_header`: ["X-Required-Header"] Required header parameter
+    * `required_new_param`: Required additional parameter
 
   ## Options
 
@@ -24,11 +25,14 @@ defmodule OpenAPIClient.Operations do
     * `x_static_flag`: ["X-Static-Flag"] Static flag query parameter. Default value is `true`
     * `date_header_with_default`: ["X-Date-Header-With-Default"] Date header parameter with default. Default value is `"2024-01-23"`
     * `optional_header`: ["X-Optional-Header"] Optional header parameter. Default value obtained through a call to `Application.get_env(:open_api_client_ex, :required_header)`
+    * `optional_header_new_param`: Optional additional header parameter
+    * `optional_new_param`: Optional additional parameter
+    * `optional_new_param_with_default`: Optional additional parameter. Default value is `"new_param_value"`
     * `base_url`: Request's base URL. Default value is taken from `@base_url`
     * `client_pipeline`: Client pipeline for making a request. Default value obtained through a call to `OpenAPIClient.Utils.get_config(__operation__, :client_pipeline)}
 
   """
-  @spec get_test(String.t(), [
+  @spec get_test(String.t(), String.t(), [
           {:date_query_with_default, Date.t()}
           | {:datetime_query, DateTime.t()}
           | {:optional_query, String.t()}
@@ -37,11 +41,14 @@ defmodule OpenAPIClient.Operations do
           | {:x_static_flag, true}
           | {:date_header_with_default, Date.t()}
           | {:optional_header, String.t()}
+          | {:optional_header_new_param, String.t()}
+          | {:optional_new_param, String.t()}
+          | {:optional_new_param_with_default, String.t()}
           | {:base_url, String.t() | URI.t()}
           | {:client_pipeline, OpenAPIClient.Client.pipeline()}
         ]) :: {:ok, OpenAPIClient.TestSchema.t()} | {:error, OpenAPIClient.Client.Error.t()}
-  def get_test(required_header, opts \\ []) do
-    initial_args = [required_header: required_header]
+  def get_test(required_header, required_new_param, opts \\ []) do
+    initial_args = [required_header: required_header, required_new_param: required_new_param]
 
     client_pipeline = Keyword.get(opts, :client_pipeline)
     base_url = opts[:base_url] || @base_url
@@ -73,6 +80,9 @@ defmodule OpenAPIClient.Operations do
       Keyword.get_lazy(opts, :optional_header, fn ->
         Application.get_env(:open_api_client_ex, :required_header)
       end)
+
+    optional_new_param_with_default =
+      Keyword.get_lazy(opts, :optional_new_param_with_default, fn -> "new_param_value" end)
 
     query_params =
       opts
@@ -135,6 +145,10 @@ defmodule OpenAPIClient.Operations do
       __args__: initial_args,
       __call__: {__MODULE__, :get_test},
       __opts__: opts,
+      __params__: [
+        optional_new_param_with_default: optional_new_param_with_default,
+        required_new_param: required_new_param
+      ],
       __profile__: :test
     )
     |> OpenAPIClient.Client.perform(client_pipeline)

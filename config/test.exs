@@ -44,6 +44,37 @@ config :open_api_client_ex,
             [
               name: "date_header_with_default",
               default: {:const, "2024-01-23"}
+            ]},
+           {{"required_new_param", :new},
+            [
+              spec: %{
+                "schema" => %{"type" => "string"},
+                "description" => "Required additional parameter",
+                "required" => true
+              }
+            ]},
+           {{"optional_new_param", :new},
+            [
+              spec: %{
+                "schema" => %{"type" => "string"},
+                "description" => "Optional additional parameter"
+              }
+            ]},
+           {{"optional_header_new_param", :new},
+            [
+              spec: %{
+                "schema" => %{"type" => "string"},
+                "description" => "Optional additional header parameter",
+                "in" => "header"
+              }
+            ]},
+           {{"optional_new_param_with_default", :new},
+            [
+              spec: %{
+                "schema" => %{"type" => "string"},
+                "description" => "Optional additional parameter"
+              },
+              default: {:const, "new_param_value"}
             ]}
          ]
        ]},

@@ -6,7 +6,7 @@ defmodule OpenAPIClient.OperationsTest do
 
   setup :verify_on_exit!
 
-  describe "get_test/2" do
+  describe "get_test/3" do
     test "[200] performs a request and encodes OpenAPIClient.TestSchema from response's body" do
       expect(@httpoison, :request, fn :get, "https://example.com/test", _, headers, options ->
         assert {_, "2024-01-02"} = List.keyfind(options[:params], "date_query_with_default", 0)
@@ -46,7 +46,10 @@ defmodule OpenAPIClient.OperationsTest do
                 number: 7.0,
                 string: "another_string"
               }} ==
-               OpenAPIClient.Operations.get_test("string",
+               OpenAPIClient.Operations.get_test("string", "string",
+                 optional_new_param_with_default: "string",
+                 optional_new_param: "string",
+                 optional_header_new_param: "string",
                  optional_header: "string",
                  date_header_with_default: ~D[2024-01-02],
                  x_static_flag: true,

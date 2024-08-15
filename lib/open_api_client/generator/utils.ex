@@ -21,20 +21,26 @@ if Mix.env() in [:dev, :test] do
     @type schema_type_enum_config :: [
             {:strict, boolean()} | {:options, [{term(), [{:value, atom()}]}]}
           ]
-    @type schema_type_config :: [
+    @type schema_type_config_option ::
             {:name, String.t()}
             | {:default,
                {:const, term()} | {:profile_config, atom()} | {module(), atom(), list()}}
             | {:example, term()}
             | {:enum, schema_type_enum_config()}
-          ]
+
+    @type schema_type_config :: [schema_type_config_option()]
 
     @type operation_param_config :: schema_type_config()
+
+    @type operation_new_param_config_option :: schema_type_config_option() | {:spec, map()}
+    @type operation_new_param_config :: operation_new_param_config_option()
+
     @type operation_config :: [
             {:params,
              [
                {{String.t(), OpenAPI.Processor.Operation.Param.location()},
                 operation_param_config()}
+               | {{String.t(), :new}, operation_new_param_config()}
              ]}
           ]
 

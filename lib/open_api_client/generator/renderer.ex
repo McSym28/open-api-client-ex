@@ -702,14 +702,15 @@ if Mix.env() in [:dev, :test] do
                 %GeneratorParam{
                   param: %Param{name: name, location: location, value_type: type},
                   schema_type: %SchemaType{default: default} = schema_type,
-                  old_name: old_name
+                  old_name: old_name,
+                  new: is_new
                 },
                 use_typed_encoder
                 when not is_nil(default) ->
                   atom = String.to_atom(name)
                   variable = Macro.var(atom, nil)
 
-                  if type_needs_typed_encoding?(type, schema_type) do
+                  if not is_new and type_needs_typed_encoding?(type, schema_type) do
                     type_new = schema_type_to_readable_type(type, schema_type, state)
 
                     {[
@@ -744,7 +745,8 @@ if Mix.env() in [:dev, :test] do
                   param: %Param{name: name, location: location, value_type: type},
                   schema_type: schema_type,
                   static: true,
-                  old_name: old_name
+                  old_name: old_name,
+                  new: false
                 },
                 use_typed_encoder ->
                   if type_needs_typed_encoding?(type, schema_type) do
@@ -773,7 +775,8 @@ if Mix.env() in [:dev, :test] do
 
                 %GeneratorParam{
                   param: %Param{value_type: type},
-                  schema_type: schema_type
+                  schema_type: schema_type,
+                  new: false
                 },
                 use_typed_encoder ->
                   if type_needs_typed_encoding?(type, schema_type) do
@@ -781,6 +784,9 @@ if Mix.env() in [:dev, :test] do
                   else
                     {[], use_typed_encoder}
                   end
+
+                _, use_typed_encoder ->
+                  {[], use_typed_encoder}
               end)
 
             client_pipeline_expression =
@@ -819,8 +825,9 @@ if Mix.env() in [:dev, :test] do
           {:=, _, [{:query, _, _} | _]} = _query_expression, args ->
             query_value =
               all_params
-              |> Enum.filter(fn %GeneratorParam{param: %Param{location: location}} ->
-                location == :query
+              |> Enum.filter(fn
+                %GeneratorParam{param: %Param{location: :query}, new: false} -> true
+                _ -> false
               end)
               |> render_params_parse(path, state)
 
@@ -840,13 +847,36 @@ if Mix.env() in [:dev, :test] do
           [] ->
             headers_value =
               all_params
-              |> Enum.filter(fn %GeneratorParam{param: %Param{location: location}} ->
-                location == :header
+              |> Enum.filter(fn
+                %GeneratorParam{param: %Param{location: :header}, new: false} -> true
+                _ -> false
               end)
               |> render_params_parse(path, state)
 
+            private_assigns =
+              all_params
+              |> Enum.flat_map(fn
+                %GeneratorParam{
+                  static: static,
+                  new: true,
+                  schema_type: %SchemaType{default: default},
+                  param: %Param{name: name}
+                }
+                when static or not is_nil(default) ->
+                  atom = String.to_atom(name)
+                  [quote(do: {unquote(atom), unquote(Macro.var(atom, nil))})]
+
+                _ ->
+                  []
+              end)
+              |> case do
+                [] -> %{}
+                new_params -> %{__params__: new_params}
+              end
+              |> Map.put(:__profile__, operation_profile)
+
             {operation_assigns, private_assigns} =
-              Enum.flat_map_reduce(map_arguments, %{__profile__: operation_profile}, fn
+              Enum.flat_map_reduce(map_arguments, private_assigns, fn
                 {:url, value}, acc ->
                   {[{:request_url, value}], acc}
 
@@ -1324,7 +1354,8 @@ if Mix.env() in [:dev, :test] do
                  param: %Param{name: name, location: location, value_type: type},
                  old_name: old_name,
                  static: static,
-                 schema_type: schema_type
+                 schema_type: schema_type,
+                 new: is_new
                } = param},
               acc ->
                 path_new = [{:parameter, location, old_name} | path]
@@ -1358,7 +1389,7 @@ if Mix.env() in [:dev, :test] do
                   end
 
                 case location do
-                  :path ->
+                  :path when not is_new ->
                     acc_new
                     |> Map.update!(
                       :httpoison_request_arguments,
@@ -1367,7 +1398,7 @@ if Mix.env() in [:dev, :test] do
                       end)
                     )
 
-                  :query ->
+                  :query when not is_new ->
                     acc_new
                     |> Map.update!(
                       :httpoison_request_arguments,
@@ -1387,7 +1418,7 @@ if Mix.env() in [:dev, :test] do
                       ]
                     )
 
-                  :header ->
+                  :header when not is_new ->
                     acc_new
                     |> Map.update!(
                       :httpoison_request_arguments,

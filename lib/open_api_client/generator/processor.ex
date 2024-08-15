@@ -37,7 +37,7 @@ if Mix.env() in [:dev, :test] do
 
     @impl true
     def ignore_operation?(
-          state,
+          %OpenAPI.Processor.State{} = state,
           %OperationSpec{
             "$oag_path": request_path,
             "$oag_path_parameters": params_from_path,
@@ -52,8 +52,52 @@ if Mix.env() in [:dev, :test] do
         operation_config = Utils.operation_config(state, request_path, request_method)
         param_configs = Keyword.get(operation_config, :params, [])
 
+        reader_state =
+          %OpenAPI.Reader.State{
+            base_file: operation_spec."$oag_base_file",
+            base_file_path: operation_spec."$oag_base_file_path",
+            current_file: operation_spec."$oag_last_ref_file",
+            current_file_path: operation_spec."$oag_last_ref_path",
+            files: %{},
+            last_ref_file: operation_spec."$oag_last_ref_file",
+            last_ref_path: operation_spec."$oag_last_ref_path",
+            path_parameters: operation_spec.parameters,
+            refs: %{},
+            schema_specs_by_path: state.schema_specs_by_path,
+            spec: state.spec
+          }
+
+        {new_parameters, new_parameters_mapset} =
+          Enum.flat_map_reduce(
+            param_configs,
+            MapSet.new(),
+            fn
+              {{name, :new}, config}, mapset ->
+                config
+                |> Keyword.get(:spec)
+                |> case do
+                  spec_map when is_map(spec_map) ->
+                    location = Map.get(spec_map, "in", "cookie")
+
+                    {_reader, spec} =
+                      spec_map
+                      |> Map.put("name", name)
+                      |> Map.put_new("in", location)
+                      |> then(&ParamSpec.decode(reader_state, &1))
+
+                    {[spec], MapSet.put(mapset, {name, location})}
+
+                  _ ->
+                    {[], mapset}
+                end
+
+              _, mapset ->
+                {[], mapset}
+            end
+          )
+
         {all_params, param_renamings} =
-          (params_from_path ++ params_from_operation)
+          (params_from_path ++ params_from_operation ++ new_parameters)
           |> Enum.reverse()
           |> Enum.map_reduce(%{}, fn %ParamSpec{required: required, schema: param_schema} =
                                        param_spec,
@@ -63,7 +107,9 @@ if Mix.env() in [:dev, :test] do
                param} =
               Param.from_spec(state, param_spec)
 
-            {_, config} = List.keyfind(param_configs, {name, location}, 0, {name, []})
+            is_new = MapSet.member?(new_parameters_mapset, {name, Atom.to_string(location)})
+            location_find = if is_new, do: :new, else: location
+            {_, config} = List.keyfind(param_configs, {name, location_find}, 0, {name, []})
 
             {name_new, type_new, %SchemaType{default: default} = schema_type} =
               process_schema_type(
@@ -117,10 +163,11 @@ if Mix.env() in [:dev, :test] do
             generator_param_new =
               %GeneratorParam{
                 param: param_new,
-                old_name: name,
+                old_name: if(is_new, do: name_new, else: name),
                 config: config,
                 static: is_nil(default) and (required or location == :path),
-                schema_type: schema_type
+                schema_type: schema_type,
+                new: is_new
               }
               |> append_param_example(param_spec, state)
 
