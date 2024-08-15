@@ -41,6 +41,8 @@ defmodule OpenAPIClient.Operations do
           | {:client_pipeline, OpenAPIClient.Client.pipeline()}
         ]) :: {:ok, OpenAPIClient.TestSchema.t()} | {:error, OpenAPIClient.Client.Error.t()}
   def get_test(required_header, opts \\ []) do
+    initial_args = [required_header: required_header]
+
     client_pipeline = Keyword.get(opts, :client_pipeline)
     base_url = opts[:base_url] || @base_url
 
@@ -130,7 +132,8 @@ defmodule OpenAPIClient.Operations do
       response_types: [{200, [{"application/json", {OpenAPIClient.TestSchema, :t}}]}]
     }
     |> OpenAPIClient.Client.Operation.put_private(
-      __info__: {__MODULE__, :get_test, required_header: required_header},
+      __args__: initial_args,
+      __call__: {__MODULE__, :get_test},
       __opts__: opts,
       __profile__: :test
     )
@@ -159,6 +162,8 @@ defmodule OpenAPIClient.Operations do
           | {:client_pipeline, OpenAPIClient.Client.pipeline()}
         ]) :: :ok | :error | {:error, OpenAPIClient.Client.Error.t()}
   def set_test(body, opts \\ []) do
+    initial_args = [body: body]
+
     client_pipeline = Keyword.get(opts, :client_pipeline)
     base_url = opts[:base_url] || @base_url
 
@@ -178,7 +183,8 @@ defmodule OpenAPIClient.Operations do
       response_types: [{"2XX", :null}, {:default, :null}, {400, :null}]
     }
     |> OpenAPIClient.Client.Operation.put_private(
-      __info__: {__MODULE__, :set_test, body: body},
+      __args__: initial_args,
+      __call__: {__MODULE__, :set_test},
       __opts__: opts,
       __profile__: :test
     )

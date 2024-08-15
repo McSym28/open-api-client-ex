@@ -693,9 +693,9 @@ if Mix.env() in [:dev, :test] do
 
       path = [{request_path, request_method}]
 
-      do_expressions_new =
-        Enum.flat_map(do_expressions, fn
-          {:=, _, [{:client, _, _} | _]} = _client_expression ->
+      {do_expressions_new, args} =
+        Enum.flat_map_reduce(do_expressions, [], fn
+          {:=, _, [{:client, _, _} | _]} = _client_expression, args ->
             {param_assignments, use_typed_encoder} =
               all_params
               |> Enum.flat_map_reduce(false, fn
@@ -809,9 +809,14 @@ if Mix.env() in [:dev, :test] do
                 param_assignments
               end
 
-            [client_pipeline_expression, base_url_expression | param_assignments_new]
+            client_expression_new = [
+              client_pipeline_expression,
+              base_url_expression | param_assignments_new
+            ]
 
-          {:=, _, [{:query, _, _} | _]} = _query_expression ->
+            {client_expression_new, args}
+
+          {:=, _, [{:query, _, _} | _]} = _query_expression, args ->
             query_value =
               all_params
               |> Enum.filter(fn %GeneratorParam{param: %Param{location: location}} ->
@@ -819,16 +824,20 @@ if Mix.env() in [:dev, :test] do
               end)
               |> render_params_parse(path, state)
 
-            if query_value do
-              [quote(do: query_params = unquote(query_value))]
-            else
-              []
-            end
+            query_expression_new =
+              if query_value do
+                [quote(do: query_params = unquote(query_value))]
+              else
+                []
+              end
+
+            {query_expression_new, args}
 
           {{:., _, [{:client, _, _}, :request]} = _dot_expression, _dot_metadata,
            [
              {:%{}, _map_metadata, map_arguments}
-           ]} = _call_expression ->
+           ]} = _call_expression,
+          [] ->
             headers_value =
               all_params
               |> Enum.filter(fn %GeneratorParam{param: %Param{location: location}} ->
@@ -898,29 +907,21 @@ if Mix.env() in [:dev, :test] do
                   {[{:response_types, items}], acc}
 
                 {:opts, value}, acc ->
-                  {[], Map.put(acc, :__opts__, value)}
+                  acc_new = Map.put(acc, :__opts__, value)
+                  {[], acc_new}
+
+                {:args, []}, acc ->
+                  {[], acc}
 
                 {:args, args}, acc ->
-                  {[],
-                   Map.update(
-                     acc,
-                     :__info__,
-                     quote(do: {nil, nil, unquote(args)}),
-                     fn {:{}, [], [m, f, _a]} ->
-                       quote do: {unquote(m), unquote(f), unquote(args)}
-                     end
-                   )}
+                  acc_new = Map.put(acc, :__args__, args)
+                  {[], acc_new}
 
-                {:call, {_module, function}}, acc ->
-                  {[],
-                   Map.update(
-                     acc,
-                     :__info__,
-                     quote(do: {__MODULE__, unquote(function), nil}),
-                     fn {:{}, [], [_m, _f, a]} ->
-                       quote do: {__MODULE__, unquote(function), unquote(a)}
-                     end
-                   )}
+                {:call, {_module, _function}}, acc ->
+                  acc_new =
+                    Map.put(acc, :__call__, quote(do: {__MODULE__, unquote(function_name)}))
+
+                  {[], acc_new}
               end)
 
             operation_assigns = [
@@ -932,37 +933,57 @@ if Mix.env() in [:dev, :test] do
                 %OpenAPIClient.Client.Operation{unquote_splicing(operation_assigns)}
               end
 
-            operation =
-              if map_size(private_assigns) != 0 do
-                quote do
-                  unquote(operation)
-                  |> OpenAPIClient.Client.Operation.put_private(
-                    unquote(
-                      private_assigns
-                      |> Map.to_list()
-                      |> Enum.sort_by(fn {key, _} -> key end)
-                    )
-                  )
-                end
-              else
-                operation
+            {args, private_assigns_new} =
+              private_assigns
+              |> Map.pop(:__args__, [])
+              |> case do
+                {[], private_assigns} ->
+                  {[], private_assigns}
+
+                {args, private_assigns} ->
+                  private_assigns_new =
+                    Map.put(private_assigns, :__args__, quote(do: initial_args))
+
+                  {args, private_assigns_new}
               end
 
-            if headers_value do
-              [quote(do: headers = unquote(headers_value))]
-            else
-              []
-            end ++
-              [
-                quote do
-                  unquote(operation)
-                  |> OpenAPIClient.Client.perform(unquote(Macro.var(:client_pipeline, nil)))
-                end
-              ]
+            operation =
+              quote do
+                unquote(operation)
+                |> OpenAPIClient.Client.Operation.put_private(
+                  unquote(
+                    private_assigns_new
+                    |> Map.to_list()
+                    |> Enum.sort_by(fn {key, _} -> key end)
+                  )
+                )
+              end
 
-          expression ->
-            [expression]
+            call_expression_new =
+              if headers_value do
+                [quote(do: headers = unquote(headers_value))]
+              else
+                []
+              end ++
+                [
+                  quote do
+                    unquote(operation)
+                    |> OpenAPIClient.Client.perform(unquote(Macro.var(:client_pipeline, nil)))
+                  end
+                ]
+
+            {call_expression_new, args}
+
+          expression, args ->
+            {[expression], args}
         end)
+
+      do_expressions_new =
+        if args == [] do
+          do_expressions_new
+        else
+          [Util.put_newlines(quote(do: initial_args = unquote(args))) | do_expressions_new]
+        end
 
       {:def, def_metadata,
        [
