@@ -23,7 +23,7 @@ defmodule OpenAPIClient.Operations do
     * `x_integer_non_standard_format_query`: ["X-Integer-Non-Standard-Format-Query"] Integer query parameter with NON-standard format
     * `x_integer_standard_format_query`: ["X-Integer-Standard-Format-Query"] Integer query parameter with standard format
     * `x_static_flag`: ["X-Static-Flag"] Static flag query parameter. Default value is `true`
-    * `date_header_with_default`: ["X-Date-Header-With-Default"] Date header parameter with default. Default value is `"2024-01-23"`
+    * `date_header_with_default`: ["X-Date-Header-With-Default"] Date header parameter with default. Default value is `~D[2024-01-23]`
     * `optional_header`: ["X-Optional-Header"] Optional header parameter. Default value obtained through a call to `Application.get_env(:open_api_client_ex, :required_header)`
     * `optional_header_new_param`: Optional additional header parameter
     * `optional_new_param`: Optional additional parameter
@@ -56,25 +56,41 @@ defmodule OpenAPIClient.Operations do
     typed_encoder =
       OpenAPIClient.Utils.get_config(:test, :typed_encoder, OpenAPIClient.Client.TypedEncoder)
 
-    {:ok, date_query_with_default} =
-      opts
-      |> Keyword.get_lazy(:date_query_with_default, fn -> ~D[2022-12-15] end)
-      |> typed_encoder.encode(
-        {:string, :date},
-        [{:parameter, :query, "date_query_with_default"}, {"/test", :get}],
-        typed_encoder
-      )
+    date_query_with_default =
+      case Keyword.fetch(opts, :date_query_with_default) do
+        {:ok, value} ->
+          {:ok, value_encoded} =
+            typed_encoder.encode(
+              value,
+              {:string, :date},
+              [{:parameter, :query, "date_query_with_default"}, {"/test", :get}],
+              typed_encoder
+            )
+
+          value_encoded
+
+        :error ->
+          ~D[2022-12-15]
+      end
 
     x_static_flag = Keyword.get_lazy(opts, :x_static_flag, fn -> true end)
 
-    {:ok, date_header_with_default} =
-      opts
-      |> Keyword.get_lazy(:date_header_with_default, fn -> "2024-01-23" end)
-      |> typed_encoder.encode(
-        {:string, :date},
-        [{:parameter, :header, "X-Date-Header-With-Default"}, {"/test", :get}],
-        typed_encoder
-      )
+    date_header_with_default =
+      case Keyword.fetch(opts, :date_header_with_default) do
+        {:ok, value} ->
+          {:ok, value_encoded} =
+            typed_encoder.encode(
+              value,
+              {:string, :date},
+              [{:parameter, :header, "X-Date-Header-With-Default"}, {"/test", :get}],
+              typed_encoder
+            )
+
+          value_encoded
+
+        :error ->
+          ~D[2024-01-23]
+      end
 
     optional_header =
       Keyword.get_lazy(opts, :optional_header, fn ->

@@ -43,7 +43,7 @@ config :open_api_client_ex,
            {{"X-Date-Header-With-Default", :header},
             [
               name: "date_header_with_default",
-              default: {:const, "2024-01-23"}
+              default: {:const, ~D[2024-01-23]}
             ]},
            {{"required_new_param", :new},
             [

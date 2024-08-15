@@ -716,19 +716,25 @@ if Mix.env() in [:dev, :test] do
                     {[
                        quote(
                          do:
-                           {:ok, unquote(variable)} =
-                             opts
-                             |> Keyword.get_lazy(unquote(atom), fn ->
-                               unquote(default)
-                             end)
-                             |> typed_encoder.encode(
-                               unquote(type_new),
-                               [
-                                 {:parameter, unquote(location), unquote(old_name)},
-                                 {unquote(request_path), unquote(request_method)}
-                               ],
-                               typed_encoder
-                             )
+                           unquote(variable) =
+                             case Keyword.fetch(opts, unquote(atom)) do
+                               {:ok, value} ->
+                                 {:ok, value_encoded} =
+                                   typed_encoder.encode(
+                                     value,
+                                     unquote(type_new),
+                                     [
+                                       {:parameter, unquote(location), unquote(old_name)},
+                                       {unquote(request_path), unquote(request_method)}
+                                     ],
+                                     typed_encoder
+                                   )
+
+                                 value_encoded
+
+                               :error ->
+                                 unquote(default)
+                             end
                        )
                      ], true}
                   else
