@@ -861,23 +861,45 @@ if Mix.env() in [:dev, :test] do
 
             private_assigns =
               all_params
-              |> Enum.flat_map(fn
+              |> Enum.flat_map_reduce([], fn
                 %GeneratorParam{
                   static: static,
                   new: true,
                   schema_type: %SchemaType{default: default},
                   param: %Param{name: name}
-                }
+                },
+                opts_keys
                 when static or not is_nil(default) ->
                   atom = String.to_atom(name)
-                  [quote(do: {unquote(atom), unquote(Macro.var(atom, nil))})]
+                  {[quote(do: {unquote(atom), unquote(Macro.var(atom, nil))})], opts_keys}
 
-                _ ->
-                  []
+                %GeneratorParam{new: true, param: %Param{name: name}}, opts_keys ->
+                  atom = String.to_atom(name)
+                  {[], [atom | opts_keys]}
+
+                _, opts_keys ->
+                  {[], opts_keys}
               end)
               |> case do
-                [] -> %{}
-                new_params -> %{__params__: new_params}
+                {[], []} ->
+                  %{}
+
+                {[], opts_keys} ->
+                  %{__params__: quote(do: Keyword.take(opts, unquote(Enum.reverse(opts_keys))))}
+
+                {new_params, []} ->
+                  %{__params__: new_params}
+
+                {new_params, opts_keys} ->
+                  %{
+                    __params__:
+                      quote(
+                        do:
+                          opts
+                          |> Keyword.take(unquote(Enum.reverse(opts_keys)))
+                          |> Keyword.merge(unquote(new_params))
+                      )
+                  }
               end
               |> Map.put(:__profile__, operation_profile)
 
@@ -1002,10 +1024,20 @@ if Mix.env() in [:dev, :test] do
                 []
               end ++
                 [
-                  quote do
-                    unquote(operation)
-                    |> OpenAPIClient.Client.perform(unquote(Macro.var(:client_pipeline, nil)))
-                  end
+                  quote(
+                    do:
+                      client =
+                        OpenAPIClient.Utils.get_config(
+                          unquote(operation_profile),
+                          :client,
+                          OpenAPIClient.Client
+                        )
+                  ),
+                  quote(
+                    do:
+                      unquote(operation)
+                      |> client.perform(client_pipeline)
+                  )
                 ]
 
             {call_expression_new, args}
@@ -1015,7 +1047,7 @@ if Mix.env() in [:dev, :test] do
         end)
 
       do_expressions_new =
-        if args == [] do
+        if Enum.empty?(args) do
           do_expressions_new
         else
           [Util.put_newlines(quote(do: initial_args = unquote(args))) | do_expressions_new]
@@ -1349,6 +1381,7 @@ if Mix.env() in [:dev, :test] do
               ],
               call_arguments: [],
               call_opts: [base_url: @test_example_url],
+              new_params_assertions: [],
               httpoison_request_assertions: [],
               httpoison_response_assignmets: [],
               httpoison_response_fields: [{:status_code, status_code}],
@@ -1394,58 +1427,75 @@ if Mix.env() in [:dev, :test] do
                     )
                   end
 
-                case location do
-                  :path when not is_new ->
-                    acc_new
-                    |> Map.update!(
-                      :httpoison_request_arguments,
-                      &List.update_at(&1, 1, fn url ->
-                        String.replace(url, "{#{name}}", to_string(param_example))
-                      end)
-                    )
+                if is_new do
+                  Map.update!(
+                    acc_new,
+                    :new_params_assertions,
+                    &[
+                      quote(
+                        do:
+                          assert(
+                            {_, unquote(param_example_decoded)} =
+                              List.keyfind(params, unquote(String.to_atom(name)), 0)
+                          )
+                      )
+                      | &1
+                    ]
+                  )
+                else
+                  case location do
+                    :path ->
+                      acc_new
+                      |> Map.update!(
+                        :httpoison_request_arguments,
+                        &List.update_at(&1, 1, fn url ->
+                          String.replace(url, "{#{name}}", to_string(param_example))
+                        end)
+                      )
 
-                  :query when not is_new ->
-                    acc_new
-                    |> Map.update!(
-                      :httpoison_request_arguments,
-                      &List.replace_at(&1, 4, quote(do: options))
-                    )
-                    |> Map.update!(
-                      :httpoison_request_assertions,
-                      &[
-                        quote(
-                          do:
-                            assert(
-                              {_, unquote(param_example)} =
-                                List.keyfind(options[:params], unquote(old_name), 0)
-                            )
-                        )
-                        | &1
-                      ]
-                    )
+                    :query ->
+                      acc_new
+                      |> Map.update!(
+                        :httpoison_request_arguments,
+                        &List.replace_at(&1, 4, quote(do: options))
+                      )
+                      |> Map.update!(
+                        :httpoison_request_assertions,
+                        &[
+                          quote(
+                            do:
+                              assert(
+                                {_, unquote(param_example)} =
+                                  List.keyfind(options[:params], unquote(old_name), 0)
+                              )
+                          )
+                          | &1
+                        ]
+                      )
 
-                  :header when not is_new ->
-                    acc_new
-                    |> Map.update!(
-                      :httpoison_request_arguments,
-                      &List.replace_at(&1, 3, quote(do: headers))
-                    )
-                    |> Map.update!(
-                      :httpoison_request_assertions,
-                      &[
-                        quote(
-                          do:
-                            assert(
-                              {_, unquote(param_example)} =
-                                List.keyfind(headers, unquote(String.downcase(old_name)), 0)
-                            )
-                        )
-                        | &1
-                      ]
-                    )
+                    :header ->
+                      acc_new
+                      |> Map.update!(
+                        :httpoison_request_arguments,
+                        &List.replace_at(&1, 3, quote(do: headers))
+                      )
+                      |> Map.update!(
+                        :httpoison_request_assertions,
+                        &[
+                          quote(
+                            do:
+                              assert(
+                                {_, unquote(param_example)} =
+                                  List.keyfind(headers, unquote(String.downcase(old_name)), 0)
+                              )
+                          )
+                          | &1
+                        ]
+                      )
 
-                  _ ->
-                    acc_new
+                    _ ->
+                      acc_new
+                  end
                 end
 
               {:request_body, {nil, _, _}}, acc ->
@@ -1552,8 +1602,43 @@ if Mix.env() in [:dev, :test] do
           end
           |> then(&"[#{status_code}] #{&1}")
 
+        new_params_assertions_callback =
+          test_parameters[:new_params_assertions]
+          |> Enum.reverse()
+          |> case do
+            [] ->
+              quote(do: &OpenAPIClient.Client.perform/2)
+
+            params ->
+              {:fn, [],
+               [
+                 {:->, [],
+                  [
+                    [
+                      quote(
+                        do:
+                          %OpenAPIClient.Client.Operation{
+                            assigns: %{private: %{__params__: params}}
+                          } = operation
+                      ),
+                      Macro.var(:pipeline, nil)
+                    ],
+                    quote do
+                      unquote_splicing(params)
+                      OpenAPIClient.Client.perform(operation, pipeline)
+                    end
+                  ]}
+               ]}
+          end
+
         quote do
           test unquote(test_message) do
+            expect(
+              OpenAPIClient.ClientMock,
+              :perform,
+              unquote(new_params_assertions_callback)
+            )
+
             expect(
               @httpoison,
               :request,

@@ -149,6 +149,8 @@ defmodule OpenAPIClient.Operations do
       "X-Required-Header" => required_header
     }
 
+    client = OpenAPIClient.Utils.get_config(:test, :client, OpenAPIClient.Client)
+
     %OpenAPIClient.Client.Operation{
       request_base_url: base_url,
       request_url: "/test",
@@ -161,13 +163,16 @@ defmodule OpenAPIClient.Operations do
       __args__: initial_args,
       __call__: {__MODULE__, :get_test},
       __opts__: opts,
-      __params__: [
-        optional_new_param_with_default: optional_new_param_with_default,
-        required_new_param: required_new_param
-      ],
+      __params__:
+        opts
+        |> Keyword.take([:optional_header_new_param, :optional_new_param])
+        |> Keyword.merge(
+          optional_new_param_with_default: optional_new_param_with_default,
+          required_new_param: required_new_param
+        ),
       __profile__: :test
     )
-    |> OpenAPIClient.Client.perform(client_pipeline)
+    |> client.perform(client_pipeline)
   end
 
   @doc """
@@ -203,6 +208,8 @@ defmodule OpenAPIClient.Operations do
       |> Enum.map(fn {:string_header, value} -> {"X-String-Header", value} end)
       |> Map.new()
 
+    client = OpenAPIClient.Utils.get_config(:test, :client, OpenAPIClient.Client)
+
     %OpenAPIClient.Client.Operation{
       request_base_url: base_url,
       request_url: "/test",
@@ -218,6 +225,6 @@ defmodule OpenAPIClient.Operations do
       __opts__: opts,
       __profile__: :test
     )
-    |> OpenAPIClient.Client.perform(client_pipeline)
+    |> client.perform(client_pipeline)
   end
 end

@@ -8,6 +8,17 @@ defmodule OpenAPIClient.OperationsTest do
 
   describe "get_test/3" do
     test "[200] performs a request and encodes OpenAPIClient.TestSchema from response's body" do
+      expect(OpenAPIClient.ClientMock, :perform, fn %OpenAPIClient.Client.Operation{
+                                                      assigns: %{private: %{__params__: params}}
+                                                    } = operation,
+                                                    pipeline ->
+        assert {_, "string"} = List.keyfind(params, :optional_header_new_param, 0)
+        assert {_, "string"} = List.keyfind(params, :optional_new_param, 0)
+        assert {_, "string"} = List.keyfind(params, :optional_new_param_with_default, 0)
+        assert {_, "string"} = List.keyfind(params, :required_new_param, 0)
+        OpenAPIClient.Client.perform(operation, pipeline)
+      end)
+
       expect(@httpoison, :request, fn :get, "https://example.com/test", _, headers, options ->
         assert {_, "2024-01-02"} = List.keyfind(options[:params], "date_query_with_default", 0)
         assert {_, "2024-01-02T01:23:45Z"} = List.keyfind(options[:params], "datetime_query", 0)
@@ -65,6 +76,8 @@ defmodule OpenAPIClient.OperationsTest do
 
   describe "set_test/2" do
     test "[298] performs a request and encodes OpenAPIClient.TestRequestSchema from request's body" do
+      expect(OpenAPIClient.ClientMock, :perform, &OpenAPIClient.Client.perform/2)
+
       expect(@httpoison, :request, fn :post, "https://example.com/test", body, headers, _ ->
         assert {_, "string"} = List.keyfind(headers, "x-string-header", 0)
 
@@ -104,6 +117,8 @@ defmodule OpenAPIClient.OperationsTest do
     end
 
     test "[299] performs a request and encodes OpenAPIClient.TestRequestSchema from request's body" do
+      expect(OpenAPIClient.ClientMock, :perform, &OpenAPIClient.Client.perform/2)
+
       expect(@httpoison, :request, fn :post, "https://example.com/test", body, headers, _ ->
         assert {_, "string"} = List.keyfind(headers, "x-string-header", 0)
 
@@ -143,6 +158,8 @@ defmodule OpenAPIClient.OperationsTest do
     end
 
     test "[400] performs a request and encodes OpenAPIClient.TestRequestSchema from request's body" do
+      expect(OpenAPIClient.ClientMock, :perform, &OpenAPIClient.Client.perform/2)
+
       expect(@httpoison, :request, fn :post, "https://example.com/test", body, headers, _ ->
         assert {_, "string"} = List.keyfind(headers, "x-string-header", 0)
 
