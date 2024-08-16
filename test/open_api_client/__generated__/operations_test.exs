@@ -9,10 +9,8 @@ defmodule OpenAPIClient.OperationsTest do
 
   describe "get_test/3" do
     test "[200] performs a request and encodes OpenAPIClient.TestSchema from response's body" do
-      expect(@client, :perform, fn %OpenAPIClient.Client.Operation{
-                                     assigns: %{private: %{__params__: params}}
-                                   } = operation,
-                                   pipeline ->
+      expect(@client, :perform, fn operation, pipeline ->
+        params = OpenAPIClient.Client.Operation.get_private(operation, :__params__)
         assert {_, "string"} = List.keyfind(params, :optional_header_new_param, 0)
         assert {_, "string"} = List.keyfind(params, :optional_new_param, 0)
         assert {_, "new_param_value"} = List.keyfind(params, :optional_new_param_with_default, 0)

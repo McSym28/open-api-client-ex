@@ -643,15 +643,11 @@ if Mix.env() in [:dev, :test] do
                {:->, [],
                 [
                   [
-                    quote(
-                      do:
-                        %OpenAPIClient.Client.Operation{
-                          assigns: %{private: %{__params__: params}}
-                        } = operation
-                    ),
+                    Macro.var(:operation, nil),
                     Macro.var(:pipeline, nil)
                   ],
                   quote do
+                    params = OpenAPIClient.Client.Operation.get_private(operation, :__params__)
                     unquote_splicing(params)
                     OpenAPIClient.Client.perform(operation, pipeline)
                   end

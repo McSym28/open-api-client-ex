@@ -97,6 +97,12 @@ defmodule OpenAPIClient.Client.Operation do
     %__MODULE__{operation | response_headers: put_headers(headers, new_headers)}
   end
 
+  @spec get_private(t(), atom()) :: term()
+  @spec get_private(t(), atom(), term()) :: term()
+  def get_private(%__MODULE__{assigns: %{private: private}} = _operation, key, default \\ nil) do
+    Map.get(private, key, default)
+  end
+
   @spec put_private(t(), atom(), term()) :: t()
   def put_private(operation, key, value) do
     put_private(operation, %{key => value})
