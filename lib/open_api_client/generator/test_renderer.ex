@@ -187,7 +187,8 @@ if Mix.env() in [:dev, :test] do
                 use ExUnit.Case, async: true
                 unquote(quote(do: import(Mox)) |> Util.put_newlines())
 
-                unquote(quote(do: @httpoison(OpenAPIClient.HTTPoisonMock)) |> Util.put_newlines())
+                @httpoison OpenAPIClient.HTTPoisonMock
+                unquote(quote(do: @client(OpenAPIClient.ClientMock)) |> Util.put_newlines())
 
                 setup :verify_on_exit!
 
@@ -661,7 +662,7 @@ if Mix.env() in [:dev, :test] do
       quote do
         test unquote(test_message) do
           expect(
-            OpenAPIClient.ClientMock,
+            @client,
             :perform,
             unquote(new_params_assertions_callback)
           )
