@@ -97,6 +97,25 @@ paths:
           schema:
             type: integer
             format: int69
+        - in: query
+          name: X-Enum-Query
+          description: Enum query parameter
+          schema:
+            type: string
+            enum: 
+              - ENUM_1
+              - ENUM_2
+              - ENUM_3
+        - in: query
+          name: X-Enum-Query-With-Default
+          description: Enum query parameter with default
+          schema:
+            type: string
+            enum: 
+              - ENUM_9
+              - ENUM_8
+              - ENUM_7
+            default: ENUM_9
       responses:
         "200":
           description: "Success"

@@ -182,8 +182,13 @@ if Mix.env() in [:dev, :test] do
 
           fields_new =
             Enum.flat_map(all_fields, fn
-              %GeneratorField{field: nil} -> []
-              %GeneratorField{} = generator_field -> [prepare_field_type(generator_field)]
+              %GeneratorField{field: nil} ->
+                []
+
+              %GeneratorField{field: %Field{type: type} = field, schema_type: schema_type} =
+                  _generator_field ->
+                type_new = prepare_spec_type(type, schema_type)
+                [%Field{field | type: type_new}]
             end)
 
           {%Schema{schema | fields: fields_new}, [{:const, type} | types]}
@@ -364,7 +369,10 @@ if Mix.env() in [:dev, :test] do
         all_params
         |> Enum.group_by(
           fn %GeneratorParam{static: static} -> static end,
-          fn %GeneratorParam{param: param} -> param end
+          fn %GeneratorParam{param: %Param{value_type: type} = param, schema_type: schema_type} ->
+            type_new = prepare_spec_type(type, schema_type)
+            %Param{param | value_type: type_new}
+          end
         )
         |> then(fn map -> {Map.get(map, true, []), Map.get(map, false, [])} end)
 
@@ -522,10 +530,36 @@ if Mix.env() in [:dev, :test] do
                 when not is_nil(default) ->
                   atom = String.to_atom(name)
                   variable = Macro.var(atom, nil)
+                  type_new = Utils.schema_type_to_readable_type(state, type, schema_type)
+
+                  default_new =
+                    case default do
+                      _ when is_new ->
+                        default
+
+                      {_, _, _} ->
+                        default
+
+                      _ ->
+                        typed_encoder =
+                          Utils.get_config(
+                            state,
+                            :typed_encoder,
+                            OpenAPIClient.Client.TypedEncoder
+                          )
+
+                        {:ok, default_new} =
+                          typed_encoder.encode(
+                            default,
+                            type_new,
+                            [{:parameter, location, old_name}, {request_path, request_method}],
+                            typed_encoder
+                          )
+
+                        default_new
+                    end
 
                   if not is_new and type_needs_typed_encoding?(type, schema_type) do
-                    type_new = Utils.schema_type_to_readable_type(state, type, schema_type)
-
                     {[
                        quote(
                          do:
@@ -546,7 +580,7 @@ if Mix.env() in [:dev, :test] do
                                  value_encoded
 
                                :error ->
-                                 unquote(default)
+                                 unquote(default_new)
                              end
                        )
                      ], true}
@@ -555,7 +589,7 @@ if Mix.env() in [:dev, :test] do
                        quote(
                          do:
                            unquote(variable) =
-                             Keyword.get_lazy(opts, unquote(atom), fn -> unquote(default) end)
+                             Keyword.get_lazy(opts, unquote(atom), fn -> unquote(default_new) end)
                        )
                      ], use_typed_encoder}
                   end
@@ -1014,9 +1048,8 @@ if Mix.env() in [:dev, :test] do
 
     defp parse_spec_return_type(type, acc), do: Enum.reverse([type | acc])
 
-    defp prepare_field_type(%GeneratorField{
-           field: %Field{type: {:enum, enum_options}} = field,
-           schema_type: %SchemaType{enum: %SchemaType.Enum{strict: enum_strict, type: enum_type}}
+    defp prepare_spec_type({:enum, enum_options}, %SchemaType{
+           enum: %SchemaType.Enum{strict: enum_strict, type: enum_type}
          }) do
       enum_options_new =
         enum_options
@@ -1037,24 +1070,15 @@ if Mix.env() in [:dev, :test] do
           enum_options_new
         end
 
-      %Field{field | type: {:union, union_types}}
+      {:union, union_types}
     end
 
-    defp prepare_field_type(
-           %GeneratorField{field: %Field{type: {:array, {:enum, _} = enum_type}} = field} =
-             generator_field
-         ) do
-      %Field{type: type_new} =
-        field_new =
-        prepare_field_type(%GeneratorField{
-          generator_field
-          | field: %Field{field | type: enum_type}
-        })
-
-      %Field{field_new | type: {:array, type_new}}
+    defp prepare_spec_type({:array, {:enum, _} = enum_type}, schema_type) do
+      enum_type_new = prepare_spec_type(enum_type, schema_type)
+      {:array, enum_type_new}
     end
 
-    defp prepare_field_type(%GeneratorField{field: field}), do: field
+    defp prepare_spec_type(type, _schema_type), do: type
 
     defp update_schema_examples(
            schema_type,

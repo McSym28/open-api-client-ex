@@ -23,6 +23,8 @@ defmodule OpenAPIClient.OperationsTest do
         assert {_, "2022-12-15"} = List.keyfind(options[:params], "date_query_with_default", 0)
         assert {_, "2024-01-02T01:23:45Z"} = List.keyfind(options[:params], "datetime_query", 0)
         assert {_, "optional-query"} = List.keyfind(options[:params], "optional_query", 0)
+        assert {_, "ENUM_1"} = List.keyfind(options[:params], "X-Enum-Query", 0)
+        assert {_, "ENUM_9"} = List.keyfind(options[:params], "X-Enum-Query-With-Default", 0)
         assert {_, 1} = List.keyfind(options[:params], "X-Integer-Non-Standard-Format-Query", 0)
         assert {_, 1} = List.keyfind(options[:params], "X-Integer-Standard-Format-Query", 0)
         assert {_, true} = List.keyfind(options[:params], "X-Static-Flag", 0)
@@ -66,6 +68,8 @@ defmodule OpenAPIClient.OperationsTest do
                  x_static_flag: true,
                  x_integer_standard_format_query: 1,
                  x_integer_non_standard_format_query: 1,
+                 x_enum_query_with_default: :enum_9,
+                 x_enum_query: :enum_1,
                  optional_query: "optional-query",
                  datetime_query: ~U[2024-01-02 01:23:45Z],
                  date_query_with_default: ~D[2022-12-15],

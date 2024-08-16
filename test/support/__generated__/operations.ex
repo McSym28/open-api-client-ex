@@ -20,6 +20,8 @@ defmodule OpenAPIClient.Operations do
     * `date_query_with_default`: Date query parameter with default. Default value is `~D[2022-12-15]`
     * `datetime_query`: DateTime query parameter
     * `optional_query`: Optional query parameter
+    * `x_enum_query`: ["X-Enum-Query"] Enum query parameter
+    * `x_enum_query_with_default`: ["X-Enum-Query-With-Default"] Enum query parameter with default. Default value is `:enum_9`
     * `x_integer_non_standard_format_query`: ["X-Integer-Non-Standard-Format-Query"] Integer query parameter with NON-standard format
     * `x_integer_standard_format_query`: ["X-Integer-Standard-Format-Query"] Integer query parameter with standard format
     * `x_static_flag`: ["X-Static-Flag"] Static flag query parameter. Default value is `true`
@@ -36,9 +38,11 @@ defmodule OpenAPIClient.Operations do
           {:date_query_with_default, Date.t()}
           | {:datetime_query, DateTime.t()}
           | {:optional_query, String.t()}
+          | {:x_enum_query, :enum_1 | :enum_2 | :enum_3 | String.t()}
+          | {:x_enum_query_with_default, :enum_7 | :enum_8 | :enum_9 | String.t()}
           | {:x_integer_non_standard_format_query, integer}
           | {:x_integer_standard_format_query, integer}
-          | {:x_static_flag, true}
+          | {:x_static_flag, true | boolean}
           | {:date_header_with_default, Date.t()}
           | {:optional_header, String.t()}
           | {:optional_header_new_param, String.t()}
@@ -70,7 +74,25 @@ defmodule OpenAPIClient.Operations do
           value_encoded
 
         :error ->
-          ~D[2022-12-15]
+          "2022-12-15"
+      end
+
+    x_enum_query_with_default =
+      case Keyword.fetch(opts, :x_enum_query_with_default) do
+        {:ok, value} ->
+          {:ok, value_encoded} =
+            typed_encoder.encode(
+              value,
+              {:enum,
+               [{:enum_7, "ENUM_7"}, {:enum_8, "ENUM_8"}, {:enum_9, "ENUM_9"}, :not_strict]},
+              [{:parameter, :query, "X-Enum-Query-With-Default"}, {"/test", :get}],
+              typed_encoder
+            )
+
+          value_encoded
+
+        :error ->
+          "ENUM_9"
       end
 
     x_static_flag = Keyword.get_lazy(opts, :x_static_flag, fn -> true end)
@@ -89,7 +111,7 @@ defmodule OpenAPIClient.Operations do
           value_encoded
 
         :error ->
-          ~D[2024-01-23]
+          "2024-01-23"
       end
 
     optional_header =
@@ -105,6 +127,7 @@ defmodule OpenAPIClient.Operations do
       |> Keyword.take([
         :datetime_query,
         :optional_query,
+        :x_enum_query,
         :x_integer_non_standard_format_query,
         :x_integer_standard_format_query
       ])
@@ -123,6 +146,18 @@ defmodule OpenAPIClient.Operations do
 
           {"X-Integer-Non-Standard-Format-Query", value_new}
 
+        {:x_enum_query, value} ->
+          {:ok, value_new} =
+            typed_encoder.encode(
+              value,
+              {:enum,
+               [{:enum_1, "ENUM_1"}, {:enum_2, "ENUM_2"}, {:enum_3, "ENUM_3"}, :not_strict]},
+              [{:parameter, :query, "X-Enum-Query"}, [{"/test", :get}]],
+              typed_encoder
+            )
+
+          {"X-Enum-Query", value_new}
+
         {:optional_query, value} ->
           {"optional_query", value}
 
@@ -140,6 +175,7 @@ defmodule OpenAPIClient.Operations do
       |> Map.new()
       |> Map.merge(%{
         "date_query_with_default" => date_query_with_default,
+        "X-Enum-Query-With-Default" => x_enum_query_with_default,
         "X-Static-Flag" => x_static_flag
       })
 
