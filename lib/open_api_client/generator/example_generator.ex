@@ -117,26 +117,30 @@ if Mix.env() in [:dev, :test] do
         ),
         do: process_schema_type(type, schema_type, path, caller_module)
 
-    def process_schema_type(_type, %SchemaType{examples: [value | _]}, _path, _caller_module),
+    defp process_schema_type(_type, %SchemaType{examples: [value | _]}, _path, _caller_module),
       do: value
 
-    def process_schema_type(
-          {:array, {:enum, _}},
-          %SchemaType{enum: %SchemaType.Enum{options: enum_options}},
-          path,
-          caller_module
-        ),
-        do: caller_module.generate({:array, {:enum, enum_options}}, path, caller_module)
+    defp process_schema_type(_type, %SchemaType{default: value}, _path, _caller_module)
+         when not is_nil(value) and not is_tuple(value),
+         do: value
 
-    def process_schema_type(
-          {:enum, _},
-          %SchemaType{enum: %SchemaType.Enum{options: enum_options}},
-          path,
-          caller_module
-        ),
-        do: caller_module.generate({:enum, enum_options}, path, caller_module)
+    defp process_schema_type(
+           {:array, {:enum, _}},
+           %SchemaType{enum: %SchemaType.Enum{options: enum_options}},
+           path,
+           caller_module
+         ),
+         do: caller_module.generate({:array, {:enum, enum_options}}, path, caller_module)
 
-    def process_schema_type(type, _schema_type, path, caller_module),
+    defp process_schema_type(
+           {:enum, _},
+           %SchemaType{enum: %SchemaType.Enum{options: enum_options}},
+           path,
+           caller_module
+         ),
+         do: caller_module.generate({:enum, enum_options}, path, caller_module)
+
+    defp process_schema_type(type, _schema_type, path, caller_module),
       do: caller_module.generate(type, path, caller_module)
   end
 end

@@ -1,5 +1,7 @@
 if Mix.env() in [:dev, :test] do
   defmodule OpenAPIClient.Generator.Utils do
+    alias OpenAPIClient.Generator.SchemaType
+
     @operation_url_pattern_rank_multiplicand 10
 
     @operation_url_pattern_rank_any 0
@@ -104,11 +106,17 @@ if Mix.env() in [:dev, :test] do
     end
 
     @spec get_config(
-            OpenAPI.Processor.State.t() | OpenAPI.Renderer.State.t() | String.t(),
+            OpenAPI.Processor.State.t()
+            | OpenAPI.Renderer.State.t()
+            | OpenAPIClient.Generator.TestRenderer.State.t()
+            | String.t(),
             atom()
           ) :: term()
     @spec get_config(
-            OpenAPI.Processor.State.t() | OpenAPI.Renderer.State.t() | atom(),
+            OpenAPI.Processor.State.t()
+            | OpenAPI.Renderer.State.t()
+            | OpenAPIClient.Generator.TestRenderer.State.t()
+            | atom(),
             atom(),
             term()
           ) :: term()
@@ -122,16 +130,28 @@ if Mix.env() in [:dev, :test] do
       get_config(profile, key, default)
     end
 
+    def get_config(
+          %OpenAPIClient.Generator.TestRenderer.State{renderer_state: renderer_state},
+          key,
+          default
+        ) do
+      get_config(renderer_state, key, default)
+    end
+
     def get_config(profile, key, default) when is_atom(profile) do
       OpenAPIClient.Utils.get_config(profile, key, default)
     end
 
     @spec get_oapi_generator_config(
-            OpenAPI.Processor.State.t() | OpenAPI.Renderer.State.t(),
+            OpenAPI.Processor.State.t()
+            | OpenAPI.Renderer.State.t()
+            | OpenAPIClient.Generator.TestRenderer.State.t(),
             atom()
           ) :: term()
     @spec get_oapi_generator_config(
-            OpenAPI.Processor.State.t() | OpenAPI.Renderer.State.t(),
+            OpenAPI.Processor.State.t()
+            | OpenAPI.Renderer.State.t()
+            | OpenAPIClient.Generator.TestRenderer.State.t(),
             atom(),
             term()
           ) :: term()
@@ -144,6 +164,50 @@ if Mix.env() in [:dev, :test] do
     def get_oapi_generator_config(%OpenAPI.Renderer.State{profile: profile}, key, default) do
       get_oapi_generator_config_profile(profile, key, default)
     end
+
+    def get_oapi_generator_config(
+          %OpenAPIClient.Generator.TestRenderer.State{renderer_state: renderer_state},
+          key,
+          default
+        ) do
+      get_oapi_generator_config(renderer_state, key, default)
+    end
+
+    @spec schema_type_to_readable_type(
+            OpenAPI.Renderer.State.t() | OpenAPIClient.Generator.TestRenderer.State.t(),
+            OpenAPI.Processor.Type.t(),
+            SchemaType.t()
+          ) :: OpenAPIClient.Schema.type()
+    def schema_type_to_readable_type(
+          _state,
+          {:enum, _},
+          %SchemaType{enum: %SchemaType.Enum{options: enum_options, strict: true}}
+        ),
+        do: {:enum, enum_options}
+
+    def schema_type_to_readable_type(
+          _state,
+          {:enum, _},
+          %SchemaType{enum: %SchemaType.Enum{options: enum_options}}
+        ),
+        do: {:enum, enum_options ++ [:not_strict]}
+
+    def schema_type_to_readable_type(
+          state,
+          {:array, {:enum, _} = enum},
+          schema_type
+        ),
+        do: {:array, schema_type_to_readable_type(state, enum, schema_type)}
+
+    def schema_type_to_readable_type(
+          %OpenAPIClient.Generator.TestRenderer.State{renderer_state: renderer_state},
+          type,
+          schema_type
+        ),
+        do: schema_type_to_readable_type(renderer_state, type, schema_type)
+
+    def schema_type_to_readable_type(state, type, _schema_type),
+      do: OpenAPI.Renderer.Util.to_readable_type(state, type)
 
     defp get_oapi_generator_config_profile(profile, key, default) do
       :oapi_generator
