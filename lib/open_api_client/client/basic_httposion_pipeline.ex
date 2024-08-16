@@ -1,5 +1,5 @@
 if Code.ensure_loaded?(HTTPoison) do
-  defmodule OpenAPIClient.BasicHTTPoisonPipeline do
+  defmodule OpenAPIClient.Client.BasicHTTPoisonPipeline do
     use Pluggable.StepBuilder
 
     step OpenAPIClient.Client.Steps.RequestBodyTypedEncoder
