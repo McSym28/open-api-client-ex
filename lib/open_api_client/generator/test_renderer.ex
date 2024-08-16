@@ -826,6 +826,9 @@ if Mix.env() in [:dev, :test] do
          ),
          do: generate_schema_type_example(state, type, schema_type, path)
 
+    defp generate_example(state, {:array, type}, path),
+      do: [generate_example(state, type, [[0] | path])]
+
     defp generate_example(%State{implementation: implementation} = state, type, path),
       do: implementation.type_example(state, type, path)
 
