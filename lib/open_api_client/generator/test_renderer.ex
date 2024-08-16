@@ -832,6 +832,13 @@ if Mix.env() in [:dev, :test] do
     defp generate_schema_type_example(_state, _type, %SchemaType{examples: [value | _]}, _path),
       do: value
 
+    defp generate_schema_type_example(state, type, %SchemaType{default: value}, path)
+         when not is_nil(value) and not is_tuple(value) do
+      typed_encoder = Utils.get_config(state, :typed_encoder, OpenAPIClient.Client.TypedEncoder)
+      {:ok, value_encoded} = typed_encoder.encode(value, type, path, typed_encoder)
+      value_encoded
+    end
+
     defp generate_schema_type_example(
            state,
            {:array, {:enum, _}},
