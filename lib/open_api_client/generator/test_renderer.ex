@@ -2,7 +2,7 @@ if Mix.env() in [:dev, :test] do
   defmodule OpenAPIClient.Generator.TestRenderer do
     defmacro __using__(_opts) do
       quote do
-        use OpenAPIClient.Generator.TestRenderer
+        @behaviour OpenAPIClient.Generator.TestRenderer
 
         @impl OpenAPIClient.Generator.TestRenderer
         defdelegate render(state, file), to: OpenAPIClient.Generator.TestRenderer
