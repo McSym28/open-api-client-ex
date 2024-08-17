@@ -95,10 +95,10 @@ if Mix.env() in [:dev, :test] do
                 state :: State.t(),
                 type ::
                   OpenAPIClient.Schema.type()
-                  | reference()
                   | GeneratorParam.t()
                   | GeneratorSchema.t()
-                  | GeneratorField.t(),
+                  | GeneratorField.t()
+                  | OpenAPI.Processor.Type.t(),
                 path :: type_example_path()
               ) :: term()
     @callback decode_example(
@@ -700,6 +700,9 @@ if Mix.env() in [:dev, :test] do
     def example(_state, {:enum, [value | _]}, _path), do: value
     def example(_state, type, _path) when type in [:any, :map], do: %{"a" => "b"}
 
+    def example(%State{implementation: implementation} = state, {:union, [type | _]}, path),
+      do: implementation.example(state, type, path)
+
     def example(%State{implementation: implementation} = state, {module, type}, path)
         when is_atom(module) and is_atom(type) do
       true =
@@ -873,6 +876,14 @@ if Mix.env() in [:dev, :test] do
           typed_decoder.decode(value, {module, type}, path, @example_typed_decoder)
       end
     end
+
+    def decode_example(
+          %State{implementation: implementation} = state,
+          value,
+          {:union, [type | _]},
+          path
+        ),
+        do: implementation.decode_example(state, value, type, path)
 
     def decode_example(state, value, type, path) do
       typed_decoder = Utils.get_config(state, :typed_decoder, OpenAPIClient.Client.TypedDecoder)
