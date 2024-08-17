@@ -148,7 +148,7 @@ if Mix.env() in [:dev, :test] do
 
           ast =
             quote do
-              defmodule unquote(module) do
+              defmodule unquote(generate_module_name(state, module)) do
                 use ExUnit.Case, async: true
                 unquote(quote(do: import(Mox)) |> Util.put_newlines())
 
@@ -162,7 +162,7 @@ if Mix.env() in [:dev, :test] do
             end
 
           file =
-            %File{file | ast: ast}
+            %File{file | ast: ast, module: module, contents: nil, location: nil}
             |> then(&%File{&1 | contents: implementation.format(state, &1)})
             |> then(&%File{&1 | location: implementation.location(state, &1)})
 
@@ -175,9 +175,8 @@ if Mix.env() in [:dev, :test] do
     end
 
     @impl __MODULE__
-    def module(state, %File{module: module} = _file) do
-      state
-      |> generate_module_name(module)
+    def module(_state, %File{module: module} = _file) do
+      module
       |> Module.split()
       |> List.update_at(-1, &"#{&1}Test")
       |> Module.concat()
@@ -207,7 +206,7 @@ if Mix.env() in [:dev, :test] do
       renderer_state
       |> renderer_implementaion.location(file)
       |> Path.split()
-      |> List.update_at(-1, fn filename -> Path.basename(filename, ".ex") <> "_test.exs" end)
+      |> List.update_at(-1, fn filename -> Path.basename(filename, ".ex") <> ".exs" end)
       |> Path.join()
       |> then(&Path.join([test_base_location, Path.relative_to(&1, base_location)]))
     end
