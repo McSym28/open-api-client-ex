@@ -175,11 +175,6 @@ defmodule OpenAPIClient.Client.TypedEncoder do
   end
 
   def encode(value, {module, type}, path, caller_module)
-      when is_atom(module) and is_atom(type) and is_struct(value) do
-    caller_module.encode(Map.from_struct(value), {module, type}, path, caller_module)
-  end
-
-  def encode(value, {module, type}, path, caller_module)
       when is_atom(module) and is_atom(type) and is_map(value) do
     if Utils.is_module?(module) and Utils.does_implement_behaviour?(module, OpenAPIClient.Schema) do
       fields =
@@ -187,7 +182,7 @@ defmodule OpenAPIClient.Client.TypedEncoder do
         |> module.__fields__()
         |> Map.new()
 
-      value
+      if(is_struct(value), do: Map.from_struct(value), else: value)
       |> Enum.reduce_while({:ok, %{}}, fn {new_name, field_value}, {:ok, acc} ->
         case Map.fetch(fields, new_name) do
           {:ok, {old_name, field_type}} ->
