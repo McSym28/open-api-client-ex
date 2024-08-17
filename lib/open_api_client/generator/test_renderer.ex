@@ -34,6 +34,10 @@ if Mix.env() in [:dev, :test] do
         @impl OpenAPIClient.Generator.TestRenderer
         defdelegate example(state, type, path), to: OpenAPIClient.Generator.TestRenderer
 
+        @impl OpenAPIClient.Generator.TestRenderer
+        defdelegate decode_example(state, value, type, path),
+          to: OpenAPIClient.Generator.TestRenderer
+
         defoverridable render: 2,
                        module: 2,
                        format: 2,
@@ -41,7 +45,8 @@ if Mix.env() in [:dev, :test] do
                        write: 2,
                        render_operation: 2,
                        render_operation_test: 4,
-                       example: 3
+                       example: 3,
+                       decode_example: 4
       end
     end
 
@@ -96,6 +101,12 @@ if Mix.env() in [:dev, :test] do
                   | GeneratorField.t(),
                 path :: type_example_path()
               ) :: term()
+    @callback decode_example(
+                state :: State.t(),
+                value :: term(),
+                type :: OpenAPIClient.Schema.type() | GeneratorSchema.t(),
+                path :: type_example_path()
+              ) :: term()
 
     @optional_callbacks render: 2,
                         module: 2,
@@ -104,76 +115,25 @@ if Mix.env() in [:dev, :test] do
                         write: 2,
                         render_operation: 2,
                         render_operation_test: 4,
-                        example: 3
+                        example: 3,
+                        decode_example: 4
 
     @test_example_url "https://example.com"
+
+    @example_schema ExampleSchema
+    @example_typed_decoder ExampleTypedDecoder
 
     @behaviour __MODULE__
 
     @impl __MODULE__
     def render(
-          %State{
-            implementation: implementation,
-            renderer_state: %OpenAPI.Renderer.State{schemas: schemas}
-          } = state,
+          %State{implementation: implementation} = state,
           %File{operations: operations} = file
         ) do
-      schema_fields_agent = ensure_schema_fields_agent()
-      typed_decoder = Utils.get_config(state, :typed_decoder, OpenAPIClient.Client.TypedDecoder)
+      ensure_schema_fields_agent()
 
-      stub(ExampleTypedDecoder, :decode, fn
-        value, {module, type}, path, _caller_module
-        when is_atom(module) and is_atom(type) and is_map(value) ->
-          with :alias <- Macro.classify_atom(module),
-               %Schema{ref: schema_ref, output_format: output_format} <-
-                 Enum.find_value(schemas, fn
-                   {_ref, %Schema{module_name: module_name, type_name: ^type} = schema} ->
-                     if generate_module_name(state, module_name) == module do
-                       schema
-                     end
-
-                   _ ->
-                     nil
-                 end) do
-            ExampleSchemaFieldsAgent.update(schema_fields_agent, schema_ref)
-
-            case typed_decoder.decode(value, {ExampleSchema, type}, path, ExampleTypedDecoder) do
-              {:ok, decoded_value} when output_format == :struct ->
-                decoded_value =
-                  quote do
-                    %unquote(module){
-                      unquote_splicing(
-                        decoded_value
-                        |> Map.to_list()
-                        |> Enum.sort_by(fn {name, _value} -> name end)
-                      )
-                    }
-                  end
-
-                {:ok, decoded_value}
-
-              {:ok, decoded_value} ->
-                quote do
-                  {:ok,
-                   %{
-                     unquote_splicing(
-                       decoded_value
-                       |> Map.to_list()
-                       |> Enum.sort_by(fn {name, _value} -> name end)
-                     )
-                   }}
-                end
-
-              {:error, _} = error ->
-                error
-            end
-          else
-            _ ->
-              typed_decoder.decode(value, {module, type}, path, ExampleTypedDecoder)
-          end
-
-        value, type, path, _caller_module ->
-          typed_decoder.decode(value, type, path, ExampleTypedDecoder)
+      stub(@example_typed_decoder, :decode, fn value, type, path, _caller_module ->
+        implementation.decode_example(state, value, type, path)
       end)
 
       operations
@@ -835,6 +795,91 @@ if Mix.env() in [:dev, :test] do
          ),
          do: implementation.example(state, type, path)
 
+    @impl __MODULE__
+    def decode_example(
+          state,
+          value,
+          %GeneratorSchema{
+            schema: %Schema{output_format: output_format, module_name: module, type_name: type}
+          } = generator_schema,
+          path
+        ) do
+      ExampleSchemaFieldsAgent.update(ensure_schema_fields_agent(), generator_schema)
+
+      typed_decoder = Utils.get_config(state, :typed_decoder, OpenAPIClient.Client.TypedDecoder)
+
+      case typed_decoder.decode(value, {@example_schema, type}, path, @example_typed_decoder) do
+        {:ok, decoded_value} when output_format == :struct ->
+          decoded_value =
+            quote do
+              %unquote(module){
+                unquote_splicing(
+                  decoded_value
+                  |> Map.to_list()
+                  |> Enum.sort_by(fn {name, _value} -> name end)
+                )
+              }
+            end
+
+          {:ok, decoded_value}
+
+        {:ok, decoded_value} ->
+          quote do
+            {:ok,
+             %{
+               unquote_splicing(
+                 decoded_value
+                 |> Map.to_list()
+                 |> Enum.sort_by(fn {name, _value} -> name end)
+               )
+             }}
+          end
+
+        {:error, _} = error ->
+          error
+      end
+    end
+
+    def decode_example(
+          %State{
+            implementation: implementation,
+            renderer_state: %OpenAPI.Renderer.State{schemas: schemas}
+          } = state,
+          value,
+          {module, type},
+          path
+        )
+        when is_atom(module) and is_atom(type) and is_map(value) do
+      with :alias <- Macro.classify_atom(module),
+           %Schema{ref: schema_ref} <-
+             Enum.find_value(schemas, fn
+               {_ref, %Schema{module_name: module_name, type_name: ^type} = schema} ->
+                 if generate_module_name(state, module_name) == module do
+                   schema
+                 end
+
+               _ ->
+                 nil
+             end),
+           [{_, %GeneratorSchema{schema: schema} = generator_schema}] =
+             :ets.lookup(:schemas, schema_ref) do
+        schema_new = %Schema{schema | module_name: module}
+        generator_schema_new = %GeneratorSchema{generator_schema | schema: schema_new}
+        implementation.decode_example(state, value, generator_schema_new, path)
+      else
+        _ ->
+          typed_decoder =
+            Utils.get_config(state, :typed_decoder, OpenAPIClient.Client.TypedDecoder)
+
+          typed_decoder.decode(value, {module, type}, path, @example_typed_decoder)
+      end
+    end
+
+    def decode_example(state, value, type, path) do
+      typed_decoder = Utils.get_config(state, :typed_decoder, OpenAPIClient.Client.TypedDecoder)
+      typed_decoder.decode(value, type, path, @example_typed_decoder)
+    end
+
     defp select_example_schema(_state, [], _converter_key), do: {nil, :null}
 
     defp select_example_schema(state, schemas, converter_key) do
@@ -864,20 +909,19 @@ if Mix.env() in [:dev, :test] do
          when is_reference(schema_ref) do
       [{_, generator_schema}] = :ets.lookup(:schemas, schema_ref)
 
-      %Schema{module_name: module, type_name: type, output_format: _output_format} =
-        Map.fetch!(schemas, schema_ref)
-
-      example_encoded =
-        implementation.example(state, generator_schema, path)
-
+      %Schema{module_name: module, type_name: type} = schema = Map.fetch!(schemas, schema_ref)
       module = generate_module_name(state, module)
+      schema_new = %Schema{schema | module_name: module}
+      generator_schema_new = %GeneratorSchema{generator_schema | schema: schema_new}
+
+      example_encoded = implementation.example(state, generator_schema_new, path)
 
       {:ok, example_decoded} =
-        apply(ExampleTypedDecoder, :decode, [
+        apply(@example_typed_decoder, :decode, [
           example_encoded,
           {module, type},
           path,
-          ExampleTypedDecoder
+          @example_typed_decoder
         ])
 
       example_encoded = sort_encoded_example(example_encoded)
@@ -888,7 +932,12 @@ if Mix.env() in [:dev, :test] do
       example_encoded = implementation.example(state, type, path)
 
       {:ok, example_decoded} =
-        apply(ExampleTypedDecoder, :decode, [example_encoded, type, path, ExampleTypedDecoder])
+        apply(@example_typed_decoder, :decode, [
+          example_encoded,
+          type,
+          path,
+          @example_typed_decoder
+        ])
 
       example_encoded = sort_encoded_example(example_encoded)
       {example_encoded, example_decoded}
@@ -960,11 +1009,12 @@ if Mix.env() in [:dev, :test] do
         nil ->
           {:ok, pid} = ExampleSchemaFieldsAgent.start_link()
 
-          Mox.defmock(ExampleSchema, for: OpenAPIClient.Schema)
-          Mox.defmock(ExampleTypedDecoder, for: OpenAPIClient.Client.TypedDecoder)
+          Mox.defmock(@example_schema, for: OpenAPIClient.Schema)
+          Mox.defmock(@example_typed_decoder, for: OpenAPIClient.Client.TypedDecoder)
 
-          stub(ExampleSchema, :__fields__, fn _type ->
-            ExampleSchemaFieldsAgent.get(pid)
+          stub(@example_schema, :__fields__, fn _type ->
+            %GeneratorSchema{schema_fields: schema_fields} = ExampleSchemaFieldsAgent.get(pid)
+            schema_fields
           end)
 
           Process.put(:open_api_client_ex, Map.put(app_data, :schema_fields_agent, pid))
