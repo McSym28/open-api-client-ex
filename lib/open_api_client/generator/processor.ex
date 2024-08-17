@@ -454,24 +454,34 @@ if Mix.env() in [:dev, :test] do
       enum_options = Keyword.get(enum_config, :options, [])
       enum_strict = Keyword.get(enum_config, :strict, false)
 
-      {enum_values_new, enum_options} =
-        Enum.map_reduce(enum_values, [], &process_enum_value(&1, &2, enum_options))
+      enum = %SchemaType.Enum{type: enum_type, options: enum_options, strict: enum_strict}
+
+      {enum_values_new, %SchemaType.Enum{options: enum_options_new} = enum_new} =
+        Enum.map_reduce(enum_values, enum, &process_enum_value(&1, &2, path, state))
 
       type_new = {:enum, enum_values_new}
 
       enum_options_new =
-        Enum.sort_by(enum_options, fn
+        Enum.sort_by(enum_options_new, fn
           {atom, _string} -> {0, atom}
           value -> {1, value}
         end)
 
       default_new =
-        if default && not is_tuple(default) do
-          typed_decoder =
-            Utils.get_config(state, :typed_decoder, OpenAPIClient.Client.TypedDecoder)
-
+        if not is_nil(default) && not is_tuple(default) do
           {:ok, default_new} =
-            typed_decoder.decode(default, {:enum, enum_options_new}, path, typed_decoder)
+            if is_atom(default) do
+              Enum.find_value(enum_options_new, :error, fn
+                {^default, _} -> {:ok, default}
+                ^default -> {:ok, default}
+                _ -> nil
+              end)
+            else
+              typed_decoder =
+                Utils.get_config(state, :typed_decoder, OpenAPIClient.Client.TypedDecoder)
+
+              typed_decoder.decode(default, {:enum, enum_options_new}, path, typed_decoder)
+            end
 
           default_new
         else
@@ -481,7 +491,7 @@ if Mix.env() in [:dev, :test] do
       schema_type_new = %SchemaType{
         schema_type
         | default: default_new,
-          enum: %SchemaType.Enum{type: enum_type, options: enum_options_new, strict: enum_strict}
+          enum: %SchemaType.Enum{enum_new | options: enum_options_new}
       }
 
       {name_new, type_new, schema_type_new}
@@ -552,20 +562,40 @@ if Mix.env() in [:dev, :test] do
       {name_new, type, schema_type}
     end
 
-    defp process_enum_value(value, acc, options) do
-      {_, config} = List.keyfind(options, value, 0, {value, []})
+    defp process_enum_value(
+           value,
+           %SchemaType.Enum{type: enum_type, options: enum_options} = enum,
+           path,
+           state
+         ) do
+      {_, config} = List.keyfind(enum_options, value, 0, {value, []})
 
       value
       |> is_binary()
       |> if do
         {:ok,
-         Keyword.get_lazy(config, :value, fn -> value |> snakesize_name() |> String.to_atom() end)}
+         Keyword.get_lazy(config, :value, fn ->
+           typed_decoder =
+             Utils.get_config(state, :typed_decoder, OpenAPIClient.Client.TypedDecoder)
+
+           case typed_decoder.decode(value, enum_type, path, typed_decoder) do
+             {:ok, value_decoded} when is_atom(value_decoded) -> value_decoded
+             _ -> value |> snakesize_name() |> String.to_atom()
+           end
+         end)}
       else
         Keyword.fetch(config, :value)
       end
       |> case do
-        {:ok, new_value} -> {new_value, [{new_value, value} | acc]}
-        :error -> {value, [value | acc]}
+        {:ok, new_value} ->
+          enum_options_new = [{new_value, value} | enum_options]
+          enum_new = %SchemaType.Enum{enum | options: enum_options_new}
+          {new_value, enum_new}
+
+        :error ->
+          enum_options_new = [value | enum_options]
+          enum_new = %SchemaType.Enum{enum | options: enum_options_new}
+          {value, enum_new}
       end
     end
 
