@@ -32,7 +32,7 @@ if Mix.env() in [:dev, :test] do
                     to: OpenAPIClient.Generator.TestRenderer
 
         @impl OpenAPIClient.Generator.TestRenderer
-        defdelegate type_example(state, type, path), to: OpenAPIClient.Generator.TestRenderer
+        defdelegate example(state, type, path), to: OpenAPIClient.Generator.TestRenderer
 
         defoverridable render: 2,
                        module: 2,
@@ -41,7 +41,7 @@ if Mix.env() in [:dev, :test] do
                        write: 2,
                        render_operation: 2,
                        render_operation_test: 4,
-                       type_example: 3
+                       example: 3
       end
     end
 
@@ -86,9 +86,14 @@ if Mix.env() in [:dev, :test] do
                   {content_type :: String.t() | nil, schema :: OpenAPI.Processor.Type.t(),
                    status_code :: integer()}
               ) :: Macro.t()
-    @callback type_example(
+    @callback example(
                 state :: State.t(),
-                type :: OpenAPIClient.Schema.type(),
+                type ::
+                  OpenAPIClient.Schema.type()
+                  | reference()
+                  | GeneratorParam.t()
+                  | GeneratorSchema.t()
+                  | GeneratorField.t(),
                 path :: type_example_path()
               ) :: term()
 
@@ -99,7 +104,7 @@ if Mix.env() in [:dev, :test] do
                         write: 2,
                         render_operation: 2,
                         render_operation_test: 4,
-                        type_example: 3
+                        example: 3
 
     @test_example_url "https://example.com"
 
@@ -341,7 +346,7 @@ if Mix.env() in [:dev, :test] do
 
     @impl __MODULE__
     def render_operation_test(
-          state,
+          %State{implementation: implementation} = state,
           %Operation{
             module_name: module_name,
             function_name: function_name,
@@ -434,7 +439,7 @@ if Mix.env() in [:dev, :test] do
 
               type_new = Utils.schema_type_to_readable_type(state, type, schema_type)
 
-              param_example = generate_example(state, param, path_new)
+              param_example = implementation.example(state, param, path_new)
 
               {:ok, param_example_decoded} =
                 typed_decoder.decode(
@@ -706,35 +711,129 @@ if Mix.env() in [:dev, :test] do
     end
 
     @impl __MODULE__
-    def type_example(_state, :null, _path), do: nil
-    def type_example(_state, :boolean, _path), do: true
+    def example(_state, :null, _path), do: nil
+    def example(_state, :boolean, _path), do: true
 
-    def type_example(%State{implementation: implementation} = state, {:boolean, _}, path),
-      do: implementation.type_example(state, :boolean, path)
+    def example(%State{implementation: implementation} = state, {:boolean, _}, path),
+      do: implementation.example(state, :boolean, path)
 
-    def type_example(_state, :integer, _path), do: 1
+    def example(_state, :integer, _path), do: 1
 
-    def type_example(%State{implementation: implementation} = state, {:integer, _}, path),
-      do: implementation.type_example(state, :integer, path)
+    def example(%State{implementation: implementation} = state, {:integer, _}, path),
+      do: implementation.example(state, :integer, path)
 
-    def type_example(_state, :number, _path), do: 1.0
+    def example(_state, :number, _path), do: 1.0
 
-    def type_example(%State{implementation: implementation} = state, {:number, _}, path),
-      do: implementation.type_example(state, :number, path)
+    def example(%State{implementation: implementation} = state, {:number, _}, path),
+      do: implementation.example(state, :number, path)
 
-    def type_example(_state, {:string, :date}, _path), do: "2024-01-02"
-    def type_example(_state, {:string, :date_time}, _path), do: "2024-01-02T01:23:45Z"
-    def type_example(_state, {:string, :time}, _path), do: "01:23:45"
-    def type_example(_state, {:string, :uri}, _path), do: "http://example.com"
-    def type_example(_state, {:string, _}, _path), do: "string"
+    def example(_state, {:string, :date}, _path), do: "2024-01-02"
+    def example(_state, {:string, :date_time}, _path), do: "2024-01-02T01:23:45Z"
+    def example(_state, {:string, :time}, _path), do: "01:23:45"
+    def example(_state, {:string, :uri}, _path), do: "http://example.com"
+    def example(_state, {:string, _}, _path), do: "string"
 
-    def type_example(%State{implementation: implementation} = state, {:array, type}, path),
-      do: [implementation.type_example(state, type, [[0] | path])]
+    def example(%State{implementation: implementation} = state, {:array, type}, path),
+      do: [implementation.example(state, type, [[0] | path])]
 
-    def type_example(_state, {:const, value}, _path), do: value
-    def type_example(_state, {:enum, [{_atom, value} | _]}, _path), do: value
-    def type_example(_state, {:enum, [value | _]}, _path), do: value
-    def type_example(_state, type, _path) when type in [:any, :map], do: %{"a" => "b"}
+    def example(_state, {:const, value}, _path), do: value
+    def example(_state, {:enum, [{_atom, value} | _]}, _path), do: value
+    def example(_state, {:enum, [value | _]}, _path), do: value
+    def example(_state, type, _path) when type in [:any, :map], do: %{"a" => "b"}
+
+    def example(%State{implementation: implementation} = state, {module, type}, path)
+        when is_atom(module) and is_atom(type) do
+      true =
+        OpenAPIClient.Utils.is_module?(module) and
+          OpenAPIClient.Utils.does_implement_behaviour?(module, OpenAPIClient.Schema)
+
+      type
+      |> module.__fields__()
+      |> Map.new(fn {key, {old_name, type}} ->
+        example_key = implementation.example(state, type, [key | path])
+        {old_name, example_key}
+      end)
+    end
+
+    def example(
+          state,
+          %GeneratorField{field: %Field{type: type}, schema_type: schema_type},
+          path
+        ),
+        do: schema_type_example(state, type, schema_type, path)
+
+    def example(
+          %State{implementation: implementation} = state,
+          %GeneratorSchema{fields: all_fields},
+          path
+        ) do
+      all_fields
+      |> Enum.flat_map(fn
+        %GeneratorField{field: nil} ->
+          []
+
+        %GeneratorField{old_name: name} = field ->
+          example_field = implementation.example(state, field, [name | path])
+          [{name, example_field}]
+      end)
+      |> Map.new()
+    end
+
+    def example(%State{implementation: implementation} = state, schema_ref, path)
+        when is_reference(schema_ref) do
+      [{_, schema}] = :ets.lookup(:schemas, schema_ref)
+      implementation.example(state, schema, path)
+    end
+
+    def example(
+          state,
+          %GeneratorParam{param: %Param{value_type: type}, schema_type: schema_type},
+          path
+        ),
+        do: schema_type_example(state, type, schema_type, path)
+
+    def example(%State{implementation: implementation} = state, {:array, type}, path),
+      do: [implementation.example(state, type, [[0] | path])]
+
+    defp schema_type_example(_state, _type, %SchemaType{examples: [value | _]}, _path),
+      do: value
+
+    defp schema_type_example(
+           state,
+           type,
+           %SchemaType{default: value} = schema_type,
+           path
+         )
+         when not is_nil(value) and not is_tuple(value) do
+      typed_encoder = Utils.get_config(state, :typed_encoder, OpenAPIClient.Client.TypedEncoder)
+      type_new = Utils.schema_type_to_readable_type(state, type, schema_type)
+      {:ok, value_encoded} = typed_encoder.encode(value, type_new, path, typed_encoder)
+      value_encoded
+    end
+
+    defp schema_type_example(
+           %State{implementation: implementation} = state,
+           {:array, {:enum, _}},
+           %SchemaType{enum: %SchemaType.Enum{options: enum_options}},
+           path
+         ),
+         do: implementation.example(state, {:array, {:enum, enum_options}}, path)
+
+    defp schema_type_example(
+           %State{implementation: implementation} = state,
+           {:enum, _},
+           %SchemaType{enum: %SchemaType.Enum{options: enum_options}},
+           path
+         ),
+         do: implementation.example(state, {:enum, enum_options}, path)
+
+    defp schema_type_example(
+           %State{implementation: implementation} = state,
+           type,
+           _schema_type,
+           path
+         ),
+         do: implementation.example(state, type, path)
 
     defp select_example_schema(_state, [], _converter_key), do: {nil, :null}
 
@@ -755,7 +854,10 @@ if Mix.env() in [:dev, :test] do
       do: {nil, nil}
 
     defp generate_schema_example(
-           %State{renderer_state: %OpenAPI.Renderer.State{schemas: schemas}} = state,
+           %State{
+             implementation: implementation,
+             renderer_state: %OpenAPI.Renderer.State{schemas: schemas}
+           } = state,
            schema_ref,
            path
          )
@@ -766,7 +868,7 @@ if Mix.env() in [:dev, :test] do
         Map.fetch!(schemas, schema_ref)
 
       example_encoded =
-        generate_example(state, generator_schema, path)
+        implementation.example(state, generator_schema, path)
 
       module = generate_module_name(state, module)
 
@@ -782,8 +884,8 @@ if Mix.env() in [:dev, :test] do
       {example_encoded, example_decoded}
     end
 
-    defp generate_schema_example(state, type, path) do
-      example_encoded = generate_example(state, type, path)
+    defp generate_schema_example(%State{implementation: implementation} = state, type, path) do
+      example_encoded = implementation.example(state, type, path)
 
       {:ok, example_decoded} =
         apply(ExampleTypedDecoder, :decode, [example_encoded, type, path, ExampleTypedDecoder])
@@ -791,78 +893,6 @@ if Mix.env() in [:dev, :test] do
       example_encoded = sort_encoded_example(example_encoded)
       {example_encoded, example_decoded}
     end
-
-    defp generate_example(
-           state,
-           %GeneratorField{field: %Field{type: type}, schema_type: schema_type},
-           path
-         ),
-         do: generate_schema_type_example(state, type, schema_type, path)
-
-    defp generate_example(state, %GeneratorSchema{fields: all_fields}, path) do
-      all_fields
-      |> Enum.flat_map(fn
-        %GeneratorField{field: nil} ->
-          []
-
-        %GeneratorField{old_name: name} = field ->
-          [{name, generate_example(state, field, [name | path])}]
-      end)
-      |> Map.new()
-    end
-
-    defp generate_example(state, schema_ref, path) when is_reference(schema_ref) do
-      [{_, schema}] = :ets.lookup(:schemas, schema_ref)
-      generate_example(state, schema, path)
-    end
-
-    defp generate_example(
-           state,
-           %GeneratorParam{param: %Param{value_type: type}, schema_type: schema_type},
-           path
-         ),
-         do: generate_schema_type_example(state, type, schema_type, path)
-
-    defp generate_example(state, {:array, type}, path),
-      do: [generate_example(state, type, [[0] | path])]
-
-    defp generate_example(%State{implementation: implementation} = state, type, path),
-      do: implementation.type_example(state, type, path)
-
-    defp generate_schema_type_example(_state, _type, %SchemaType{examples: [value | _]}, _path),
-      do: value
-
-    defp generate_schema_type_example(
-           state,
-           type,
-           %SchemaType{default: value} = schema_type,
-           path
-         )
-         when not is_nil(value) and not is_tuple(value) do
-      typed_encoder = Utils.get_config(state, :typed_encoder, OpenAPIClient.Client.TypedEncoder)
-      type_new = Utils.schema_type_to_readable_type(state, type, schema_type)
-      {:ok, value_encoded} = typed_encoder.encode(value, type_new, path, typed_encoder)
-      value_encoded
-    end
-
-    defp generate_schema_type_example(
-           state,
-           {:array, {:enum, _}},
-           %SchemaType{enum: %SchemaType.Enum{options: enum_options}},
-           path
-         ),
-         do: generate_example(state, {:array, {:enum, enum_options}}, path)
-
-    defp generate_schema_type_example(
-           state,
-           {:enum, _},
-           %SchemaType{enum: %SchemaType.Enum{options: enum_options}},
-           path
-         ),
-         do: generate_example(state, {:enum, enum_options}, path)
-
-    defp generate_schema_type_example(state, type, _schema_type, path),
-      do: generate_example(state, type, path)
 
     defp sort_encoded_example(map) when is_map(map) do
       items =

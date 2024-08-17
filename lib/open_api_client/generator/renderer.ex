@@ -64,7 +64,7 @@ if Mix.env() in [:dev, :test] do
           %OpenAPI.Renderer.State{schemas: schemas} = state,
           %File{operations: operations} = file
         ) do
-      Enum.each(schemas, fn {schema_ref, _schema} ->
+      Enum.each(schemas, fn {schema_ref, schema} ->
         [
           {_,
            %GeneratorSchema{fields: generator_fields, schema_fields: schema_fields} =
@@ -90,7 +90,8 @@ if Mix.env() in [:dev, :test] do
 
           :ets.insert(
             :schemas,
-            {schema_ref, %GeneratorSchema{generator_schema | schema_fields: schema_fields}}
+            {schema_ref,
+             %GeneratorSchema{generator_schema | schema_fields: schema_fields, schema: schema}}
           )
         end
       end)

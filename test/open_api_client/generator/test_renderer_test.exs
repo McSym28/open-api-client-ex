@@ -1,6 +1,50 @@
 defmodule OpenAPIClient.Generator.TestRendererTest do
   use ExUnit.Case, async: true
   alias OpenAPIClient.Generator.TestRenderer
+  alias OpenAPI.Processor.Schema.Field
+  alias OpenAPI.Processor.Operation.Param
+  alias OpenAPIClient.Generator.Param, as: GeneratorParam
+  alias OpenAPIClient.Generator.Schema, as: GeneratorSchema
+  alias OpenAPIClient.Generator.Field, as: GeneratorField
+  alias OpenAPIClient.Generator.SchemaType
+
+  @integer_field %GeneratorField{
+    field: %Field{name: "integer", type: :integer},
+    old_name: "Integer",
+    schema_type: %SchemaType{examples: [2, 3]}
+  }
+  @string_field %GeneratorField{
+    field: %Field{name: "string", type: {:string, :generic}},
+    old_name: "String",
+    schema_type: %SchemaType{examples: ["string1", "string1"]}
+  }
+  @enum_field %GeneratorField{
+    field: %Field{name: "enum", type: {:enum, ["ENUM1", "ENUM2"]}},
+    old_name: "Enum",
+    schema_type: %SchemaType{
+      enum: %SchemaType.Enum{options: [enum1: "ENUM1", enum2: "ENUM2"], type: {:string, :generic}},
+      examples: ["ENUM1", "ENUM2"]
+    }
+  }
+  @array_enum_field %GeneratorField{
+    field: %Field{name: "array_enum", type: {:array, {:enum, ["ENUM1", "ENUM2"]}}},
+    old_name: "ArrayEnum",
+    schema_type: %SchemaType{
+      enum: %SchemaType.Enum{options: [enum1: "ENUM1", enum2: "ENUM2"], type: {:string, :generic}},
+      examples: [["ENUM1", "ENUM2"]]
+    }
+  }
+  @extra_field %GeneratorField{old_name: "Extra"}
+
+  @schema %GeneratorSchema{
+    fields: [@integer_field, @string_field, @enum_field, @array_enum_field, @extra_field]
+  }
+
+  @integer_param %GeneratorParam{
+    param: %Param{name: "integer", location: :header, value_type: :integer},
+    old_name: "Integer",
+    schema_type: %SchemaType{examples: [2, 3]}
+  }
 
   @clauses [
     {:null, {:pipe, quote(do: is_nil())}},
@@ -26,7 +70,20 @@ defmodule OpenAPIClient.Generator.TestRendererTest do
     {{:enum, [enum1: "ENUM1", enum2: "ENUM2"]}, "enum with aliases",
      {:pipe, quote(do: is_binary())}},
     {:map, {:pipe, quote(do: is_map())}},
-    {:any, {:pipe, quote(do: is_map())}}
+    {:any, {:pipe, quote(do: is_map())}},
+    {quote(do: @integer_field), "integer field", {:pipe, quote(do: is_integer())}},
+    {quote(do: @string_field), "string field", {:pipe, quote(do: is_binary())}},
+    {quote(do: put_in(@integer_field, [Access.key!(:schema_type), Access.key!(:examples)], [])),
+     "integer field without examples", {:pipe, quote(do: is_integer())}},
+    {quote(do: put_in(@enum_field, [Access.key!(:schema_type), Access.key!(:examples)], [])),
+     "enum field", {:pipe, quote(do: is_binary())}},
+    {quote(
+       do: put_in(@array_enum_field, [Access.key!(:schema_type), Access.key!(:examples)], [])
+     ), "array of enums field", {:pipe, quote(do: Enum.all?(&is_binary/1))}},
+    {quote(do: @schema), "schema", {:pipe, quote(do: is_map())}},
+    {quote(do: @integer_param), "integer param", {:pipe, quote(do: is_integer())}},
+    {{OpenAPIClient.TestRequestSchema, :t}, "OpenAPIClient.TestRequestSchema",
+     {:pipe, quote(do: is_map())}}
   ]
 
   setup_all do
@@ -38,7 +95,7 @@ defmodule OpenAPIClient.Generator.TestRendererTest do
     }
   end
 
-  describe "type_example/3" do
+  describe "example/3" do
     @clauses
     |> Enum.map(fn
       {type, check} -> {type, to_string(type), check}
@@ -52,7 +109,7 @@ defmodule OpenAPIClient.Generator.TestRendererTest do
                     assert(
                       unquote(pattern) =
                         unquote(Macro.var(:state, nil))
-                        |> TestRenderer.type_example(unquote(type), [])
+                        |> TestRenderer.example(unquote(type), [])
                         |> unquote(pipe)
                     )
 
@@ -60,7 +117,7 @@ defmodule OpenAPIClient.Generator.TestRendererTest do
             quote do:
                     assert(
                       unquote(Macro.var(:state, nil))
-                      |> TestRenderer.type_example(unquote(type), [])
+                      |> TestRenderer.example(unquote(type), [])
                       |> unquote(pipe)
                     )
         end
