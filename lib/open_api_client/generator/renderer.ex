@@ -1098,12 +1098,17 @@ if Mix.env() in [:dev, :test] do
           %Schema{} = schema = schemas[schema_ref]
 
           examples =
-            examples
-            |> Enum.flat_map(fn
+            Enum.flat_map(examples, fn
               {_key, %OpenAPI.Spec.Schema.Example{value: nil}} -> []
               {_key, %OpenAPI.Spec.Schema.Example{value: example}} -> [example]
             end)
-            |> then(&[example | &1])
+
+          examples =
+            if example do
+              [example | examples]
+            else
+              examples
+            end
 
           examples =
             if is_array do
