@@ -104,9 +104,10 @@ if Mix.env() in [:dev, :test] do
     @callback decode_example(
                 state :: State.t(),
                 value :: term(),
-                type :: OpenAPIClient.Schema.type() | GeneratorSchema.t(),
+                type ::
+                  OpenAPIClient.Schema.type() | GeneratorSchema.t() | OpenAPI.Processor.Type.t(),
                 path :: type_example_path()
-              ) :: term()
+              ) :: {:ok, term()} | {:error, OpenAPIClient.Client.Error.t()}
 
     @optional_callbacks render: 2,
                         module: 2,
