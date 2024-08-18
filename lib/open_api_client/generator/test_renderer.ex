@@ -863,12 +863,8 @@ if Mix.env() in [:dev, :test] do
 
                _ ->
                  nil
-             end),
-           [{_, %GeneratorSchema{schema: schema} = generator_schema}] =
-             :ets.lookup(:schemas, schema_ref) do
-        schema_new = %Schema{schema | module_name: module}
-        generator_schema_new = %GeneratorSchema{generator_schema | schema: schema_new}
-        implementation.decode_example(state, value, generator_schema_new, path)
+             end) do
+        implementation.decode_example(state, value, schema_ref, path)
       else
         _ ->
           typed_decoder =
@@ -885,6 +881,51 @@ if Mix.env() in [:dev, :test] do
           path
         ),
         do: implementation.decode_example(state, value, type, path)
+
+    def decode_example(
+          %State{implementation: implementation} = state,
+          value,
+          schema_ref,
+          path
+        )
+        when is_reference(schema_ref) do
+      [{_, %GeneratorSchema{schema: %Schema{module_name: module} = schema} = generator_schema}] =
+        :ets.lookup(:schemas, schema_ref)
+
+      module_new = generate_module_name(state, module)
+      schema_new = %Schema{schema | module_name: module_new}
+      generator_schema_new = %GeneratorSchema{generator_schema | schema: schema_new}
+      implementation.decode_example(state, value, generator_schema_new, path)
+    end
+
+    def decode_example(
+          %State{implementation: implementation} = state,
+          value,
+          [type],
+          path
+        ) do
+      value
+      |> Enum.with_index()
+      |> Enum.reduce_while({:ok, []}, fn {item_value, index}, {:ok, acc} ->
+        case implementation.decode_example(state, item_value, type, [[index] | path]) do
+          {:ok, decoded_value} -> {:cont, {:ok, [decoded_value | acc]}}
+          {:error, _} = error -> {:halt, error}
+        end
+      end)
+      |> case do
+        {:ok, decoded_value} -> {:ok, Enum.reverse(decoded_value)}
+        {:error, _} = error -> error
+      end
+    end
+
+    def decode_example(
+          %State{implementation: implementation} = state,
+          value,
+          {:array, type},
+          path
+        ) do
+      implementation.decode_example(state, value, [type], path)
+    end
 
     def decode_example(state, value, type, path) do
       typed_decoder = Utils.get_config(state, :typed_decoder, OpenAPIClient.Client.TypedDecoder)
