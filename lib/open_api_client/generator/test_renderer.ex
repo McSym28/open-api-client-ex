@@ -336,7 +336,7 @@ if Mix.env() in [:dev, :test] do
         ])
 
       request_schema_test_message =
-        if request_schema_test_message = test_message_schema(state, request_schema) do
+        if request_schema_test_message = test_message_schema(state, module_name, request_schema) do
           "encodes #{request_schema_test_message} from request's body"
         end
 
@@ -347,7 +347,7 @@ if Mix.env() in [:dev, :test] do
         ])
 
       response_schema_test_message =
-        if response_schema_test_message = test_message_schema(state, response_schema) do
+        if response_schema_test_message = test_message_schema(state, module_name, response_schema) do
           "encodes #{response_schema_test_message} from response's body"
         end
 
@@ -1012,13 +1012,16 @@ if Mix.env() in [:dev, :test] do
       Module.concat(Utils.get_oapi_generator_config(state, :base_module, ""), module_name)
     end
 
-    defp test_message_schema(%State{renderer_state: renderer_state} = _state, schema) do
+    defp test_message_schema(
+           %State{renderer_state: renderer_state} = _state,
+           parent_module_name,
+           schema
+         ) do
       case Util.to_readable_type(renderer_state, schema) do
         [{module, _type}] ->
           if Macro.classify_atom(module) == :alias do
             module
-            |> Module.split()
-            |> Enum.join(".")
+            |> test_message_schema_module_name(parent_module_name)
             |> then(&"array of #{&1}")
           end
 
@@ -1027,9 +1030,7 @@ if Mix.env() in [:dev, :test] do
 
         {module, _type} ->
           if Macro.classify_atom(module) == :alias do
-            module
-            |> Module.split()
-            |> Enum.join(".")
+            test_message_schema_module_name(module, parent_module_name)
           end
 
         :map ->
@@ -1039,6 +1040,27 @@ if Mix.env() in [:dev, :test] do
           nil
       end
     end
+
+    defp test_message_schema_module_name(module_name, parent_module_name) do
+      parent_module_name_parts = Module.split(parent_module_name)
+
+      module_name
+      |> Module.split()
+      |> test_message_schema_module_name_acc(parent_module_name_parts, [])
+      |> Enum.join(".")
+    end
+
+    defp test_message_schema_module_name_acc([], _, acc), do: Enum.reverse(acc)
+
+    defp test_message_schema_module_name_acc(
+           [part | module_name_rest],
+           [part | parent_module_name_rest],
+           []
+         ),
+         do: test_message_schema_module_name_acc(module_name_rest, parent_module_name_rest, [])
+
+    defp test_message_schema_module_name_acc([part | module_name_rest], parent_module_name, acc),
+      do: test_message_schema_module_name_acc(module_name_rest, parent_module_name, [part | acc])
 
     defp apply_body_converter(state, body, content_type, converter_key) do
       {_, {module, function, args}} =
