@@ -101,7 +101,8 @@ config :open_api_client_ex,
       {{"TestRequestSchema", :t},
        [
          fields: [
-           {"StrictEnum", [enum: [strict: true], example: "STRICT_ENUM_2"]}
+           {"StrictEnum", [enum: [strict: true], example: "STRICT_ENUM_2"]},
+           {:*, [enum: [strict: true]]}
          ]
        ]}
     ]

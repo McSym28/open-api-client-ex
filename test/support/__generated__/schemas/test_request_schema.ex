@@ -6,9 +6,9 @@ defmodule OpenAPIClient.TestRequestSchema do
   @behaviour OpenAPIClient.Schema
 
   @type t :: %__MODULE__{
-          array_enum: [:dynamic_enum_1 | :dynamic_enum_2 | String.t()] | nil,
+          array_enum: [:dynamic_enum_1 | :dynamic_enum_2] | nil,
           child: OpenAPIClient.TestRequestSchema.Child.t() | nil,
-          enum_with_default: :another_enum | :default_enum | :some_enum | String.t(),
+          enum_with_default: :another_enum | :default_enum | :some_enum,
           number_enum: 1 | number | nil,
           strict_enum: :strict_enum_1 | :strict_enum_2 | :strict_enum_3
         }
@@ -23,23 +23,13 @@ defmodule OpenAPIClient.TestRequestSchema do
   def __fields__(:t) do
     [
       array_enum:
-        {"ArrayEnum",
-         enum: [
-           {:dynamic_enum_1, "DYNAMIC_ENUM_1"},
-           {:dynamic_enum_2, "DYNAMIC_ENUM_2"},
-           :not_strict
-         ]},
+        {"ArrayEnum", enum: [dynamic_enum_1: "DYNAMIC_ENUM_1", dynamic_enum_2: "DYNAMIC_ENUM_2"]},
       child: {"Child", {OpenAPIClient.TestRequestSchema.Child, :t}},
       enum_with_default:
         {"EnumWithDefault",
          {:enum,
-          [
-            {:another_enum, "ANOTHER_ENUM"},
-            {:default_enum, "DEFAULT_ENUM"},
-            {:some_enum, "SOME_ENUM"},
-            :not_strict
-          ]}},
-      number_enum: {"NumberEnum", {:enum, [1, 2.0, 3.0, :not_strict]}},
+          another_enum: "ANOTHER_ENUM", default_enum: "DEFAULT_ENUM", some_enum: "SOME_ENUM"}},
+      number_enum: {"NumberEnum", {:enum, [1, 2.0, 3.0]}},
       strict_enum:
         {"StrictEnum",
          {:enum,

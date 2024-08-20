@@ -382,7 +382,7 @@ if Mix.env() in [:dev, :test] do
 
           generator_fields =
             Enum.map(fields, fn %Field{name: name} = field ->
-              {_, config} = List.keyfind(field_configs, name, 0, {name, []})
+              config = Utils.schema_field_config(field_configs, name)
               process_field(field, config, Map.get(schema_properties, name), state)
             end)
 

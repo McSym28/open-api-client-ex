@@ -44,7 +44,10 @@ if Mix.env() in [:dev, :test] do
     @type operation_config :: [{:params, operation_params_config()}]
 
     @type schema_field_config :: schema_type_config()
-    @type schema_config :: [{:fields, [{String.t(), schema_field_config()}]}]
+    @type schema_field_name_pattern ::
+            common_pattern() | String.t() | list(schema_field_name_pattern())
+    @type schema_fields_config :: [{schema_field_name_pattern(), schema_field_config()}]
+    @type schema_config :: [{:fields, schema_fields_config()}]
 
     @spec operation_config(
             OpenAPI.Processor.State.t(),
@@ -77,6 +80,11 @@ if Mix.env() in [:dev, :test] do
       state
       |> get_config(:schemas, [])
       |> build_config({module, type})
+    end
+
+    @spec schema_field_config(schema_fields_config(), String.t()) :: schema_field_config()
+    def schema_field_config(config, name) do
+      build_config(config, name)
     end
 
     @spec ensure_ets_table(atom()) :: :ets.table()
@@ -198,9 +206,17 @@ if Mix.env() in [:dev, :test] do
       |> Keyword.get(key, default)
     end
 
-    defp build_config(config, {_first, _second} = tuple) when is_list(config) do
+    defp build_config(config, value_or_tuple) when is_list(config) do
       config
-      |> Enum.flat_map(fn {pattern, config} ->
+      |> filter_config(value_or_tuple)
+      |> Enum.sort_by(fn {rank, _config} -> rank end)
+      |> Enum.reduce([], fn {_rank, config}, acc ->
+        OpenAPIClient.Utils.config_merge(acc, config)
+      end)
+    end
+
+    defp filter_config(pattern_config, {_first, _second} = tuple) do
+      Enum.flat_map(pattern_config, fn {pattern, config} ->
         case tuple_pattern_rank(pattern, tuple) do
           {:ok, {first_rank, second_rank}} ->
             [{first_rank * @tuple_pattern_rank_multiplicand + second_rank, config}]
@@ -209,9 +225,14 @@ if Mix.env() in [:dev, :test] do
             []
         end
       end)
-      |> Enum.sort_by(fn {rank, _config} -> rank end)
-      |> Enum.reduce([], fn {_rank, config}, acc ->
-        OpenAPIClient.Utils.config_merge(acc, config)
+    end
+
+    defp filter_config(pattern_config, value) do
+      Enum.flat_map(pattern_config, fn {pattern, config} ->
+        case pattern_rank(pattern, value) do
+          {:ok, rank} -> [{rank, config}]
+          :error -> []
+        end
       end)
     end
 
