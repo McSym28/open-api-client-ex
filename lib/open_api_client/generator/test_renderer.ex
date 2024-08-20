@@ -694,6 +694,9 @@ if Mix.env() in [:dev, :test] do
     def example(_state, {:string, _}, _path), do: "string"
 
     def example(%State{implementation: implementation} = state, {:array, type}, path),
+      do: implementation.example(state, [type], path)
+
+    def example(%State{implementation: implementation} = state, [type], path),
       do: [implementation.example(state, type, [[0] | path])]
 
     def example(_state, {:const, value}, _path), do: value
