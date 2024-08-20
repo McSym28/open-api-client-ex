@@ -8,8 +8,8 @@ if Mix.env() in [:dev, :test] do
 
     @tuple_pattern_rank_multiplicand 10
 
-    @type pattern :: :* | String.t() | atom() | Regex.t() | list(pattern())
-    @type tuple_pattern :: :* | {pattern(), pattern()}
+    @type any_pattern :: :*
+    @type common_pattern :: any_pattern() | Regex.t()
 
     @type schema_type_enum_config :: [
             {:strict, boolean()} | {:options, [{term(), [{:value, atom()}]}]}
@@ -28,13 +28,20 @@ if Mix.env() in [:dev, :test] do
     @type operation_new_param_config_option :: schema_type_config_option() | {:spec, map()}
     @type operation_new_param_config :: operation_new_param_config_option()
 
-    @type operation_config :: [
-            {:params,
-             [
-               {tuple_pattern(), operation_param_config()}
-               | {{String.t(), :new}, operation_new_param_config()}
-             ]}
+    @type operation_param_name_pattern ::
+            common_pattern() | String.t() | list(operation_param_name_pattern())
+    @type operation_param_location_pattern ::
+            common_pattern()
+            | OpenAPI.Processor.Operation.Param.location()
+            | list(operation_param_location_pattern())
+
+    @type operation_params_config :: [
+            {any_pattern() | {operation_param_name_pattern(), operation_param_location_pattern()},
+             operation_param_config()}
+            | {{String.t(), :new}, operation_new_param_config()}
           ]
+
+    @type operation_config :: [{:params, operation_params_config()}]
 
     @type schema_field_config :: schema_type_config()
     @type schema_config :: [{:fields, [{String.t(), schema_field_config()}]}]
@@ -50,6 +57,15 @@ if Mix.env() in [:dev, :test] do
       state
       |> get_config(:operations, [])
       |> build_config({url, method})
+    end
+
+    @spec operation_param_config(
+            operation_params_config(),
+            String.t(),
+            OpenAPI.Processor.Operation.Param.location()
+          ) :: operation_param_config()
+    def operation_param_config(config, name, location) do
+      build_config(config, {name, location})
     end
 
     @spec schema_config(

@@ -109,7 +109,7 @@ if Mix.env() in [:dev, :test] do
 
             is_new = MapSet.member?(new_parameters_mapset, {name, Atom.to_string(location)})
             location_find = if is_new, do: :new, else: location
-            {_, config} = List.keyfind(param_configs, {name, location_find}, 0, {name, []})
+            config = Utils.operation_param_config(param_configs, name, location_find)
 
             {name_new, type_new, %SchemaType{default: default} = schema_type} =
               process_schema_type(

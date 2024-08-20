@@ -15,6 +15,16 @@ paths:
           schema:
             type: string
           example: string_header
+        - in: header
+          name: X-Config-Strict-Enum-Header
+          description: Enum header parameter that has it's "strcictness" set through config
+          schema:
+            type: string
+            enum: 
+              - CONFIG_STRICT_ENUM_1
+              - CONFIG_STRICT_ENUM_2
+              - CONFIG_STRICT_ENUM_3
+          example: CONFIG_STRICT_ENUM_1
       requestBody: 
         content:
           "application/json":

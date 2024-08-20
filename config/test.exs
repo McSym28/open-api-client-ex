@@ -83,7 +83,8 @@ config :open_api_client_ex,
       {{"/test", :post},
        [
          params: [
-           {{"X-String-Header", :header}, [name: "string_header"]}
+           {{"X-String-Header", :header}, [name: "string_header"]},
+           {:*, [enum: [strict: true]]}
          ]
        ]}
     ],

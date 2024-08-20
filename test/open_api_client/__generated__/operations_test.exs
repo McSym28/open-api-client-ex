@@ -84,6 +84,9 @@ defmodule OpenAPIClient.OperationsTest do
       expect(@httpoison, :request, fn :post, "https://example.com/test", body, headers, _ ->
         assert {_, "string_header"} = List.keyfind(headers, "x-string-header", 0)
 
+        assert {_, "CONFIG_STRICT_ENUM_1"} =
+                 List.keyfind(headers, "x-config-strict-enum-header", 0)
+
         assert {:ok, "application/json"} ==
                  (with {_, content_type_request} <- List.keyfind(headers, "content-type", 0),
                        {:ok, {media_type, media_subtype, _parameters}} =
@@ -114,6 +117,7 @@ defmodule OpenAPIClient.OperationsTest do
                    number_enum: 2.0,
                    strict_enum: :strict_enum_3
                  },
+                 x_config_strict_enum_header: :config_strict_enum_1,
                  string_header: "string_header",
                  base_url: "https://example.com"
                )
@@ -124,6 +128,9 @@ defmodule OpenAPIClient.OperationsTest do
 
       expect(@httpoison, :request, fn :post, "https://example.com/test", body, headers, _ ->
         assert {_, "string_header"} = List.keyfind(headers, "x-string-header", 0)
+
+        assert {_, "CONFIG_STRICT_ENUM_1"} =
+                 List.keyfind(headers, "x-config-strict-enum-header", 0)
 
         assert {:ok, "application/json"} ==
                  (with {_, content_type_request} <- List.keyfind(headers, "content-type", 0),
@@ -155,6 +162,7 @@ defmodule OpenAPIClient.OperationsTest do
                    number_enum: 2.0,
                    strict_enum: :strict_enum_3
                  },
+                 x_config_strict_enum_header: :config_strict_enum_1,
                  string_header: "string_header",
                  base_url: "https://example.com"
                )
@@ -165,6 +173,9 @@ defmodule OpenAPIClient.OperationsTest do
 
       expect(@httpoison, :request, fn :post, "https://example.com/test", body, headers, _ ->
         assert {_, "string_header"} = List.keyfind(headers, "x-string-header", 0)
+
+        assert {_, "CONFIG_STRICT_ENUM_1"} =
+                 List.keyfind(headers, "x-config-strict-enum-header", 0)
 
         assert {:ok, "application/json"} ==
                  (with {_, content_type_request} <- List.keyfind(headers, "content-type", 0),
@@ -196,6 +207,7 @@ defmodule OpenAPIClient.OperationsTest do
                    number_enum: 2.0,
                    strict_enum: :strict_enum_3
                  },
+                 x_config_strict_enum_header: :config_strict_enum_1,
                  string_header: "string_header",
                  base_url: "https://example.com"
                )

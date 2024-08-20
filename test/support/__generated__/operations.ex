@@ -223,12 +223,15 @@ defmodule OpenAPIClient.Operations do
   ## Options
 
     * `string_header`: ["X-String-Header"] String header parameter
+    * `x_config_strict_enum_header`: ["X-Config-Strict-Enum-Header"] Enum header parameter that has it's "strcictness" set through config
     * `base_url`: Request's base URL. Default value is taken from `@base_url`
     * `client_pipeline`: Client pipeline for making a request. Default value obtained through a call to `OpenAPIClient.Utils.get_config(__operation__, :client_pipeline)}
 
   """
   @spec set_test(OpenAPIClient.TestRequestSchema.t(), [
           {:string_header, String.t()}
+          | {:x_config_strict_enum_header,
+             :config_strict_enum_1 | :config_strict_enum_2 | :config_strict_enum_3}
           | {:base_url, String.t() | URI.t()}
           | {:client_pipeline, OpenAPIClient.Client.pipeline()}
         ]) :: :ok | :error | {:error, OpenAPIClient.Client.Error.t()}
@@ -238,10 +241,30 @@ defmodule OpenAPIClient.Operations do
     client_pipeline = Keyword.get(opts, :client_pipeline)
     base_url = opts[:base_url] || @base_url
 
+    typed_encoder =
+      OpenAPIClient.Utils.get_config(:test, :typed_encoder, OpenAPIClient.Client.TypedEncoder)
+
     headers =
       opts
-      |> Keyword.take([:string_header])
-      |> Enum.map(fn {:string_header, value} -> {"X-String-Header", value} end)
+      |> Keyword.take([:string_header, :x_config_strict_enum_header])
+      |> Enum.map(fn
+        {:x_config_strict_enum_header, value} ->
+          {:ok, value_new} =
+            typed_encoder.encode(
+              value,
+              {:enum,
+               config_strict_enum_1: "CONFIG_STRICT_ENUM_1",
+               config_strict_enum_2: "CONFIG_STRICT_ENUM_2",
+               config_strict_enum_3: "CONFIG_STRICT_ENUM_3"},
+              [{:parameter, :header, "X-Config-Strict-Enum-Header"}, [{"/test", :post}]],
+              typed_encoder
+            )
+
+          {"X-Config-Strict-Enum-Header", value_new}
+
+        {:string_header, value} ->
+          {"X-String-Header", value}
+      end)
       |> Map.new()
 
     client = OpenAPIClient.Utils.get_config(:test, :client, OpenAPIClient.Client)
