@@ -8,7 +8,7 @@ defmodule OpenAPIClient.OperationsTest do
   setup :verify_on_exit!
 
   describe "get_test/3" do
-    test "[200] performs a request and encodes OpenAPIClient.TestSchema from response's body" do
+    test "[200] performs a request and encodes TestSchema from response's body" do
       expect(@client, :perform, fn operation, pipeline ->
         params = OpenAPIClient.Client.Operation.get_private(operation, :__params__)
         assert {_, "string"} = List.keyfind(params, :optional_header_new_param, 0)
@@ -78,7 +78,7 @@ defmodule OpenAPIClient.OperationsTest do
   end
 
   describe "set_test/2" do
-    test "[298] performs a request and encodes OpenAPIClient.TestRequestSchema from request's body" do
+    test "[298] performs a request and encodes TestRequestSchema from request's body" do
       expect(@client, :perform, &OpenAPIClient.Client.perform/2)
 
       expect(@httpoison, :request, fn :post, "https://example.com/test", body, headers, _ ->
@@ -119,7 +119,7 @@ defmodule OpenAPIClient.OperationsTest do
                )
     end
 
-    test "[299] performs a request and encodes OpenAPIClient.TestRequestSchema from request's body" do
+    test "[299] performs a request and encodes TestRequestSchema from request's body" do
       expect(@client, :perform, &OpenAPIClient.Client.perform/2)
 
       expect(@httpoison, :request, fn :post, "https://example.com/test", body, headers, _ ->
@@ -160,7 +160,7 @@ defmodule OpenAPIClient.OperationsTest do
                )
     end
 
-    test "[400] performs a request and encodes OpenAPIClient.TestRequestSchema from request's body" do
+    test "[400] performs a request and encodes TestRequestSchema from request's body" do
       expect(@client, :perform, &OpenAPIClient.Client.perform/2)
 
       expect(@httpoison, :request, fn :post, "https://example.com/test", body, headers, _ ->
