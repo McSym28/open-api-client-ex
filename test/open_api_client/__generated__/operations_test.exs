@@ -108,7 +108,7 @@ defmodule OpenAPIClient.OperationsTest do
       assert :ok ==
                OpenAPIClient.Operations.set_test(
                  %OpenAPIClient.TestRequestSchema{
-                   array_enum: ["DYNAMIC_ENUM_1"],
+                   array_enum: [:dynamic_enum_1],
                    child: %OpenAPIClient.TestRequestSchema.Child{string: "nested_string_value"},
                    enum_with_default: :default_enum,
                    number_enum: 2.0,
@@ -149,7 +149,7 @@ defmodule OpenAPIClient.OperationsTest do
       assert :ok ==
                OpenAPIClient.Operations.set_test(
                  %OpenAPIClient.TestRequestSchema{
-                   array_enum: ["DYNAMIC_ENUM_1"],
+                   array_enum: [:dynamic_enum_1],
                    child: %OpenAPIClient.TestRequestSchema.Child{string: "nested_string_value"},
                    enum_with_default: :default_enum,
                    number_enum: 2.0,
@@ -190,7 +190,7 @@ defmodule OpenAPIClient.OperationsTest do
       assert :error ==
                OpenAPIClient.Operations.set_test(
                  %OpenAPIClient.TestRequestSchema{
-                   array_enum: ["DYNAMIC_ENUM_1"],
+                   array_enum: [:dynamic_enum_1],
                    child: %OpenAPIClient.TestRequestSchema.Child{string: "nested_string_value"},
                    enum_with_default: :default_enum,
                    number_enum: 2.0,
