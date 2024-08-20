@@ -197,7 +197,7 @@ if Mix.env() in [:dev, :test] do
           {:array, {:enum, _} = enum},
           schema_type
         ),
-        do: {:array, schema_type_to_readable_type(state, enum, schema_type)}
+        do: [schema_type_to_readable_type(state, enum, schema_type)]
 
     def schema_type_to_readable_type(
           %OpenAPIClient.Generator.TestRenderer.State{renderer_state: renderer_state},

@@ -24,9 +24,11 @@ defmodule OpenAPIClient.TestRequestSchema do
     [
       array_enum:
         {"ArrayEnum",
-         {:array,
-          {:enum,
-           [{:dynamic_enum_1, "DYNAMIC_ENUM_1"}, {:dynamic_enum_2, "DYNAMIC_ENUM_2"}, :not_strict]}}},
+         enum: [
+           {:dynamic_enum_1, "DYNAMIC_ENUM_1"},
+           {:dynamic_enum_2, "DYNAMIC_ENUM_2"},
+           :not_strict
+         ]},
       child: {"Child", {OpenAPIClient.TestRequestSchema.Child, :t}},
       enum_with_default:
         {"EnumWithDefault",
