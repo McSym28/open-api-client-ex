@@ -454,10 +454,10 @@ if Mix.env() in [:dev, :test] do
       enum_options = Keyword.get(enum_config, :options, [])
       enum_strict = Keyword.get(enum_config, :strict, false)
 
-      enum = %SchemaType.Enum{type: enum_type, options: enum_options, strict: enum_strict}
+      enum = %SchemaType.Enum{type: enum_type, options: [], strict: enum_strict}
 
       {enum_values_new, %SchemaType.Enum{options: enum_options_new} = enum_new} =
-        Enum.map_reduce(enum_values, enum, &process_enum_value(&1, &2, path, state))
+        Enum.map_reduce(enum_values, enum, &process_enum_value(&1, &2, enum_options, path, state))
 
       type_new = {:enum, enum_values_new}
 
@@ -565,10 +565,11 @@ if Mix.env() in [:dev, :test] do
     defp process_enum_value(
            value,
            %SchemaType.Enum{type: enum_type, options: enum_options} = enum,
+           config_options,
            path,
            state
          ) do
-      {_, config} = List.keyfind(enum_options, value, 0, {value, []})
+      {_, config} = List.keyfind(config_options, value, 0, {value, []})
 
       value
       |> is_binary()
