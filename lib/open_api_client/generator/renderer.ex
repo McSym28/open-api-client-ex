@@ -259,6 +259,7 @@ if Mix.env() in [:dev, :test] do
         |> Enum.map(fn
           {field, {_, nil}} -> field
           {field, {false, _default}} -> field
+          {field, {true, {_, _, _} = _default}} -> field
           {field, {true, default}} -> {field, default}
         end)
         |> Enum.sort_by(fn
