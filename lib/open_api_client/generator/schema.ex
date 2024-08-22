@@ -2,7 +2,7 @@ if Mix.env() in [:dev, :test] do
   defmodule OpenAPIClient.Generator.Schema do
     @type t :: %__MODULE__{
             fields: [OpenAPIClient.Generator.Field.t()],
-            schema_fields: OpenAPIClient.Schema.schema_type(),
+            schema_fields: [{String.t(), OpenAPIClient.Schema.field_type()}],
             schema: OpenAPI.Processor.Schema.t()
           }
 

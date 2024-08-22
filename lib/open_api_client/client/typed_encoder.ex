@@ -180,12 +180,23 @@ defmodule OpenAPIClient.Client.TypedEncoder do
       fields =
         type
         |> module.__fields__()
-        |> Map.new()
+        |> Map.new(fn
+          {new_name, {old_name, type}} -> {new_name, {old_name, type, nil}}
+          {new_name, {old_name, type, default}} -> {new_name, {old_name, type, default}}
+        end)
 
-      if(is_struct(value), do: Map.from_struct(value), else: value)
+      fields
+      |> Enum.reduce(if(is_struct(value), do: Map.from_struct(value), else: value), fn
+        {new_name, {_old_name, _type, default}}, acc
+        when is_function(default, 0) and is_nil(:erlang.map_get(new_name, acc)) ->
+          Map.put(acc, new_name, default.())
+
+        _, acc ->
+          acc
+      end)
       |> Enum.reduce_while({:ok, %{}}, fn {new_name, field_value}, {:ok, acc} ->
         case Map.fetch(fields, new_name) do
-          {:ok, {old_name, field_type}} ->
+          {:ok, {old_name, field_type, _default}} ->
             case caller_module.encode(
                    field_value,
                    field_type,

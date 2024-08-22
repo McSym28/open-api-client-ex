@@ -747,9 +747,17 @@ if Mix.env() in [:dev, :test] do
 
       type
       |> module.__fields__()
-      |> Map.new(fn {key, {old_name, type}} ->
-        example_key = implementation.example(state, type, [key | path])
-        {old_name, example_key}
+      |> Map.new(fn field ->
+        field
+        |> case do
+          {key, {old_name, type}} -> {key, {old_name, type}}
+          {key, {old_name, type, _default}} -> {key, {old_name, type}}
+        end
+        |> case do
+          {key, {old_name, type}} ->
+            example_key = implementation.example(state, type, [key | path])
+            {old_name, example_key}
+        end
       end)
     end
 

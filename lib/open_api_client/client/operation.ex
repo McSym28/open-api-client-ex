@@ -8,13 +8,11 @@ defmodule OpenAPIClient.Client.Operation do
   @type parameter_location :: common_parameter_location() | custom_parameter_location()
   @type parameter_key :: {String.t(), parameter_location()}
   @type parameters :: %{parameter_key() => String.t()}
-  @type parameter_type ::
-          {String.t(), Schema.type()} | {String.t(), Schema.type(), term() | (-> term())}
   @type parameter_type_key :: {atom(), parameter_location()}
   @type content_type :: String.t()
-  @type request_schema :: {content_type(), OpenAPIClient.Schema.type()}
+  @type request_schema :: {content_type(), Schema.type()}
   @type response_status_code :: integer() | String.t() | :default
-  @type response_schema :: {content_type(), OpenAPIClient.Schema.type()}
+  @type response_schema :: {content_type(), Schema.type()}
   @type response_type :: {response_status_code(), [response_schema()] | :null}
   @type external_parameters ::
           [{{String.t(), parameter_location()}, String.t()}]
@@ -30,7 +28,7 @@ defmodule OpenAPIClient.Client.Operation do
           request_url: url(),
           request_method: method(),
           request_parameters: parameters(),
-          request_parameter_types: [{parameter_type_key(), parameter_type()}],
+          request_parameter_types: [{parameter_type_key(), Schema.field_type()}],
           request_body: term() | nil,
           request_types: [request_schema()],
           response_body: term() | nil,

@@ -81,7 +81,14 @@ if Mix.env() in [:dev, :test] do
                 schema_type: schema_type
               } = _generator_field ->
                 type_new = Utils.schema_type_to_readable_type(state, type, schema_type)
-                [{String.to_atom(new_name), {old_name, type_new}}]
+
+                field_type =
+                  case schema_type do
+                    %SchemaType{default: {_, _, _} = default} -> {old_name, type_new, default}
+                    _ -> {old_name, type_new}
+                  end
+
+                [{String.to_atom(new_name), field_type}]
 
               _ ->
                 []
@@ -281,7 +288,7 @@ if Mix.env() in [:dev, :test] do
         {:@, _, [{:spec, _, [{:"::", [], [{:__fields__, _, _}, _]}]}]} ->
           [
             quote(do: @impl(OpenAPIClient.Schema)),
-            quote(do: @spec(__fields__(types()) :: keyword(OpenAPIClient.Schema.schema_type())))
+            quote(do: @spec(__fields__(types()) :: keyword(OpenAPIClient.Schema.field_type())))
           ]
 
         {:def, def_metadata,
@@ -291,6 +298,16 @@ if Mix.env() in [:dev, :test] do
 
           [{_, %GeneratorSchema{schema_fields: schema_fields}}] = :ets.lookup(:schemas, ref)
 
+          schema_fields_new =
+            Enum.map(schema_fields, fn
+              {new_name, {old_name, type}} ->
+                {new_name, {old_name, type}}
+
+              {new_name, {old_name, type, default}} ->
+                {new_name,
+                 quote(do: {unquote(old_name), unquote(type), fn -> unquote(default) end})}
+            end)
+
           [
             {:def, def_metadata,
              [
@@ -298,7 +315,7 @@ if Mix.env() in [:dev, :test] do
                [
                  do:
                    quote do
-                     unquote(schema_fields)
+                     unquote(schema_fields_new)
                    end
                ]
              ]}

@@ -21,7 +21,7 @@ defmodule OpenAPIClient.Schema do
           | {:enum, [enum_option | :not_strict]}
           | {module(), atom()}
   @type type :: non_array_type() | [non_array_type()]
-  @type schema_type :: {String.t(), type()}
+  @type field_type :: {String.t(), type()} | {String.t(), type(), term() | (-> term())}
 
-  @callback __fields__(atom()) :: keyword(schema_type())
+  @callback __fields__(atom()) :: keyword(field_type())
 end

@@ -270,7 +270,10 @@ defmodule OpenAPIClient.Client.TypedDecoder do
       fields =
         type
         |> module.__fields__()
-        |> Map.new(fn {new_name, {old_name, type}} -> {old_name, {new_name, type}} end)
+        |> Map.new(fn
+          {new_name, {old_name, type}} -> {old_name, {new_name, type}}
+          {new_name, {old_name, type, _default}} -> {old_name, {new_name, type}}
+        end)
 
       is_struct = function_exported?(module, :__struct__, 0)
 
