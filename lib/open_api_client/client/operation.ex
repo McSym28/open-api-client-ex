@@ -1,14 +1,24 @@
 defmodule OpenAPIClient.Client.Operation do
+  alias OpenAPIClient.Schema
+
   @type url :: String.t() | URI.t()
   @type method :: :get | :put | :post | :delete | :options | :head | :patch | :trace
-  @type query_params :: %{String.t() => String.t()}
-  @type headers :: %{String.t() => String.t()}
+  @type common_parameter_location :: :path | :header | :query | :cookie
+  @type custom_parameter_location :: :custom
+  @type parameter_location :: common_parameter_location() | custom_parameter_location()
+  @type parameter_key :: {String.t(), parameter_location()}
+  @type parameters :: %{parameter_key() => String.t()}
+  @type parameter_type ::
+          {String.t(), Schema.type()} | {String.t(), Schema.type(), term() | (-> term())}
+  @type parameter_type_key :: {atom(), parameter_location()}
   @type content_type :: String.t()
   @type request_schema :: {content_type(), OpenAPIClient.Schema.type()}
   @type response_status_code :: integer() | String.t() | :default
   @type response_schema :: {content_type(), OpenAPIClient.Schema.type()}
   @type response_type :: {response_status_code(), [response_schema()] | :null}
-  @type external_headers :: [{String.t(), String.t()}] | keyword(String.t()) | headers()
+  @type external_parameters ::
+          [{{String.t(), parameter_location()}, String.t()}]
+          | %{{String.t(), parameter_location()} => String.t()}
   @type result :: {:ok, term()} | {:error, term()}
 
   alias OpenAPIClient.Client.Error
@@ -19,12 +29,12 @@ defmodule OpenAPIClient.Client.Operation do
           request_base_url: url(),
           request_url: url(),
           request_method: method(),
-          request_query_params: query_params(),
-          request_headers: headers(),
+          request_parameters: parameters(),
+          request_parameter_types: [{parameter_type_key(), parameter_type()}],
           request_body: term() | nil,
           request_types: [request_schema()],
           response_body: term() | nil,
-          response_headers: headers(),
+          response_parameters: parameters(),
           response_status_code: integer() | nil,
           response_types: [response_type()],
           result: result() | nil
@@ -42,10 +52,10 @@ defmodule OpenAPIClient.Client.Operation do
     :result,
     halted: false,
     assigns: %{private: %{}},
-    request_query_params: %{},
-    request_headers: %{},
+    request_parameters: %{},
+    request_parameter_types: [],
     request_types: [],
-    response_headers: %{},
+    response_parameters: %{},
     response_types: []
   ]
 
@@ -55,46 +65,54 @@ defmodule OpenAPIClient.Client.Operation do
     |> Pluggable.Token.halt()
   end
 
-  @spec get_request_header(t(), String.t()) :: {:ok, String.t()} | :error
-  def get_request_header(%__MODULE__{request_headers: headers}, header_name) do
-    get_header(headers, header_name)
+  @spec get_request_parameter(t(), String.t(), common_parameter_location()) ::
+          {:ok, String.t()} | :error
+  def get_request_parameter(%__MODULE__{request_parameters: parameters}, name, location) do
+    get_parameter(parameters, name, location)
   end
 
-  @spec get_request_content_type_header_media_type(t()) ::
+  @spec get_request_content_type(t()) ::
           {:ok, String.t()} | {:error, :not_found | :invalid_format}
-  def get_request_content_type_header_media_type(%__MODULE__{request_headers: headers}) do
-    get_content_type_header_media_type(headers)
+  def get_request_content_type(%__MODULE__{request_parameters: parameters}) do
+    get_content_type(parameters)
   end
 
-  @spec put_request_header(t(), String.t(), String.t()) :: t()
-  def put_request_header(operation, header_name, header_value) do
-    put_request_headers(operation, [{header_name, header_value}])
+  @spec put_request_parameter(t(), String.t(), common_parameter_location(), String.t()) :: t()
+  def put_request_parameter(operation, name, location, value) do
+    put_request_parameters(operation, [{{name, location}, value}])
   end
 
-  @spec put_request_headers(t(), external_headers()) :: t()
-  def put_request_headers(%__MODULE__{request_headers: headers} = operation, new_headers) do
-    %__MODULE__{operation | request_headers: put_headers(headers, new_headers)}
+  @spec put_request_parameters(t(), external_parameters()) :: t()
+  def put_request_parameters(
+        %__MODULE__{request_parameters: parameters} = operation,
+        new_parameters
+      ) do
+    %__MODULE__{operation | request_parameters: put_parameters(parameters, new_parameters)}
   end
 
-  @spec get_response_header(t(), String.t()) :: {:ok, String.t()} | :error
-  def get_response_header(%__MODULE__{response_headers: headers}, header_name) do
-    get_header(headers, header_name)
+  @spec get_response_parameter(t(), String.t(), common_parameter_location()) ::
+          {:ok, String.t()} | :error
+  def get_response_parameter(%__MODULE__{response_parameters: parameters}, name, location) do
+    get_parameter(parameters, name, location)
   end
 
-  @spec get_response_content_type_header_media_type(t()) ::
+  @spec get_response_content_type(t()) ::
           {:ok, String.t()} | {:error, :not_found | :invalid_format}
-  def get_response_content_type_header_media_type(%__MODULE__{response_headers: headers}) do
-    get_content_type_header_media_type(headers)
+  def get_response_content_type(%__MODULE__{response_parameters: parameters}) do
+    get_content_type(parameters)
   end
 
-  @spec put_response_header(t(), String.t(), String.t()) :: t()
-  def put_response_header(operation, header_name, header_value) do
-    put_response_headers(operation, [{header_name, header_value}])
+  @spec put_response_parameter(t(), String.t(), common_parameter_location(), String.t()) :: t()
+  def put_response_parameter(operation, name, location, value) do
+    put_response_parameters(operation, [{{name, location}, value}])
   end
 
-  @spec put_response_headers(t(), external_headers()) :: t()
-  def put_response_headers(%__MODULE__{response_headers: headers} = operation, new_headers) do
-    %__MODULE__{operation | response_headers: put_headers(headers, new_headers)}
+  @spec put_response_parameters(t(), external_parameters()) :: t()
+  def put_response_parameters(
+        %__MODULE__{response_parameters: parameters} = operation,
+        new_parameters
+      ) do
+    %__MODULE__{operation | response_parameters: put_parameters(parameters, new_parameters)}
   end
 
   @spec get_private(t(), atom()) :: term()
@@ -147,7 +165,7 @@ defmodule OpenAPIClient.Client.Operation do
         {:ok, {status_code, nil, :null}}
 
       {status_code, schemas} ->
-        case get_response_content_type_header_media_type(operation) do
+        case get_response_content_type(operation) do
           {:ok, content_type} ->
             case List.keyfind(schemas, content_type, 0) do
               {_, type} ->
@@ -189,21 +207,40 @@ defmodule OpenAPIClient.Client.Operation do
     end
   end
 
-  defp get_header(headers, header_name) do
-    Map.fetch(headers, String.downcase(header_name))
+  defp get_parameter(parameters, name, :header = location) do
+    do_get_parameter(parameters, String.downcase(name), location)
   end
 
-  defp put_headers(headers, new_headers) do
-    new_headers_map =
-      Map.new(new_headers, fn {name, value} ->
-        {name |> to_string() |> String.downcase(), value}
-      end)
-
-    Map.merge(headers, new_headers_map)
+  defp get_parameter(parameters, name, location) do
+    do_get_parameter(parameters, name, location)
   end
 
-  defp get_content_type_header_media_type(headers) do
-    with {:get, {:ok, content_type}} <- {:get, get_header(headers, "Content-Type")},
+  defp do_get_parameter(parameters, name, location) do
+    Map.fetch(parameters, {name, location})
+  end
+
+  defp put_parameters(parameters, new_parameters) do
+    Enum.reduce(new_parameters, parameters, fn {{name, location}, value}, acc ->
+      put_parameter(acc, name, location, value)
+    end)
+  end
+
+  defp put_parameter(parameters, name, location, value) when not is_binary(name),
+    do: put_parameter(parameters, to_string(name), location, value)
+
+  defp put_parameter(parameters, name, :header = location, value),
+    do: do_put_parameter(parameters, String.downcase(name), location, value)
+
+  defp put_parameter(parameters, name, location, value),
+    do: do_put_parameter(parameters, name, location, value)
+
+  defp do_put_parameter(parameters, name, location, value) do
+    Map.put(parameters, {name, location}, value)
+  end
+
+  defp get_content_type(parameters) do
+    with {:get, {:ok, content_type}} <-
+           {:get, get_parameter(parameters, "Content-Type", :header)},
          {:parse, {:ok, {type, subtype, _parameters}}} <-
            {:parse, parse_content_type_header(content_type)} do
       media_type = "#{type}/#{subtype}"

@@ -31,9 +31,8 @@ if Code.ensure_loaded?(HTTPoison) do
     def call(
           %Operation{
             request_body: body,
-            request_headers: headers,
             request_method: method,
-            request_query_params: query_params,
+            request_parameters: parameters,
             request_base_url: base_url,
             request_url: url
           } = operation,
@@ -46,6 +45,20 @@ if Code.ensure_loaded?(HTTPoison) do
 
       url = base_url |> URI.merge(url) |> URI.to_string()
       body = body || ""
+
+      {headers, query_params} =
+        Enum.reduce(parameters, {%{}, %{}}, fn
+          {{name, :header}, value}, {headers, query_params} ->
+            headers_new = Map.put(headers, name, value)
+            {headers_new, query_params}
+
+          {{name, :query}, value}, {headers, query_params} ->
+            query_params_new = Map.put(query_params, name, value)
+            {headers, query_params_new}
+
+          _, {headers, query_params} ->
+            {headers, query_params}
+        end)
 
       headers =
         opts
@@ -69,8 +82,10 @@ if Code.ensure_loaded?(HTTPoison) do
       case httpoison.request(method, url, body, headers, options) do
         {:ok,
          %HTTPoison.Response{body: body, headers: headers, status_code: status_code} = _response} ->
+          headers_new = Enum.map(headers, fn {key, value} -> {{key, :header}, value} end)
+
           %Operation{operation | response_body: body, response_status_code: status_code}
-          |> Operation.put_response_headers(headers)
+          |> Operation.put_response_parameters(headers_new)
 
         {:error, %HTTPoison.Error{} = error} ->
           Operation.set_result(

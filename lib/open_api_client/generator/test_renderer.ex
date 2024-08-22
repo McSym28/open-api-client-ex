@@ -379,7 +379,9 @@ if Mix.env() in [:dev, :test] do
             ],
             call_arguments: [],
             call_opts: [base_url: @test_example_url],
-            new_params_assertions: [],
+            custom_params_assertions: [],
+            custom_params_assertions_args: false,
+            custom_params_assertions_opts: false,
             httpoison_request_assertions: [],
             httpoison_response_assignmets: [],
             httpoison_response_fields: [{:status_code, status_code}],
@@ -392,7 +394,7 @@ if Mix.env() in [:dev, :test] do
                old_name: old_name,
                static: static,
                schema_type: schema_type,
-               new: is_new
+               custom: is_custom
              } = param},
             acc ->
               path_new = [{:parameter, location, old_name} | path]
@@ -420,20 +422,30 @@ if Mix.env() in [:dev, :test] do
                   )
                 end
 
-              if is_new do
-                Map.update!(
-                  acc_new,
-                  :new_params_assertions,
+              if is_custom do
+                acc_new
+                |> Map.update!(
+                  :custom_params_assertions,
                   &[
                     quote(
                       do:
                         assert(
-                          {_, unquote(param_example_decoded)} =
-                            List.keyfind(params, unquote(String.to_atom(name)), 0)
+                          {:ok, unquote(param_example_decoded)} ==
+                            Keyword.fetch(
+                              unquote(Macro.var(if(static, do: :args, else: :opts), nil)),
+                              unquote(String.to_atom(name))
+                            )
                         )
                     )
                     | &1
                   ]
+                )
+                |> Map.replace!(
+                  if(static,
+                    do: :custom_params_assertions_args,
+                    else: :custom_params_assertions_opts
+                  ),
+                  true
                 )
               else
                 case location do
@@ -458,7 +470,7 @@ if Mix.env() in [:dev, :test] do
                         quote(
                           do:
                             assert(
-                              {_, unquote(param_example)} =
+                              {_, unquote(to_string(param_example))} =
                                 List.keyfind(options[:params], unquote(old_name), 0)
                             )
                         )
@@ -478,7 +490,7 @@ if Mix.env() in [:dev, :test] do
                         quote(
                           do:
                             assert(
-                              {_, unquote(param_example)} =
+                              {_, unquote(to_string(param_example))} =
                                 List.keyfind(headers, unquote(String.downcase(old_name)), 0)
                             )
                         )
@@ -595,8 +607,8 @@ if Mix.env() in [:dev, :test] do
         end
         |> then(&"[#{status_code}] #{&1}")
 
-      new_params_assertions_callback =
-        test_parameters[:new_params_assertions]
+      custom_params_assertions_callback =
+        test_parameters[:custom_params_assertions]
         |> Enum.reverse()
         |> case do
           [] ->
@@ -612,7 +624,27 @@ if Mix.env() in [:dev, :test] do
                     Macro.var(:pipeline, nil)
                   ],
                   quote do
-                    params = OpenAPIClient.Client.Operation.get_private(operation, :__params__)
+                    unquote_splicing(
+                      Util.clean_list([
+                        if(test_parameters[:custom_params_assertions_args],
+                          do:
+                            quote(
+                              do:
+                                args =
+                                  OpenAPIClient.Client.Operation.get_private(operation, :__args__)
+                            )
+                        ),
+                        if(test_parameters[:custom_params_assertions_opts],
+                          do:
+                            quote(
+                              do:
+                                opts =
+                                  OpenAPIClient.Client.Operation.get_private(operation, :__opts__)
+                            )
+                        )
+                      ])
+                    )
+
                     unquote_splicing(params)
                     OpenAPIClient.Client.perform(operation, pipeline)
                   end
@@ -625,7 +657,7 @@ if Mix.env() in [:dev, :test] do
           expect(
             @client,
             :perform,
-            unquote(new_params_assertions_callback)
+            unquote(custom_params_assertions_callback)
           )
 
           expect(

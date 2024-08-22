@@ -10,11 +10,12 @@ defmodule OpenAPIClient.OperationsTest do
   describe "get_test/3" do
     test "[200] performs a request and encodes TestSchema from response's body" do
       expect(@client, :perform, fn operation, pipeline ->
-        params = OpenAPIClient.Client.Operation.get_private(operation, :__params__)
-        assert {_, "string"} = List.keyfind(params, :optional_header_new_param, 0)
-        assert {_, "string"} = List.keyfind(params, :optional_new_param, 0)
-        assert {_, "new_param_value"} = List.keyfind(params, :optional_new_param_with_default, 0)
-        assert {_, "string"} = List.keyfind(params, :required_new_param, 0)
+        args = OpenAPIClient.Client.Operation.get_private(operation, :__args__)
+        opts = OpenAPIClient.Client.Operation.get_private(operation, :__opts__)
+        assert {:ok, "string"} == Keyword.fetch(opts, :optional_header_new_param)
+        assert {:ok, "string"} == Keyword.fetch(opts, :optional_new_param)
+        assert {:ok, "new_param_value"} == Keyword.fetch(opts, :optional_new_param_with_default)
+        assert {:ok, "string"} == Keyword.fetch(args, :required_new_param)
         OpenAPIClient.Client.perform(operation, pipeline)
       end)
 
@@ -24,9 +25,9 @@ defmodule OpenAPIClient.OperationsTest do
         assert {_, "optional-query"} = List.keyfind(options[:params], "optional_query", 0)
         assert {_, "ENUM_1"} = List.keyfind(options[:params], "X-Enum-Query", 0)
         assert {_, "ENUM_9"} = List.keyfind(options[:params], "X-Enum-Query-With-Default", 0)
-        assert {_, 1} = List.keyfind(options[:params], "X-Integer-Non-Standard-Format-Query", 0)
-        assert {_, 1} = List.keyfind(options[:params], "X-Integer-Standard-Format-Query", 0)
-        assert {_, true} = List.keyfind(options[:params], "X-Static-Flag", 0)
+        assert {_, "1"} = List.keyfind(options[:params], "X-Integer-Non-Standard-Format-Query", 0)
+        assert {_, "1"} = List.keyfind(options[:params], "X-Integer-Standard-Format-Query", 0)
+        assert {_, "true"} = List.keyfind(options[:params], "X-Static-Flag", 0)
         assert {_, "2024-01-23"} = List.keyfind(headers, "x-date-header-with-default", 0)
         assert {_, "optional_header"} = List.keyfind(headers, "x-optional-header", 0)
         assert {_, "required_header"} = List.keyfind(headers, "x-required-header", 0)

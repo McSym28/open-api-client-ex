@@ -67,12 +67,12 @@ if Mix.env() in [:dev, :test] do
             spec: state.spec
           }
 
-        {new_parameters, new_parameters_mapset} =
+        {new_parameters, custom_parameters_mapset} =
           Enum.flat_map_reduce(
             param_configs,
             MapSet.new(),
             fn
-              {{name, :new}, config}, mapset ->
+              {{name, :custom}, config}, mapset ->
                 config
                 |> Keyword.get(:spec)
                 |> case do
@@ -107,8 +107,8 @@ if Mix.env() in [:dev, :test] do
                param} =
               Param.from_spec(state, param_spec)
 
-            is_new = MapSet.member?(new_parameters_mapset, {name, Atom.to_string(location)})
-            location_find = if is_new, do: :new, else: location
+            is_custom = MapSet.member?(custom_parameters_mapset, {name, Atom.to_string(location)})
+            location_find = if is_custom, do: :custom, else: location
             config = Utils.operation_param_config(param_configs, name, location_find)
 
             {name_new, type_new, %SchemaType{default: default} = schema_type} =
@@ -163,11 +163,11 @@ if Mix.env() in [:dev, :test] do
             generator_param_new =
               %GeneratorParam{
                 param: param_new,
-                old_name: if(is_new, do: name_new, else: name),
+                old_name: if(is_custom, do: name_new, else: name),
                 config: config,
                 static: is_nil(default) and (required or location == :path),
                 schema_type: schema_type,
-                new: is_new
+                custom: is_custom
               }
               |> append_param_example(param_spec, state)
 

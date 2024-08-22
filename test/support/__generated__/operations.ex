@@ -52,160 +52,50 @@ defmodule OpenAPIClient.Operations do
           | {:client_pipeline, OpenAPIClient.Client.pipeline()}
         ]) :: {:ok, OpenAPIClient.TestSchema.t()} | {:error, OpenAPIClient.Client.Error.t()}
   def get_test(required_header, required_new_param, opts \\ []) do
-    initial_args = [required_header: required_header, required_new_param: required_new_param]
-
     client_pipeline = Keyword.get(opts, :client_pipeline)
     base_url = opts[:base_url] || @base_url
-
-    typed_encoder =
-      OpenAPIClient.Utils.get_config(:test, :typed_encoder, OpenAPIClient.Client.TypedEncoder)
-
-    date_query_with_default =
-      case Keyword.fetch(opts, :date_query_with_default) do
-        {:ok, value} ->
-          {:ok, value_encoded} =
-            typed_encoder.encode(
-              value,
-              {:string, :date},
-              [{:parameter, :query, "date_query_with_default"}, {"/test", :get}],
-              typed_encoder
-            )
-
-          value_encoded
-
-        :error ->
-          "2022-12-15"
-      end
-
-    x_enum_query_with_default =
-      case Keyword.fetch(opts, :x_enum_query_with_default) do
-        {:ok, value} ->
-          {:ok, value_encoded} =
-            typed_encoder.encode(
-              value,
-              {:enum,
-               [{:enum_7, "ENUM_7"}, {:enum_8, "ENUM_8"}, {:enum_9, "ENUM_9"}, :not_strict]},
-              [{:parameter, :query, "X-Enum-Query-With-Default"}, {"/test", :get}],
-              typed_encoder
-            )
-
-          value_encoded
-
-        :error ->
-          "ENUM_9"
-      end
-
-    x_static_flag = Keyword.get_lazy(opts, :x_static_flag, fn -> true end)
-
-    date_header_with_default =
-      case Keyword.fetch(opts, :date_header_with_default) do
-        {:ok, value} ->
-          {:ok, value_encoded} =
-            typed_encoder.encode(
-              value,
-              {:string, :date},
-              [{:parameter, :header, "X-Date-Header-With-Default"}, {"/test", :get}],
-              typed_encoder
-            )
-
-          value_encoded
-
-        :error ->
-          "2024-01-23"
-      end
-
-    optional_header =
-      Keyword.get_lazy(opts, :optional_header, fn ->
-        Application.get_env(:open_api_client_ex, :required_header)
-      end)
-
-    optional_new_param_with_default =
-      Keyword.get_lazy(opts, :optional_new_param_with_default, fn -> "new_param_value" end)
-
-    query_params =
-      opts
-      |> Keyword.take([
-        :datetime_query,
-        :optional_query,
-        :x_enum_query,
-        :x_integer_non_standard_format_query,
-        :x_integer_standard_format_query
-      ])
-      |> Enum.map(fn
-        {:x_integer_standard_format_query, value} ->
-          {"X-Integer-Standard-Format-Query", value}
-
-        {:x_integer_non_standard_format_query, value} ->
-          {:ok, value_new} =
-            typed_encoder.encode(
-              value,
-              {:integer, "int69"},
-              [{:parameter, :query, "X-Integer-Non-Standard-Format-Query"}, [{"/test", :get}]],
-              typed_encoder
-            )
-
-          {"X-Integer-Non-Standard-Format-Query", value_new}
-
-        {:x_enum_query, value} ->
-          {:ok, value_new} =
-            typed_encoder.encode(
-              value,
-              {:enum,
-               [{:enum_1, "ENUM_1"}, {:enum_2, "ENUM_2"}, {:enum_3, "ENUM_3"}, :not_strict]},
-              [{:parameter, :query, "X-Enum-Query"}, [{"/test", :get}]],
-              typed_encoder
-            )
-
-          {"X-Enum-Query", value_new}
-
-        {:optional_query, value} ->
-          {"optional_query", value}
-
-        {:datetime_query, value} ->
-          {:ok, value_new} =
-            typed_encoder.encode(
-              value,
-              {:string, :date_time},
-              [{:parameter, :query, "datetime_query"}, [{"/test", :get}]],
-              typed_encoder
-            )
-
-          {"datetime_query", value_new}
-      end)
-      |> Map.new()
-      |> Map.merge(%{
-        "date_query_with_default" => date_query_with_default,
-        "X-Enum-Query-With-Default" => x_enum_query_with_default,
-        "X-Static-Flag" => x_static_flag
-      })
-
-    headers = %{
-      "X-Date-Header-With-Default" => date_header_with_default,
-      "X-Optional-Header" => optional_header,
-      "X-Required-Header" => required_header
-    }
-
     client = OpenAPIClient.Utils.get_config(:test, :client, OpenAPIClient.Client)
 
     %OpenAPIClient.Client.Operation{
       request_base_url: base_url,
       request_url: "/test",
       request_method: :get,
-      request_headers: headers,
-      request_query_params: query_params,
+      request_parameter_types: [
+        {{:date_query_with_default, :query},
+         {"date_query_with_default", {:string, :date}, ~D[2022-12-15]}},
+        {{:datetime_query, :query}, {"datetime_query", {:string, :date_time}}},
+        {{:optional_query, :query}, {"optional_query", {:string, :generic}}},
+        {{:x_enum_query, :query},
+         {"X-Enum-Query",
+          {:enum, [{:enum_1, "ENUM_1"}, {:enum_2, "ENUM_2"}, {:enum_3, "ENUM_3"}, :not_strict]}}},
+        {{:x_enum_query_with_default, :query},
+         {"X-Enum-Query-With-Default",
+          {:enum, [{:enum_7, "ENUM_7"}, {:enum_8, "ENUM_8"}, {:enum_9, "ENUM_9"}, :not_strict]},
+          :enum_9}},
+        {{:x_integer_non_standard_format_query, :query},
+         {"X-Integer-Non-Standard-Format-Query", {:integer, "int69"}}},
+        {{:x_integer_standard_format_query, :query},
+         {"X-Integer-Standard-Format-Query", {:integer, :int32}}},
+        {{:x_static_flag, :query}, {"X-Static-Flag", {:enum, [true, :not_strict]}, true}},
+        {{:date_header_with_default, :header},
+         {"X-Date-Header-With-Default", {:string, :date}, ~D[2024-01-23]}},
+        {{:optional_header, :header},
+         {"X-Optional-Header", {:string, :generic},
+          fn -> Application.get_env(:open_api_client_ex, :required_header) end}},
+        {{:optional_header_new_param, :custom},
+         {"optional_header_new_param", {:string, :generic}}},
+        {{:required_header, :header}, {"X-Required-Header", {:string, :generic}}},
+        {{:optional_new_param, :custom}, {"optional_new_param", {:string, :generic}}},
+        {{:optional_new_param_with_default, :custom},
+         {"optional_new_param_with_default", {:string, :generic}, "new_param_value"}},
+        {{:required_new_param, :custom}, {"required_new_param", {:string, :generic}}}
+      ],
       response_types: [{200, [{"application/json", {OpenAPIClient.TestSchema, :t}}]}]
     }
     |> OpenAPIClient.Client.Operation.put_private(
-      __args__: initial_args,
+      __args__: [required_header: required_header, required_new_param: required_new_param],
       __call__: {__MODULE__, :get_test},
       __opts__: opts,
-      __params__:
-        opts
-        |> Keyword.take([:optional_header_new_param, :optional_new_param])
-        |> Keyword.merge(
-          optional_new_param_with_default: optional_new_param_with_default,
-          required_new_param: required_new_param
-        ),
       __profile__: :test
     )
     |> client.perform(client_pipeline)
@@ -236,37 +126,8 @@ defmodule OpenAPIClient.Operations do
           | {:client_pipeline, OpenAPIClient.Client.pipeline()}
         ]) :: :ok | :error | {:error, OpenAPIClient.Client.Error.t()}
   def set_test(body, opts \\ []) do
-    initial_args = [body: body]
-
     client_pipeline = Keyword.get(opts, :client_pipeline)
     base_url = opts[:base_url] || @base_url
-
-    typed_encoder =
-      OpenAPIClient.Utils.get_config(:test, :typed_encoder, OpenAPIClient.Client.TypedEncoder)
-
-    headers =
-      opts
-      |> Keyword.take([:string_header, :x_config_strict_enum_header])
-      |> Enum.map(fn
-        {:x_config_strict_enum_header, value} ->
-          {:ok, value_new} =
-            typed_encoder.encode(
-              value,
-              {:enum,
-               config_strict_enum_1: "CONFIG_STRICT_ENUM_1",
-               config_strict_enum_2: "CONFIG_STRICT_ENUM_2",
-               config_strict_enum_3: "CONFIG_STRICT_ENUM_3"},
-              [{:parameter, :header, "X-Config-Strict-Enum-Header"}, [{"/test", :post}]],
-              typed_encoder
-            )
-
-          {"X-Config-Strict-Enum-Header", value_new}
-
-        {:string_header, value} ->
-          {"X-String-Header", value}
-      end)
-      |> Map.new()
-
     client = OpenAPIClient.Utils.get_config(:test, :client, OpenAPIClient.Client)
 
     %OpenAPIClient.Client.Operation{
@@ -274,12 +135,20 @@ defmodule OpenAPIClient.Operations do
       request_url: "/test",
       request_body: body,
       request_method: :post,
-      request_headers: headers,
+      request_parameter_types: [
+        {{:string_header, :header}, {"X-String-Header", {:string, :generic}}},
+        {{:x_config_strict_enum_header, :header},
+         {"X-Config-Strict-Enum-Header",
+          {:enum,
+           config_strict_enum_1: "CONFIG_STRICT_ENUM_1",
+           config_strict_enum_2: "CONFIG_STRICT_ENUM_2",
+           config_strict_enum_3: "CONFIG_STRICT_ENUM_3"}}}
+      ],
       request_types: [{"application/json", {OpenAPIClient.TestRequestSchema, :t}}],
       response_types: [{"2XX", :null}, {:default, :null}, {400, :null}]
     }
     |> OpenAPIClient.Client.Operation.put_private(
-      __args__: initial_args,
+      __args__: [body: body],
       __call__: {__MODULE__, :set_test},
       __opts__: opts,
       __profile__: :test

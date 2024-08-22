@@ -8,10 +8,15 @@ if Mix.env() in [:dev, :test] do
             config: OpenAPIClient.Generator.Utils.operation_param_config(),
             static: boolean(),
             schema_type: SchemaType.t() | nil,
-            new: boolean()
+            custom: boolean()
           }
 
     @enforce_keys [:param, :old_name]
-    defstruct param: nil, old_name: nil, config: [], static: false, schema_type: nil, new: false
+    defstruct param: nil,
+              old_name: nil,
+              config: [],
+              static: false,
+              schema_type: nil,
+              custom: false
   end
 end

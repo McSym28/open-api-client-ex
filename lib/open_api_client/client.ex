@@ -11,14 +11,11 @@ defmodule OpenAPIClient.Client do
   @behaviour __MODULE__
 
   @impl __MODULE__
-  def perform(%Operation{request_headers: request_headers} = operation, pipeline) do
+  def perform(operation, pipeline) do
     normalized_pipeline =
       normalize_pipeline(pipeline || OpenAPIClient.Utils.get_config(operation, :client_pipeline))
 
-    request_headers_new =
-      Map.new(request_headers, fn {key, value} -> {String.downcase(key), value} end)
-
-    %{operation | request_headers: request_headers_new}
+    operation
     |> put_request_content_type_header()
     |> Pluggable.run(normalized_pipeline)
     |> case do
@@ -94,7 +91,7 @@ defmodule OpenAPIClient.Client do
   defp put_request_content_type_header(%Operation{request_body: nil} = operation), do: operation
 
   defp put_request_content_type_header(operation) do
-    case Operation.get_request_header(operation, "Content-Type") do
+    case Operation.get_request_parameter(operation, "Content-Type", :header) do
       {:ok, _content_type} -> operation
       :error -> put_most_suitable_request_content_type_header(operation)
     end
@@ -143,7 +140,7 @@ defmodule OpenAPIClient.Client do
         operation
 
       {_tag, content_type} ->
-        Operation.put_request_header(operation, "Content-Type", content_type)
+        Operation.put_request_parameter(operation, "Content-Type", :header, content_type)
     end
   end
 end
