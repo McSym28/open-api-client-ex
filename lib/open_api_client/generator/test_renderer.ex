@@ -454,7 +454,7 @@ if Mix.env() in [:dev, :test] do
                     |> Map.update!(
                       :httpoison_request_arguments,
                       &List.update_at(&1, 1, fn url ->
-                        String.replace(url, "{#{name}}", to_string(param_example))
+                        String.replace(url, "{#{old_name}}", to_string(param_example))
                       end)
                     )
 

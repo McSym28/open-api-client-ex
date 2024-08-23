@@ -333,31 +333,7 @@ if Mix.env() in [:dev, :test] do
     def render_operations(state, %File{operations: []} = file),
       do: OpenAPI.Renderer.render_operations(state, file)
 
-    def render_operations(state, %File{operations: operations} = file) do
-      operations_new =
-        Enum.map(operations, fn %Operation{
-                                  request_path: request_path,
-                                  request_method: request_method
-                                } = operation ->
-          [{_, %GeneratorOperation{param_renamings: param_renamings}}] =
-            :ets.lookup(:operations, {request_path, request_method})
-
-          request_path_new =
-            String.replace(request_path, ~r/\{([[:word:]]+)\}/, fn word ->
-              word
-              |> String.split(["{", "}"])
-              |> Enum.at(1)
-              |> then(fn name ->
-                name_new = Map.get(param_renamings, {name, :path}, name)
-                "{#{name_new}}"
-              end)
-            end)
-
-          %Operation{operation | request_path: request_path_new}
-        end)
-
-      file_new = %File{file | operations: operations_new}
-
+    def render_operations(state, file) do
       test_renderer =
         Utils.get_config(state, :test_renderer, OpenAPIClient.Generator.TestRenderer)
 
@@ -366,9 +342,9 @@ if Mix.env() in [:dev, :test] do
         renderer_state: state
       }
 
-      test_renderer.render(test_renderer_state, file_new)
+      test_renderer.render(test_renderer_state, file)
 
-      OpenAPI.Renderer.render_operations(state, file_new)
+      OpenAPI.Renderer.render_operations(state, file)
     end
 
     @impl true
@@ -508,7 +484,7 @@ if Mix.env() in [:dev, :test] do
             responses: responses
           } = operation
         ) do
-      [{_, %GeneratorOperation{params: all_params}}] =
+      [{_, %GeneratorOperation{params: all_params, param_renamings: param_renamings}}] =
         :ets.lookup(:operations, {request_path, request_method})
 
       static_params =
@@ -556,7 +532,18 @@ if Mix.env() in [:dev, :test] do
               {operation_assigns, private_assigns} =
                 Enum.flat_map_reduce(map_arguments, %{__profile__: operation_profile}, fn
                   {:url, value}, acc ->
-                    {[{:request_url, value}], acc}
+                    value_new =
+                      String.replace(value, ~r/\{([^\}]+?)\}/, fn word ->
+                        word
+                        |> String.split(["{", "}"])
+                        |> Enum.at(1)
+                        |> then(fn old_name ->
+                          name = Map.get(param_renamings, {old_name, :path}, old_name)
+                          "{#{name}}"
+                        end)
+                      end)
+
+                    {[{:request_url, value_new}], acc}
 
                   {:method, value}, acc ->
                     parameters =

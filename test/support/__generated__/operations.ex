@@ -12,6 +12,7 @@ defmodule OpenAPIClient.Operations do
 
   ## Arguments
 
+    * `path_param`: ["path-param"] Path parameter
     * `required_header`: ["X-Required-Header"] Required header parameter
     * `required_new_param`: Required additional parameter
 
@@ -34,7 +35,7 @@ defmodule OpenAPIClient.Operations do
     * `client_pipeline`: Client pipeline for making a request. Default value obtained through a call to `OpenAPIClient.Utils.get_config(__operation__, :client_pipeline)}
 
   """
-  @spec get_test(String.t(), String.t(), [
+  @spec get_test(String.t(), String.t(), String.t(), [
           {:date_query_with_default, Date.t()}
           | {:datetime_query, DateTime.t()}
           | {:optional_query, String.t()}
@@ -51,16 +52,17 @@ defmodule OpenAPIClient.Operations do
           | {:base_url, String.t() | URI.t()}
           | {:client_pipeline, OpenAPIClient.Client.pipeline()}
         ]) :: {:ok, OpenAPIClient.TestSchema.t()} | {:error, OpenAPIClient.Client.Error.t()}
-  def get_test(required_header, required_new_param, opts \\ []) do
+  def get_test(path_param, required_header, required_new_param, opts \\ []) do
     client_pipeline = Keyword.get(opts, :client_pipeline)
     base_url = opts[:base_url] || @base_url
     client = OpenAPIClient.Utils.get_config(:test, :client, OpenAPIClient.Client)
 
     %OpenAPIClient.Client.Operation{
       request_base_url: base_url,
-      request_url: "/test",
+      request_url: "/test/{path_param}",
       request_method: :get,
       request_parameter_types: [
+        {{:path_param, :path}, {"path-param", {:string, :generic}}},
         {{:date_query_with_default, :query},
          {"date_query_with_default", {:string, :date}, ~D[2022-12-15]}},
         {{:datetime_query, :query}, {"datetime_query", {:string, :date_time}}},
@@ -93,7 +95,11 @@ defmodule OpenAPIClient.Operations do
       response_types: [{200, [{"application/json", {OpenAPIClient.TestSchema, :t}}]}]
     }
     |> OpenAPIClient.Client.Operation.put_private(
-      __args__: [required_header: required_header, required_new_param: required_new_param],
+      __args__: [
+        path_param: path_param,
+        required_header: required_header,
+        required_new_param: required_new_param
+      ],
       __call__: {__MODULE__, :get_test},
       __opts__: opts,
       __profile__: :test

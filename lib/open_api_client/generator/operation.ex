@@ -4,7 +4,9 @@ if Mix.env() in [:dev, :test] do
             config: OpenAPIClient.Generator.Utils.operation_config(),
             spec: OpenAPI.Spec.Path.Operation.t(),
             params: [OpenAPIClient.Generator.Param.t()],
-            param_renamings: %{String.t() => String.t()}
+            param_renamings: %{
+              {String.t(), OpenAPI.Processor.Operation.Param.location()} => String.t()
+            }
           }
 
     @enforce_keys [:config, :spec, :params, :param_renamings]

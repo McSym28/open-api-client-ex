@@ -7,77 +7,6 @@ defmodule OpenAPIClient.OperationsTest do
 
   setup :verify_on_exit!
 
-  describe "get_test/3" do
-    test "[200] performs a request and encodes TestSchema from response's body" do
-      expect(@client, :perform, fn operation, pipeline ->
-        args = OpenAPIClient.Client.Operation.get_private(operation, :__args__)
-        opts = OpenAPIClient.Client.Operation.get_private(operation, :__opts__)
-        assert {:ok, "string"} == Keyword.fetch(opts, :optional_header_new_param)
-        assert {:ok, "string"} == Keyword.fetch(opts, :optional_new_param)
-        assert {:ok, "new_param_value"} == Keyword.fetch(opts, :optional_new_param_with_default)
-        assert {:ok, "string"} == Keyword.fetch(args, :required_new_param)
-        OpenAPIClient.Client.perform(operation, pipeline)
-      end)
-
-      expect(@httpoison, :request, fn :get, "https://example.com/test", _, headers, options ->
-        assert {_, "2022-12-15"} = List.keyfind(options[:params], "date_query_with_default", 0)
-        assert {_, "2024-01-02T01:23:45Z"} = List.keyfind(options[:params], "datetime_query", 0)
-        assert {_, "optional-query"} = List.keyfind(options[:params], "optional_query", 0)
-        assert {_, "ENUM_1"} = List.keyfind(options[:params], "X-Enum-Query", 0)
-        assert {_, "ENUM_9"} = List.keyfind(options[:params], "X-Enum-Query-With-Default", 0)
-        assert {_, "1"} = List.keyfind(options[:params], "X-Integer-Non-Standard-Format-Query", 0)
-        assert {_, "1"} = List.keyfind(options[:params], "X-Integer-Standard-Format-Query", 0)
-        assert {_, "true"} = List.keyfind(options[:params], "X-Static-Flag", 0)
-        assert {_, "2024-01-23"} = List.keyfind(headers, "x-date-header-with-default", 0)
-        assert {_, "optional_header"} = List.keyfind(headers, "x-optional-header", 0)
-        assert {_, "required_header"} = List.keyfind(headers, "x-required-header", 0)
-
-        assert {:ok, body_encoded} =
-                 Jason.encode(%{
-                   "Boolean" => true,
-                   "DateTime" => "2024-01-23T01:23:45Z",
-                   "Enum" => "ENUM_2",
-                   "Integer" => 5,
-                   "Number" => 7.0,
-                   "String" => "another_string"
-                 })
-
-        {:ok,
-         %HTTPoison.Response{
-           status_code: 200,
-           headers: [{"Content-Type", "application/json"}],
-           body: body_encoded
-         }}
-      end)
-
-      assert {:ok,
-              %OpenAPIClient.TestSchema{
-                boolean: true,
-                date_time: ~U[2024-01-23 01:23:45Z],
-                enum: :enum2,
-                integer: 5,
-                number: 7.0,
-                string: "another_string"
-              }} ==
-               OpenAPIClient.Operations.get_test("required_header", "string",
-                 optional_new_param_with_default: "new_param_value",
-                 optional_new_param: "string",
-                 optional_header_new_param: "string",
-                 optional_header: "optional_header",
-                 date_header_with_default: ~D[2024-01-23],
-                 x_static_flag: true,
-                 x_integer_standard_format_query: 1,
-                 x_integer_non_standard_format_query: 1,
-                 x_enum_query_with_default: :enum_9,
-                 x_enum_query: :enum_1,
-                 optional_query: "optional-query",
-                 datetime_query: ~U[2024-01-02 01:23:45Z],
-                 date_query_with_default: ~D[2022-12-15],
-                 base_url: "https://example.com"
-               )
-    end
-  end
-
   describe "set_test/2" do
     test "[298] performs a request and encodes TestRequestSchema from request's body" do
       expect(@client, :perform, &OpenAPIClient.Client.perform/2)
@@ -210,6 +139,81 @@ defmodule OpenAPIClient.OperationsTest do
                  },
                  x_config_strict_enum_header: :config_strict_enum_1,
                  string_header: "string_header",
+                 base_url: "https://example.com"
+               )
+    end
+  end
+
+  describe "get_test/4" do
+    test "[200] performs a request and encodes TestSchema from response's body" do
+      expect(@client, :perform, fn operation, pipeline ->
+        args = OpenAPIClient.Client.Operation.get_private(operation, :__args__)
+        opts = OpenAPIClient.Client.Operation.get_private(operation, :__opts__)
+        assert {:ok, "string"} == Keyword.fetch(opts, :optional_header_new_param)
+        assert {:ok, "string"} == Keyword.fetch(opts, :optional_new_param)
+        assert {:ok, "new_param_value"} == Keyword.fetch(opts, :optional_new_param_with_default)
+        assert {:ok, "string"} == Keyword.fetch(args, :required_new_param)
+        OpenAPIClient.Client.perform(operation, pipeline)
+      end)
+
+      expect(@httpoison, :request, fn :get,
+                                      "https://example.com/test/some_id",
+                                      _,
+                                      headers,
+                                      options ->
+        assert {_, "2022-12-15"} = List.keyfind(options[:params], "date_query_with_default", 0)
+        assert {_, "2024-01-02T01:23:45Z"} = List.keyfind(options[:params], "datetime_query", 0)
+        assert {_, "optional-query"} = List.keyfind(options[:params], "optional_query", 0)
+        assert {_, "ENUM_1"} = List.keyfind(options[:params], "X-Enum-Query", 0)
+        assert {_, "ENUM_9"} = List.keyfind(options[:params], "X-Enum-Query-With-Default", 0)
+        assert {_, "1"} = List.keyfind(options[:params], "X-Integer-Non-Standard-Format-Query", 0)
+        assert {_, "1"} = List.keyfind(options[:params], "X-Integer-Standard-Format-Query", 0)
+        assert {_, "true"} = List.keyfind(options[:params], "X-Static-Flag", 0)
+        assert {_, "2024-01-23"} = List.keyfind(headers, "x-date-header-with-default", 0)
+        assert {_, "optional_header"} = List.keyfind(headers, "x-optional-header", 0)
+        assert {_, "required_header"} = List.keyfind(headers, "x-required-header", 0)
+
+        assert {:ok, body_encoded} =
+                 Jason.encode(%{
+                   "Boolean" => true,
+                   "DateTime" => "2024-01-23T01:23:45Z",
+                   "Enum" => "ENUM_2",
+                   "Integer" => 5,
+                   "Number" => 7.0,
+                   "String" => "another_string"
+                 })
+
+        {:ok,
+         %HTTPoison.Response{
+           status_code: 200,
+           headers: [{"Content-Type", "application/json"}],
+           body: body_encoded
+         }}
+      end)
+
+      assert {:ok,
+              %OpenAPIClient.TestSchema{
+                boolean: true,
+                date_time: ~U[2024-01-23 01:23:45Z],
+                enum: :enum2,
+                integer: 5,
+                number: 7.0,
+                string: "another_string"
+              }} ==
+               OpenAPIClient.Operations.get_test("some_id", "required_header", "string",
+                 optional_new_param_with_default: "new_param_value",
+                 optional_new_param: "string",
+                 optional_header_new_param: "string",
+                 optional_header: "optional_header",
+                 date_header_with_default: ~D[2024-01-23],
+                 x_static_flag: true,
+                 x_integer_standard_format_query: 1,
+                 x_integer_non_standard_format_query: 1,
+                 x_enum_query_with_default: :enum_9,
+                 x_enum_query: :enum_1,
+                 optional_query: "optional-query",
+                 datetime_query: ~U[2024-01-02 01:23:45Z],
+                 date_query_with_default: ~D[2022-12-15],
                  base_url: "https://example.com"
                )
     end

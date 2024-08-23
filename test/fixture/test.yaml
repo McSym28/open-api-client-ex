@@ -44,11 +44,18 @@ paths:
           description: "Default result"
         "400":
           description: "Error"
+  "/test/{path-param}":
     get:
       description: "Test endpoint"
       operationId: getTest
       summary: "Test endpoint"
       parameters: 
+        - in: path
+          name: path-param
+          description: Path parameter
+          schema:
+            type: string
+          example: some_id
         - in: header
           name: X-Required-Header
           description: Required header parameter

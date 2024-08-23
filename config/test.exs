@@ -31,7 +31,7 @@ config :open_api_client_ex,
       {:*, [params: []]},
       {{[:*], [:delete]}, []},
       {{["/non_existing", ~r/non-matching-regex/], [:*]}, []},
-      {{"/test", :get},
+      {{"/test/{path-param}", :get},
        [
          params: [
            {{"X-Required-Header", :header}, [name: "required_header"]},
