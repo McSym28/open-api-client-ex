@@ -59,7 +59,7 @@ if Mix.env() in [:dev, :test] do
     alias OpenAPIClient.Generator.SchemaType
     require Logger
 
-    @impl true
+    @impl OpenAPI.Renderer
     def render(
           %OpenAPI.Renderer.State{schemas: schemas} = state,
           %File{operations: operations} = file
@@ -137,7 +137,7 @@ if Mix.env() in [:dev, :test] do
       OpenAPI.Renderer.render(state, file)
     end
 
-    @impl true
+    @impl OpenAPI.Renderer
     def render_default_client(state, file) do
       case OpenAPI.Renderer.render_default_client(state, file) do
         {:@, _, [{:default_client, _, _}] = _default_client_expression} ->
@@ -154,7 +154,7 @@ if Mix.env() in [:dev, :test] do
       end
     end
 
-    @impl true
+    @impl OpenAPI.Renderer
     def render_schema(state, %File{schemas: schemas} = file) do
       schemas_new =
         Enum.map(schemas, fn %Schema{ref: ref} = schema ->
@@ -179,7 +179,7 @@ if Mix.env() in [:dev, :test] do
       end
     end
 
-    @impl true
+    @impl OpenAPI.Renderer
     def render_schema_types(
           %OpenAPI.Renderer.State{implementation: implementation} = state,
           schemas
@@ -220,7 +220,7 @@ if Mix.env() in [:dev, :test] do
       end
     end
 
-    @impl true
+    @impl OpenAPI.Renderer
     def render_schema_struct(state, schemas) do
       {:defstruct, defstruct_metadata, [struct_fields]} =
         _struct_result = OpenAPI.Renderer.render_schema_struct(state, schemas)
@@ -280,7 +280,7 @@ if Mix.env() in [:dev, :test] do
       ])
     end
 
-    @impl true
+    @impl OpenAPI.Renderer
     def render_schema_field_function(state, schemas) do
       state
       |> OpenAPI.Renderer.render_schema_field_function(schemas)
@@ -329,7 +329,7 @@ if Mix.env() in [:dev, :test] do
       end)
     end
 
-    @impl true
+    @impl OpenAPI.Renderer
     def render_operations(state, %File{operations: []} = file),
       do: OpenAPI.Renderer.render_operations(state, file)
 
@@ -347,7 +347,7 @@ if Mix.env() in [:dev, :test] do
       OpenAPI.Renderer.render_operations(state, file)
     end
 
-    @impl true
+    @impl OpenAPI.Renderer
     def render_operation_spec(
           %OpenAPI.Renderer.State{implementation: implementation} = state,
           %Operation{
@@ -474,7 +474,7 @@ if Mix.env() in [:dev, :test] do
        ]}
     end
 
-    @impl true
+    @impl OpenAPI.Renderer
     def render_operation_function(
           state,
           %Operation{

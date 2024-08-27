@@ -35,7 +35,7 @@ if Mix.env() in [:dev, :test] do
     alias OpenAPIClient.Generator.SchemaType
     require Logger
 
-    @impl true
+    @impl OpenAPI.Processor
     def ignore_operation?(
           %OpenAPI.Processor.State{} = state,
           %OperationSpec{
@@ -206,7 +206,7 @@ if Mix.env() in [:dev, :test] do
       end
     end
 
-    @impl true
+    @impl OpenAPI.Processor
     def operation_docstring(
           state,
           %OperationSpec{"$oag_path": request_path, request_body: request_body} = operation_spec,
@@ -287,7 +287,7 @@ if Mix.env() in [:dev, :test] do
       end
     end
 
-    @impl true
+    @impl OpenAPI.Processor
     def schema_module_and_type(state, schema) do
       {module, type} = OpenAPI.Processor.schema_module_and_type(state, schema)
       process_schema(state, %Schema{schema | module_name: module, type_name: type}, [])
