@@ -350,7 +350,7 @@ if Mix.env() in [:dev, :test] do
           :error
         end
 
-      test_parameters =
+      render_parameters =
         [
           Enum.map(all_params, &{:param, &1}),
           {:request_body, {request_content_type, request_encoded, request_decoded}},
@@ -597,7 +597,7 @@ if Mix.env() in [:dev, :test] do
         |> then(&"[#{status_code}] #{&1}")
 
       custom_params_assertions_callback =
-        test_parameters[:custom_params_assertions]
+        render_parameters[:custom_params_assertions]
         |> Enum.reverse()
         |> case do
           [] ->
@@ -615,7 +615,7 @@ if Mix.env() in [:dev, :test] do
                   quote do
                     unquote_splicing(
                       Util.clean_list([
-                        if(test_parameters[:custom_params_assertions_args],
+                        if(render_parameters[:custom_params_assertions_args],
                           do:
                             quote(
                               do:
@@ -623,7 +623,7 @@ if Mix.env() in [:dev, :test] do
                                   OpenAPIClient.Client.Operation.get_private(operation, :__args__)
                             )
                         ),
-                        if(test_parameters[:custom_params_assertions_opts],
+                        if(render_parameters[:custom_params_assertions_opts],
                           do:
                             quote(
                               do:
@@ -657,20 +657,20 @@ if Mix.env() in [:dev, :test] do
                [
                  {:->, [],
                   [
-                    test_parameters[:httpoison_request_arguments],
+                    render_parameters[:httpoison_request_arguments],
                     quote do
                       unquote_splicing(
-                        Enum.reverse(test_parameters[:httpoison_request_assertions])
+                        Enum.reverse(render_parameters[:httpoison_request_assertions])
                       )
 
                       unquote_splicing(
-                        Enum.reverse(test_parameters[:httpoison_response_assignmets])
+                        Enum.reverse(render_parameters[:httpoison_response_assignmets])
                       )
 
                       {:ok,
                        %HTTPoison.Response{
                          unquote_splicing(
-                           Enum.reverse(test_parameters[:httpoison_response_fields])
+                           Enum.reverse(render_parameters[:httpoison_response_fields])
                          )
                        }}
                     end
@@ -679,11 +679,11 @@ if Mix.env() in [:dev, :test] do
             )
           )
 
-          assert unquote(test_parameters[:expected_result]) ==
+          assert unquote(render_parameters[:expected_result]) ==
                    unquote(module_name).unquote(function_name)(
                      unquote_splicing(
                        Enum.reverse([
-                         test_parameters[:call_opts] | test_parameters[:call_arguments]
+                         render_parameters[:call_opts] | render_parameters[:call_arguments]
                        ])
                      )
                    )
