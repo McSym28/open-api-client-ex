@@ -13,7 +13,7 @@ defmodule OpenAPIClient.Client do
   @impl __MODULE__
   def perform(operation, pipeline) do
     normalized_pipeline =
-      normalize_pipeline(pipeline || OpenAPIClient.Utils.get_config(operation, :client_pipeline))
+      Utils.normalize_pipeline(pipeline || Utils.get_config(operation, :client_pipeline))
 
     operation
     |> put_request_content_type_header()
@@ -58,34 +58,6 @@ defmodule OpenAPIClient.Client do
             error
         end
     end
-  end
-
-  defp normalize_pipeline(pipeline) when is_list(pipeline) do
-    Enum.map(pipeline, &normalize_step/1)
-  end
-
-  defp normalize_pipeline(pipeline) do
-    normalize_pipeline([pipeline])
-  end
-
-  defp normalize_step(module) when is_atom(module) do
-    normalize_step({module, []})
-  end
-
-  defp normalize_step({module, function_or_opts}) when is_atom(module) do
-    true = Utils.is_module?(module)
-
-    if Utils.does_implement_behaviour?(module, Pluggable) do
-      {module, function_or_opts}
-    else
-      normalize_step({module, function_or_opts, []})
-    end
-  end
-
-  defp normalize_step({module, function, args})
-       when is_atom(module) and is_atom(function) and is_list(args) do
-    true = Utils.is_module?(module) and function_exported?(module, function, length(args) + 1)
-    fn operation -> apply(module, function, [operation | args]) end
   end
 
   defp put_request_content_type_header(%Operation{request_body: nil} = operation), do: operation

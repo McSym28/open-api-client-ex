@@ -52,6 +52,36 @@ defmodule OpenAPIClient.Utils do
   def config_merge(config1, config2) when is_list(config1) and is_list(config2),
     do: do_merge(config2, [], config1)
 
+  @spec normalize_pipeline(OpenAPIClient.Client.pipeline()) ::
+          nonempty_list(OpenAPIClient.Client.step())
+  def normalize_pipeline(pipeline) when is_list(pipeline) do
+    Enum.map(pipeline, &normalize_pipeline_step/1)
+  end
+
+  def normalize_pipeline(pipeline) do
+    normalize_pipeline([pipeline])
+  end
+
+  defp normalize_pipeline_step(module) when is_atom(module) do
+    normalize_pipeline_step({module, []})
+  end
+
+  defp normalize_pipeline_step({module, function_or_opts}) when is_atom(module) do
+    true = is_module?(module)
+
+    if does_implement_behaviour?(module, Pluggable) do
+      {module, function_or_opts}
+    else
+      normalize_pipeline_step({module, function_or_opts, []})
+    end
+  end
+
+  defp normalize_pipeline_step({module, function, args})
+       when is_atom(module) and is_atom(function) and is_list(args) do
+    true = is_module?(module) and function_exported?(module, function, length(args) + 1)
+    fn operation -> apply(module, function, [operation | args]) end
+  end
+
   defp do_merge([{key, value2} | tail], acc, rest) do
     case List.keyfind(rest, key, 0) do
       {^key, value1} ->
