@@ -34,7 +34,7 @@ if Code.ensure_loaded?(HTTPoison) do
             request_method: method,
             request_parameters: parameters,
             request_base_url: base_url,
-            request_url: url
+            request_path: request_path
           } = operation,
           opts
         ) do
@@ -43,7 +43,7 @@ if Code.ensure_loaded?(HTTPoison) do
           OpenAPIClient.Utils.get_config(operation, :httpoison, HTTPoison)
         end)
 
-      url = base_url |> URI.merge(url) |> URI.to_string()
+      url = base_url |> URI.merge(request_path) |> URI.to_string()
       body = body || ""
 
       {headers, query_params} =

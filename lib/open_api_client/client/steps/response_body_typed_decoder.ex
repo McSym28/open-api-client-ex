@@ -41,7 +41,7 @@ defmodule OpenAPIClient.Client.Steps.ResponseBodyTypedDecoder do
                type,
                [
                  {:response_body, status_code, content_type},
-                 {operation.request_url, operation.request_method}
+                 {operation.request_path, operation.request_method}
                ],
                typed_decoder
              ) do

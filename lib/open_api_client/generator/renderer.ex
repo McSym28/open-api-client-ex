@@ -564,7 +564,7 @@ if Mix.env() in [:dev, :test] do
                         end)
                       end)
 
-                    {[{:request_url, value_new}], acc}
+                    {[{:request_path, value_new}], acc}
 
                   {:method, value}, acc ->
                     parameters =
@@ -613,7 +613,6 @@ if Mix.env() in [:dev, :test] do
                     {[{:request_body, value}], acc}
 
                   {:query, _}, acc ->
-                    # {[{:request_query_params, Macro.var(:query_params, nil)}], acc}
                     {[], acc}
 
                   {:request, value}, acc ->
@@ -682,9 +681,7 @@ if Mix.env() in [:dev, :test] do
                   unquote(operation)
                   |> OpenAPIClient.Client.Operation.put_private(
                     unquote(
-                      # private_assigns_new
                       private_assigns
-                      |> Map.to_list()
                       |> Enum.sort_by(fn {key, _} -> key end)
                     )
                   )

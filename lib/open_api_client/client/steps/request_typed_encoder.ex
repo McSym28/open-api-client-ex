@@ -22,7 +22,7 @@ defmodule OpenAPIClient.Client.Steps.RequestTypedEncoder do
   @spec call(Operation.t(), options()) :: Operation.t()
   def call(
         %Operation{
-          request_url: request_url,
+          request_path: request_path,
           request_method: request_method,
           request_parameter_types: parameter_types,
           assigns: %{private: private_assigns}
@@ -54,7 +54,7 @@ defmodule OpenAPIClient.Client.Steps.RequestTypedEncoder do
         )
       end)
 
-    path_rest = [{request_url, request_method}]
+    path_rest = [{request_path, request_method}]
 
     parameter_type_map
     |> Enum.reduce(passed_parameters, fn
@@ -90,12 +90,9 @@ defmodule OpenAPIClient.Client.Steps.RequestTypedEncoder do
       end
     end)
     |> Enum.reduce_while(operation, fn {path_prefix, type, value}, operation ->
-      case typed_encoder.encode(
-             value,
-             type,
-             [path_prefix | path_rest],
-             typed_encoder
-           ) do
+      value
+      |> typed_encoder.encode(type, [path_prefix | path_rest], typed_encoder)
+      |> case do
         {:ok, encoded_value} ->
           operation_new =
             case path_prefix do
@@ -108,11 +105,11 @@ defmodule OpenAPIClient.Client.Steps.RequestTypedEncoder do
                   operation,
                   fn
                     {name_atom, {^location, ^name, _type, _default}},
-                    %Operation{request_url: request_url} = operation ->
-                      request_url_new =
-                        String.replace(request_url, "{#{name_atom}}", to_string(encoded_value))
+                    %Operation{request_path: request_path} = operation ->
+                      request_path_new =
+                        String.replace(request_path, "{#{name_atom}}", to_string(encoded_value))
 
-                      operation_new = %Operation{operation | request_url: request_url_new}
+                      operation_new = %Operation{operation | request_path: request_path_new}
                       {:halt, operation_new}
 
                     _, operation ->
@@ -137,10 +134,13 @@ defmodule OpenAPIClient.Client.Steps.RequestTypedEncoder do
           {:cont, operation_new}
 
         {:error, %Error{} = error} ->
-          Operation.set_result(
-            operation,
-            {:error, %Error{error | operation: operation, step: __MODULE__}}
-          )
+          operation_new =
+            Operation.set_result(
+              operation,
+              {:error, %Error{error | operation: operation, step: __MODULE__}}
+            )
+
+          {:halt, operation_new}
       end
     end)
   end

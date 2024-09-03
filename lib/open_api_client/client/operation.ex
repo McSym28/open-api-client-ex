@@ -25,7 +25,7 @@ defmodule OpenAPIClient.Client.Operation do
           halted: boolean(),
           assigns: map(),
           request_base_url: url(),
-          request_url: url(),
+          request_path: url(),
           request_method: method(),
           request_parameters: parameters(),
           request_parameter_types: [{parameter_type_key(), Schema.field_type()}],
@@ -39,10 +39,10 @@ defmodule OpenAPIClient.Client.Operation do
         }
 
   @derive Pluggable.Token
-  @enforce_keys [:request_base_url, :request_url, :request_method]
+  @enforce_keys [:request_base_url, :request_path, :request_method]
   defstruct [
     :request_base_url,
-    :request_url,
+    :request_path,
     :request_method,
     :request_body,
     :response_body,

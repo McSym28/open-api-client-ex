@@ -59,7 +59,7 @@ defmodule OpenAPIClient.Operations do
 
     %OpenAPIClient.Client.Operation{
       request_base_url: base_url,
-      request_url: "/test/{path_param}",
+      request_path: "/test/{path_param}",
       request_method: :get,
       request_parameter_types: [
         {{:path_param, :path}, {"path-param", {:string, :generic}}},
@@ -138,7 +138,7 @@ defmodule OpenAPIClient.Operations do
 
     %OpenAPIClient.Client.Operation{
       request_base_url: base_url,
-      request_url: "/test",
+      request_path: "/test",
       request_body: body,
       request_method: :post,
       request_parameter_types: [
