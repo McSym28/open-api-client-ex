@@ -22,7 +22,7 @@ config :oapi_generator,
     renderer: OpenAPIClient.Generator.Renderer,
     output: [
       base_module: OpenAPIClient,
-      location: "test/support/__generated__",
+      location: "test/support/__generated__/open_api_client",
       schema_subdirectory: "schemas"
     ],
     naming: [
@@ -39,7 +39,7 @@ config :open_api_client_ex,
   ],
   test: [
     base_url: "https://example.com",
-    test_location: "test/open_api_client/__generated__",
+    test_location: "test/__generated__/open_api_client",
     operations: [
       {:*, [params: []]},
       {{[:*], [:delete]}, []},

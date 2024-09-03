@@ -8,7 +8,7 @@ paths:
       description: "Test endpoint"
       operationId: set_test
       summary: "Test endpoint"
-      parameters: 
+      parameters:
         - in: header
           name: X-String-Header
           description: String header parameter
@@ -20,12 +20,12 @@ paths:
           description: Enum header parameter that has it's "strcictness" set through config
           schema:
             type: string
-            enum: 
+            enum:
               - CONFIG_STRICT_ENUM_1
               - CONFIG_STRICT_ENUM_2
               - CONFIG_STRICT_ENUM_3
           example: CONFIG_STRICT_ENUM_1
-      requestBody: 
+      requestBody:
         content:
           "application/json":
             schema:
@@ -49,7 +49,7 @@ paths:
       description: "Test endpoint"
       operationId: getTest
       summary: "Test endpoint"
-      parameters: 
+      parameters:
         - in: path
           name: path-param
           description: Path parameter
@@ -119,7 +119,7 @@ paths:
           description: Enum query parameter
           schema:
             type: string
-            enum: 
+            enum:
               - ENUM_1
               - ENUM_2
               - ENUM_3
@@ -128,7 +128,7 @@ paths:
           description: Enum query parameter with default
           schema:
             type: string
-            enum: 
+            enum:
               - ENUM_9
               - ENUM_8
               - ENUM_7
@@ -170,7 +170,7 @@ components:
           example: "2024-02-03T12:34:56Z"
         Enum:
           type: string
-          enum: 
+          enum:
             - ENUM_1
             - ENUM_2
           example: ENUM_1
@@ -193,7 +193,7 @@ components:
       properties:
         StrictEnum:
           type: string
-          enum: 
+          enum:
             - STRICT_ENUM_1
             - STRICT_ENUM_2
             - STRICT_ENUM_3
@@ -202,12 +202,12 @@ components:
           type: array
           items:
             type: string
-            enum: 
+            enum:
               - DYNAMIC_ENUM_1
               - DYNAMIC_ENUM_2
         NumberEnum:
           type: number
-          enum: 
+          enum:
             - 1
             - 2.0
             - 3.0
@@ -220,7 +220,7 @@ components:
               example: nested_string_value
         EnumWithDefault:
           type: string
-          enum: 
+          enum:
             - DEFAULT_ENUM
             - SOME_ENUM
             - ANOTHER_ENUM
