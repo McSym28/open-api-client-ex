@@ -43,7 +43,7 @@ defmodule OpenAPIClient.MixProject do
        only: [:dev, :test]},
       {:jason, "~> 1.4", optional: true},
       {:httpoison, "~> 2.2", optional: true},
-      {:mox, "~> 1.1", only: [:dev, :test]},
+      {:mox, "~> 1.2", only: [:dev, :test]},
       {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false},
       {:excoveralls, "~> 0.18", only: :test},
       {:phoenix, "~> 1.7", only: :test, optional: true},
