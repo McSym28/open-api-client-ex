@@ -176,14 +176,7 @@ if Mix.env() in [:dev, :test] do
           %RendererFile{file | ast: ast, module: module, contents: nil, location: nil}
           |> then(&%RendererFile{&1 | contents: implementation.format(state, &1)})
           |> then(&%RendererFile{&1 | location: implementation.location(state, &1)})
-          |> then(fn
-            %RendererFile{contents: contents} = file
-            when not is_nil(contents) and contents != "" ->
-              implementation.write(state, file)
-
-            _file ->
-              :ok
-          end)
+          |> then(&implementation.write(state, &1))
       end
 
       non_operations
@@ -270,13 +263,7 @@ if Mix.env() in [:dev, :test] do
             location: controller_location
         }
         |> then(&%RendererFile{&1 | contents: implementation.format(state, &1)})
-        |> then(fn
-          %RendererFile{contents: contents} = file when not is_nil(contents) and contents != "" ->
-            implementation.write(state, file)
-
-          _file ->
-            :ok
-        end)
+        |> then(&implementation.write(state, &1))
 
         operation_module = generate_module_name(state, module_name)
 
@@ -689,14 +676,7 @@ if Mix.env() in [:dev, :test] do
                 location: controller_test_location
             }
             |> then(&%RendererFile{&1 | contents: implementation.format(state, &1)})
-            |> then(fn
-              %RendererFile{contents: contents} = file
-              when not is_nil(contents) and contents != "" ->
-                implementation.write(state, file)
-
-              _file ->
-                :ok
-            end)
+            |> then(&implementation.write(state, &1))
 
           _ ->
             :ok
@@ -833,15 +813,15 @@ if Mix.env() in [:dev, :test] do
     end
 
     @impl __MODULE__
+    def write(_state, %RendererFile{contents: nil} = _file), do: :ok
+    def write(_state, %RendererFile{contents: ""} = _file), do: :ok
     def write(
           %State{
             renderer_state:
               %OpenAPI.Renderer.State{implementation: renderer_implementaion} = renderer_state
           } = _state,
           file
-        ) do
-      renderer_implementaion.write(renderer_state, file)
-    end
+        ), do: renderer_implementaion.write(renderer_state, file)
 
     @impl __MODULE__
     def render_operation(
@@ -1655,13 +1635,7 @@ if Mix.env() in [:dev, :test] do
           schemas: []
         }
         |> then(&%RendererFile{&1 | contents: implementation.format(state, &1)})
-        |> then(fn
-          %RendererFile{contents: contents} = file when not is_nil(contents) and contents != "" ->
-            implementation.write(state, file)
-
-          _file ->
-            :ok
-        end)
+        |> then(&implementation.write(state, &1))
       end
     end
 
