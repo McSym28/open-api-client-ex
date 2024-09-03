@@ -103,7 +103,7 @@ if Mix.env() in [:dev, :test] do
             OpenAPI.Processor.State.t()
             | OpenAPI.Renderer.State.t()
             | OpenAPIClient.Generator.TestRenderer.State.t()
-            | String.t(),
+            | atom(),
             atom()
           ) :: term()
     @spec get_config(
@@ -114,7 +114,7 @@ if Mix.env() in [:dev, :test] do
             atom(),
             term()
           ) :: term()
-    def get_config(state, key, default \\ nil)
+    def get_config(state_or_profile, key, default \\ nil)
 
     def get_config(%OpenAPI.Processor.State{profile: profile}, key, default) do
       get_config(profile, key, default)
@@ -139,24 +139,26 @@ if Mix.env() in [:dev, :test] do
     @spec get_oapi_generator_config(
             OpenAPI.Processor.State.t()
             | OpenAPI.Renderer.State.t()
-            | OpenAPIClient.Generator.TestRenderer.State.t(),
+            | OpenAPIClient.Generator.TestRenderer.State.t()
+            | atom(),
             atom()
           ) :: term()
     @spec get_oapi_generator_config(
             OpenAPI.Processor.State.t()
             | OpenAPI.Renderer.State.t()
-            | OpenAPIClient.Generator.TestRenderer.State.t(),
+            | OpenAPIClient.Generator.TestRenderer.State.t()
+            | atom(),
             atom(),
             term()
           ) :: term()
-    def get_oapi_generator_config(state, key, default \\ nil)
+    def get_oapi_generator_config(state_or_profile, key, default \\ nil)
 
     def get_oapi_generator_config(%OpenAPI.Processor.State{profile: profile}, key, default) do
-      get_oapi_generator_config_profile(profile, key, default)
+      get_oapi_generator_config(profile, key, default)
     end
 
     def get_oapi_generator_config(%OpenAPI.Renderer.State{profile: profile}, key, default) do
-      get_oapi_generator_config_profile(profile, key, default)
+      get_oapi_generator_config(profile, key, default)
     end
 
     def get_oapi_generator_config(
@@ -165,6 +167,13 @@ if Mix.env() in [:dev, :test] do
           default
         ) do
       get_oapi_generator_config(renderer_state, key, default)
+    end
+
+    def get_oapi_generator_config(profile, key, default) when is_atom(profile) do
+      :oapi_generator
+      |> Application.get_env(profile, [])
+      |> Keyword.get(:output, [])
+      |> Keyword.get(key, default)
     end
 
     @spec schema_type_to_readable_type(
@@ -202,13 +211,6 @@ if Mix.env() in [:dev, :test] do
 
     def schema_type_to_readable_type(state, type, _schema_type),
       do: OpenAPI.Renderer.Util.to_readable_type(state, type)
-
-    defp get_oapi_generator_config_profile(profile, key, default) do
-      :oapi_generator
-      |> Application.get_env(profile, [])
-      |> Keyword.get(:output, [])
-      |> Keyword.get(key, default)
-    end
 
     @spec get_function_arity(
             OpenAPI.Renderer.State.t() | OpenAPIClient.Generator.TestRenderer.State.t(),

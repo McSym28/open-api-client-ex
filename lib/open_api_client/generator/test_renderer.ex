@@ -309,11 +309,9 @@ if Mix.env() in [:dev, :test] do
         ) do
       module_name = generate_module_name(state, module_name)
 
-      operation_profile = Utils.get_config(state, :aliased_profile, state.renderer_state.profile)
-
       typed_decoder =
-        OpenAPIClient.Utils.get_config(
-          operation_profile,
+        Utils.get_config(
+          state,
           :typed_decoder,
           OpenAPIClient.Client.TypedDecoder
         )
