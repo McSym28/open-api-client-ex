@@ -38,8 +38,11 @@ config :open_api_client_ex,
     client: OpenAPIClient.ClientMock
   ],
   test: [
+    callback_pipeline: OpenAPIClient.Client.TestCallbackPipeline,
     base_url: "https://example.com",
     test_location: "test/__generated__/open_api_client",
+    web_location: "test/support/__generated__/open_api_client_web",
+    web_test_location: "test/__generated__/open_api_client_web",
     operations: [
       {:*, [params: []]},
       {{[:*], [:delete]}, []},

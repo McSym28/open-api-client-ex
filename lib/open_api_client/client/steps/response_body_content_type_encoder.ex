@@ -1,0 +1,65 @@
+defmodule OpenAPIClient.Client.Steps.ResponseBodyContentTypeEncoder do
+  @moduledoc """
+  `Pluggable` step implementation for encoding `Operation.response_body` based on the `"Content-Type"` header
+  """
+
+  @behaviour Pluggable
+
+  alias OpenAPIClient.Client.{Error, Operation}
+
+  @type options :: []
+
+  @impl Pluggable
+  @spec init(options()) :: options()
+  def init(opts), do: opts
+
+  @impl Pluggable
+  @spec call(Operation.t(), options()) :: Operation.t()
+  def call(%Operation{response_body: nil} = operation, _opts), do: operation
+
+  def call(%Operation{response_body: body} = operation, _opts) do
+    case Operation.get_response_content_type(operation) do
+      {:ok, content_type} ->
+        operation
+        |> OpenAPIClient.Utils.get_config(:encoders, [])
+        |> List.keyfind(content_type, 0)
+        |> case do
+          {_, {module, function, args}}
+          when is_atom(module) and is_atom(function) and is_list(args) ->
+            case apply(module, function, List.insert_at(args, 0, body)) do
+              {:ok, encoded_body} ->
+                %Operation{operation | response_body: encoded_body}
+
+              {:error, error} ->
+                Operation.set_result(
+                  operation,
+                  {:error,
+                   Error.new(
+                     message:
+                       "Error while encoding request body using encoder for \"Content-Type\" #{inspect(content_type)}",
+                     operation: operation,
+                     source: error,
+                     reason: :response_body_content_type_encode_failed,
+                     step: __MODULE__
+                   )}
+                )
+            end
+
+          _ ->
+            Operation.set_result(
+              operation,
+              {:error,
+               Error.new(
+                 message: "Encoder not configured for \"Content-Type\" #{inspect(content_type)}",
+                 operation: operation,
+                 reason: :encoder_not_configured,
+                 step: __MODULE__
+               )}
+            )
+        end
+
+      {:error, _} ->
+        operation
+    end
+  end
+end

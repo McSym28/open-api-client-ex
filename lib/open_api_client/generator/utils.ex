@@ -46,7 +46,8 @@ if Mix.env() in [:dev, :test] do
             {:params, operation_params_config()},
             {:default_status_code_as_failure, boolean()},
             {:default_callback_module, module()},
-            {:default_webhook_module, module()}
+            {:default_webhook_module, module()},
+            {:callback_controller_pipe_through, [atom()]}
           ]
 
     @type schema_field_config :: schema_type_config()
@@ -232,6 +233,80 @@ if Mix.env() in [:dev, :test] do
               arity + if(static, do: 1, else: 0)
             end
           )
+
+    @spec get_test_location(
+            OpenAPI.Processor.State.t()
+            | OpenAPI.Renderer.State.t()
+            | OpenAPIClient.Generator.TestRenderer.State.t()
+            | atom()
+          ) :: String.t()
+    def get_test_location(state_or_profile) do
+      state_or_profile
+      |> get_config(:test_location)
+      |> case do
+        location when is_binary(location) ->
+          location
+
+        nil ->
+          state_or_profile
+          |> get_oapi_generator_config(:location, "")
+          |> Path.split()
+          |> case do
+            [] -> "test"
+            ["lib"] -> "test"
+            ["lib", app_name] -> ["test", app_name]
+          end
+          |> Path.join()
+      end
+    end
+
+    @spec get_web_location(
+            OpenAPI.Processor.State.t()
+            | OpenAPI.Renderer.State.t()
+            | OpenAPIClient.Generator.TestRenderer.State.t()
+            | atom()
+          ) :: String.t()
+    def get_web_location(state_or_profile) do
+      state_or_profile
+      |> get_config(:web_location)
+      |> case do
+        location when is_binary(location) ->
+          location
+
+        nil ->
+          state_or_profile
+          |> get_oapi_generator_config(:location, "")
+          |> Path.split()
+          |> case do
+            ["lib", app_name] -> ["test", "support", "#{app_name}_web"]
+          end
+          |> Path.join()
+      end
+    end
+
+    @spec get_web_test_location(
+            OpenAPI.Processor.State.t()
+            | OpenAPI.Renderer.State.t()
+            | OpenAPIClient.Generator.TestRenderer.State.t()
+            | atom()
+          ) :: String.t()
+    def get_web_test_location(state_or_profile) do
+      state_or_profile
+      |> get_config(:web_test_location)
+      |> case do
+        location when is_binary(location) ->
+          location
+
+        nil ->
+          state_or_profile
+          |> get_web_location()
+          |> Path.split()
+          |> case do
+            ["lib", app_name_web] -> ["test", app_name_web]
+            ["test", "support", app_name_web] -> ["test", app_name_web]
+          end
+          |> Path.join()
+      end
     end
 
     defp build_config(config, value_or_tuple) when is_list(config) do

@@ -143,10 +143,15 @@ defmodule OpenAPIClient.Client.Operation do
   def get_response_type(
         %__MODULE__{response_types: types, response_status_code: status_code} = operation
       ) do
+    status_code_exact = get_private(operation, :__status_code__)
+
     types
     |> Enum.reduce_while(
       {:unknown, nil},
       fn
+        {^status_code_exact, _} = type, _current ->
+          {:halt, {:exact, type}}
+
         {^status_code, _} = type, _current ->
           {:halt, {:exact, type}}
 

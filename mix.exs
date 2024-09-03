@@ -56,9 +56,12 @@ defmodule OpenAPIClient.MixProject do
   defp aliases do
     [
       "test.generate": [
+        "cmd mv test/support/__generated__/open_api_client_web/router.ex test/support/open_api_client_web/",
         "cmd rm -rf test/support/__generated__/*",
         "cmd rm -rf test/open_api_client/__generated__/*",
-        "api.gen test test/fixture/test.yaml"
+        "cmd mkdir -p test/support/__generated__/open_api_client_web",
+        "cmd mv test/support/open_api_client_web/router.ex test/support/__generated__/open_api_client_web/",
+        "api.gen.proxy test test/fixture/test.yaml"
       ]
     ]
   end
