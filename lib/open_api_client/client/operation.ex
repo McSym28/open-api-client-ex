@@ -125,8 +125,8 @@ defmodule OpenAPIClient.Client.Operation do
   end
 
   @spec put_private(t(), map() | list({term(), term()})) :: t()
-  def put_private(%__MODULE__{assigns: %{private: private}} = operation, map) when is_map(map) do
-    put_in(operation, [Access.key!(:assigns), :private], Map.merge(private, map))
+  def put_private(operation, map) when is_map(map) do
+    update_in(operation, [Access.key!(:assigns), :private], &Map.merge(&1, map))
   end
 
   def put_private(operation, list) when is_list(list) do
