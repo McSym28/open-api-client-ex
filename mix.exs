@@ -19,17 +19,21 @@ defmodule OpenAPIClient.MixProject do
     ]
   end
 
+  # Specifies which paths to compile per environment.
   defp elixirc_paths(:test), do: ["test/support" | elixirc_paths(:dev)]
-  defp elixirc_paths(_), do: ["lib"]
+  defp elixirc_paths(_env), do: ["lib"]
 
-  # Run "mix help compile.app" to learn about applications.
-  def application do
-    [
-      extra_applications: [:logger]
-    ]
-  end
+  # Configuration for the OTP application.
+  #
+  # Type `mix help compile.app` for more information.
+  def application, do: application(Mix.env())
 
-  # Run "mix help deps" to learn about dependencies.
+  defp application(:test), do: [{:mod, {OpenAPIClient.Application, []}} | application(:dev)]
+  defp application(_env), do: [extra_applications: [:logger, :runtime_tools]]
+
+  # Specifies your project dependencies.
+  #
+  # Type `mix help deps` for examples and options.
   defp deps do
     [
       {:pluggable, "~> 1.1"},
@@ -41,10 +45,14 @@ defmodule OpenAPIClient.MixProject do
       {:httpoison, "~> 2.2", optional: true},
       {:mox, "~> 1.1", only: [:dev, :test]},
       {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false},
-      {:excoveralls, "~> 0.18", only: :test}
+      {:excoveralls, "~> 0.18", only: :test},
+      {:phoenix, "~> 1.7", only: :test, optional: true},
+      {:bandit, "~> 1.5", only: :test, optional: true}
     ]
   end
 
+  # Aliases are shortcuts or tasks specific to the current project.
+  # See the documentation for `Mix` for more info on aliases.
   defp aliases do
     [
       "test.generate": [

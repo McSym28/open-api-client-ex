@@ -1,5 +1,18 @@
 import Config
 
+# We don't run a server during test. If one is required,
+# you can enable the server option below.
+config :open_api_client_ex, OpenAPIClientWeb.Endpoint,
+  http: [ip: {127, 0, 0, 1}, port: 4002],
+  secret_key_base: "n+/5UaboabFOImD8Npfjubvr120z8ijGokr7osJnSIxP7f5gUp6cwkILDkbR84Fr",
+  server: false
+
+# Initialize plugs at runtime for faster test compilation
+# Use Jason for JSON parsing in Phoenix
+config :phoenix,
+  plug_init_mode: :runtime,
+  json_library: Jason
+
 # Print only warnings and errors during test
 config :logger, level: :warning
 
