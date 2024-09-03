@@ -145,7 +145,7 @@ defmodule OpenAPIClient.OperationsTest do
   end
 
   describe "get_test/4" do
-    test "[200] performs a request and encodes TestSchema from response's body" do
+    test "[200] performs a request and decodes TestSchema from response's body" do
       expect(@client, :perform, fn operation, pipeline ->
         args = OpenAPIClient.Client.Operation.get_private(operation, :__args__)
         opts = OpenAPIClient.Client.Operation.get_private(operation, :__opts__)

@@ -337,7 +337,7 @@ if Mix.env() in [:dev, :test] do
 
       response_schema_test_message =
         if response_schema_test_message = test_message_schema(state, module_name, response_schema) do
-          "encodes #{response_schema_test_message} from response's body"
+          "decodes #{response_schema_test_message} from response's body"
         end
 
       [{_, %GeneratorOperation{params: all_params}}] =
