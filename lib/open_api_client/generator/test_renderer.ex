@@ -280,17 +280,10 @@ if Mix.env() in [:dev, :test] do
           []
 
         tests ->
-          [{_, %GeneratorOperation{params: params}}] =
+          [{_, generator_operation}] =
             :ets.lookup(:operations, {request_path, request_method})
 
-          arity =
-            Enum.reduce(
-              params,
-              if(length(request_body) == 0, do: 1, else: 2),
-              fn %GeneratorParam{static: static}, arity ->
-                arity + if(static, do: 1, else: 0)
-              end
-            )
+          arity = Utils.get_function_arity(state, operation, generator_operation)
 
           describe_message = "#{function_name}/#{arity}"
 

@@ -210,6 +210,26 @@ if Mix.env() in [:dev, :test] do
       |> Keyword.get(key, default)
     end
 
+    @spec get_function_arity(
+            OpenAPI.Renderer.State.t() | OpenAPIClient.Generator.TestRenderer.State.t(),
+            OpenAPI.Processor.Operation.t(),
+            OpenAPIClient.Generator.Operation.t()
+          ) :: non_neg_integer()
+    def get_function_arity(
+          _state,
+          %OpenAPI.Processor.Operation{request_body: request_body},
+          %OpenAPIClient.Generator.Operation{params: params}
+        ),
+        do:
+          Enum.reduce(
+            params,
+            if(length(request_body) == 0, do: 1, else: 2),
+            fn %OpenAPIClient.Generator.Param{static: static}, arity ->
+              arity + if(static, do: 1, else: 0)
+            end
+          )
+    end
+
     defp build_config(config, value_or_tuple) when is_list(config) do
       config
       |> filter_config(value_or_tuple)
