@@ -342,9 +342,41 @@ if Mix.env() in [:dev, :test] do
         renderer_state: state
       }
 
-      test_renderer.render(test_renderer_state, file)
+      operations_new =
+        Enum.map(
+          operations,
+          fn %Operation{
+               request_path: request_path,
+               request_method: request_method,
+               responses: responses
+             } = operation ->
+            [{_, %GeneratorOperation{config: operation_config}}] =
+              :ets.lookup(:operations, {request_path, request_method})
 
-      OpenAPI.Renderer.render_operations(state, file)
+            responses_new =
+              Enum.map(
+                responses,
+                fn
+                  {:default, schemas} ->
+                    status_code =
+                      !!Keyword.get(operation_config, :default_status_code_as_failure, true)
+
+                    {status_code, schemas}
+
+                  {status_code, schemas} ->
+                    {status_code, schemas}
+                end
+              )
+
+            %Operation{operation | responses: responses_new}
+          end
+        )
+
+      file_new = %File{file | operations: operations_new}
+
+      test_renderer.render(test_renderer_state, file_new)
+
+      OpenAPI.Renderer.render_operations(state, file_new)
     end
 
     @impl OpenAPI.Renderer
@@ -374,21 +406,10 @@ if Mix.env() in [:dev, :test] do
       {responses_new, {atom_success, atom_failure}} =
         responses
         |> Enum.map(fn
-          {:default, schemas} ->
-            status_code =
-              if Utils.get_config(state, :default_status_code_as_failure) do
-                599
-              else
-                299
-              end
-
-            {status_code, schemas}
-
-          {"2XX", schemas} ->
-            {298, schemas}
-
-          other ->
-            other
+          {true, schemas} -> {299, schemas}
+          {false, schemas} -> {599, schemas}
+          {"2XX", schemas} -> {298, schemas}
+          other -> other
         end)
         |> List.keystore(
           598,
@@ -602,18 +623,10 @@ if Mix.env() in [:dev, :test] do
                     items =
                       responses
                       |> Enum.sort_by(fn
-                        {status_code, _schemas} when is_integer(status_code) ->
-                          status_code
-
-                        {<<digit::utf8, "XX">>, _schemas} ->
-                          (digit - ?0 + 1) * 100 - 2
-
-                        {:default, _schemas} ->
-                          if Utils.get_config(state, :default_status_code_as_failure) do
-                            599
-                          else
-                            299
-                          end
+                        {status_code, _schemas} when is_integer(status_code) -> status_code
+                        {<<digit::utf8, "XX">>, _schemas} -> (digit - ?0 + 1) * 100 - 2
+                        {true, _schemas} -> 299
+                        {false, _schemas} -> 599
                       end)
                       |> Enum.map(fn
                         {status_or_default, schemas} when map_size(schemas) == 0 ->

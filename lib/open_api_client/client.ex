@@ -33,8 +33,8 @@ defmodule OpenAPIClient.Client do
                 "2XX" ->
                   true
 
-                :default ->
-                  !Utils.get_config(operation, :default_status_code_as_failure)
+                true ->
+                  true
 
                 _else ->
                   false

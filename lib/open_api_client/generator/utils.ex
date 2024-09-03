@@ -42,7 +42,10 @@ if Mix.env() in [:dev, :test] do
                operation_custom_param_config()}
           ]
 
-    @type operation_config :: [{:params, operation_params_config()}]
+    @type operation_config :: [
+            {:params, operation_params_config()},
+            {:default_status_code_as_failure, boolean()}
+          ]
 
     @type schema_field_config :: schema_type_config()
     @type schema_field_name_pattern ::

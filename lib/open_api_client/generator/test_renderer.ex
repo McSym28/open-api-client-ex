@@ -241,9 +241,8 @@ if Mix.env() in [:dev, :test] do
         Enum.split_with(responses, fn {status_code, _} -> is_integer(status_code) end)
 
       non_exact_responses
-      |> Map.new()
       |> Enum.reduce(
-        Map.new(exact_responses),
+        exact_responses,
         fn {status_code, schemas}, responses ->
           status_code_range =
             case status_code do
@@ -251,18 +250,17 @@ if Mix.env() in [:dev, :test] do
                 digit = digit - ?0
                 ((digit + 1) * 100 - 1)..(digit * 100)
 
-              :default ->
-                if Utils.get_config(state, :default_status_code_as_failure) do
-                  599..400
-                else
-                  299..200
-                end
+              true ->
+                299..200
+
+              false ->
+                599..400
             end
 
           status_code_new =
-            Enum.find(status_code_range, fn code -> not Map.has_key?(responses, code) end)
+            Enum.find(status_code_range, fn code -> not List.keymember?(responses, code, 0) end)
 
-          Map.put(responses, status_code_new, schemas)
+          List.keystore(responses, status_code_new, 0, {status_code_new, schemas})
         end
       )
       |> Enum.sort_by(fn {status_code, _} -> status_code end)

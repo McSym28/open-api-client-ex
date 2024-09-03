@@ -151,7 +151,7 @@ defmodule OpenAPIClient.Operations do
            config_strict_enum_3: "CONFIG_STRICT_ENUM_3"}}}
       ],
       request_types: [{"application/json", {OpenAPIClient.TestRequestSchema, :t}}],
-      response_types: [{"2XX", :null}, {:default, :null}, {400, :null}]
+      response_types: [{"2XX", :null}, {true, :null}, {400, :null}]
     }
     |> OpenAPIClient.Client.Operation.put_private(
       __args__: [body: body],

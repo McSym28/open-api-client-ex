@@ -11,7 +11,7 @@ defmodule OpenAPIClient.Client.Operation do
   @type parameter_type_key :: {atom(), parameter_location()}
   @type content_type :: String.t()
   @type request_schema :: {content_type(), Schema.type()}
-  @type response_status_code :: integer() | String.t() | :default
+  @type response_status_code :: integer() | String.t() | boolean()
   @type response_schema :: {content_type(), Schema.type()}
   @type response_type :: {response_status_code(), [response_schema()] | :null}
   @type external_parameters ::
@@ -150,7 +150,7 @@ defmodule OpenAPIClient.Client.Operation do
         when (digit - ?0) * 100 <= status_code and (digit - ?0 + 1) * 100 > status_code ->
           {:cont, {:range, type}}
 
-        {:default, _} = type, {:unknown, _} ->
+        {default, _} = type, {:unknown, _} when is_boolean(default) ->
           {:cont, {:default, type}}
 
         _, current ->
