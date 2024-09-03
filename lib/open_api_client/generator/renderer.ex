@@ -24,6 +24,9 @@ if Mix.env() in [:dev, :test] do
         defdelegate render_schema_types(state, schemas), to: OpenAPIClient.Generator.Renderer
 
         @impl OpenAPI.Renderer
+        defdelegate render_moduledoc(state, file), to: OpenAPIClient.Generator.Renderer
+
+        @impl OpenAPI.Renderer
         defdelegate render_operations(state, file), to: OpenAPIClient.Generator.Renderer
 
         @impl OpenAPI.Renderer
@@ -34,6 +37,7 @@ if Mix.env() in [:dev, :test] do
           to: OpenAPIClient.Generator.Renderer
 
         defoverridable render: 2,
+                       render_moduledoc: 2,
                        render_default_client: 2,
                        render_operations: 2,
                        render_operation_spec: 2,
@@ -138,16 +142,63 @@ if Mix.env() in [:dev, :test] do
     end
 
     @impl OpenAPI.Renderer
-    def render_default_client(state, file) do
+    def render_default_client(
+          %OpenAPI.Renderer.State{implementation: implementation} = state,
+          %File{operations: file_operations} = file
+        ) do
       case OpenAPI.Renderer.render_default_client(state, file) do
         {:@, _, [{:default_client, _, _}] = _default_client_expression} ->
-          base_url = Utils.get_config(state, :base_url)
+          {non_operations, operations} =
+            Enum.split_with(file_operations, fn %Operation{
+                                                  request_path: request_path,
+                                                  request_method: request_method
+                                                } ->
+              [{_, %GeneratorOperation{type: operation_type}}] =
+                :ets.lookup(:operations, {request_path, request_method})
 
-          if not is_binary(base_url) do
-            throw("`:base_url` for profile `#{inspect(state.profile)}` is not set!")
+              operation_type in [:callback, :webhook]
+            end)
+
+          base_url_expression =
+            unless Enum.empty?(operations) do
+              base_url = Utils.get_config(state, :base_url)
+
+              if not is_binary(base_url) do
+                throw("`:base_url` for profile `#{inspect(state.profile)}` is not set!")
+              end
+
+              quote(do: @base_url(unquote(base_url)))
+            end
+
+          callback_behaviour_expressions =
+            case non_operations do
+              [] ->
+                []
+
+              callbacks ->
+                functions =
+                  Enum.map(callbacks, fn %Operation{function_name: function_name} ->
+                    {:const, function_name}
+                  end)
+
+                [
+                  Util.put_newlines(quote(do: @behaviour(OpenAPIClient.Callback))),
+                  quote(
+                    do:
+                      @type(
+                        callback_functions ::
+                          unquote(implementation.render_type(state, {:union, functions}))
+                      )
+                  )
+                ]
+            end
+
+          [base_url_expression | callback_behaviour_expressions]
+          |> Util.clean_list()
+          |> case do
+            [] -> []
+            expressions -> Util.put_newlines(expressions)
           end
-
-          Util.put_newlines(quote(do: @base_url(unquote(base_url))))
 
         result ->
           result
@@ -330,10 +381,59 @@ if Mix.env() in [:dev, :test] do
     end
 
     @impl OpenAPI.Renderer
+    def render_moduledoc(state, %File{operations: []} = file),
+      do: OpenAPI.Renderer.render_moduledoc(state, file)
+
+    def render_moduledoc(state, %File{operations: file_operations} = file) do
+      state
+      |> OpenAPI.Renderer.render_moduledoc(file)
+      |> Macro.prewalk(fn
+        {:moduledoc, moduledoc_attributes, [doc]} ->
+          {non_operations, operations} =
+            Enum.split_with(file_operations, fn %Operation{
+                                                  request_path: request_path,
+                                                  request_method: request_method
+                                                } ->
+              [{_, %GeneratorOperation{type: operation_type}}] =
+                :ets.lookup(:operations, {request_path, request_method})
+
+              operation_type in [:callback, :webhook]
+            end)
+
+          doc_new =
+            String.replace(doc, ~r/^Provides\s+API\s+\w+\s+related/, fn _ ->
+              operations_text =
+                case operations do
+                  [] -> nil
+                  [_] -> "endpoint"
+                  _ -> "endpoints"
+                end
+
+              non_operations_text =
+                case non_operations do
+                  [] -> nil
+                  [_] -> "callback"
+                  _ -> "callbacks"
+                end
+
+              [operations_text, non_operations_text]
+              |> Enum.reject(&is_nil/1)
+              |> Enum.join(" and ")
+              |> then(&"Provides API #{&1} related")
+            end)
+
+          {:moduledoc, moduledoc_attributes, [doc_new]}
+
+        expression ->
+          expression
+      end)
+    end
+
+    @impl OpenAPI.Renderer
     def render_operations(state, %File{operations: []} = file),
       do: OpenAPI.Renderer.render_operations(state, file)
 
-    def render_operations(state, file) do
+    def render_operations(state, %File{operations: operations} = file) do
       test_renderer =
         Utils.get_config(state, :test_renderer, OpenAPIClient.Generator.TestRenderer)
 
@@ -376,7 +476,97 @@ if Mix.env() in [:dev, :test] do
 
       test_renderer.render(test_renderer_state, file_new)
 
-      OpenAPI.Renderer.render_operations(state, file_new)
+      result = OpenAPI.Renderer.render_operations(state, file_new)
+
+      operations_new
+      |> Enum.reduce({[], []}, fn %Operation{
+                                    function_name: function_name,
+                                    request_path: request_path,
+                                    request_method: request_method
+                                  } = operation,
+                                  {callbacks, callback_functions} ->
+        [
+          {_,
+           %GeneratorOperation{
+             type: operation_type,
+             normalized_request_path: normalized_request_path
+           } = generator_operation}
+        ] =
+          :ets.lookup(:operations, {request_path, request_method})
+
+        if operation_type in [:callback, :webhook] do
+          state
+          |> do_render_operation_function(operation, generator_operation)
+          |> Macro.prewalk([request_path_mask: normalized_request_path], fn
+            {key, _value} = expression, function_acc
+            when key in [
+                   :request_parameter_types,
+                   :request_types,
+                   :response_types,
+                   :response_parameter_types
+                 ] ->
+              function_acc_new = [expression | function_acc]
+              {expression, function_acc_new}
+
+            {:__args__, value} = expression, function_acc ->
+              value
+              |> Keyword.drop([:body])
+              |> Keyword.keys()
+              |> case do
+                [] ->
+                  {expression, function_acc}
+
+                args ->
+                  function_acc_new = [{:request_parameter_args, args} | function_acc]
+                  {expression, function_acc_new}
+              end
+
+            expression, function_acc ->
+              {expression, function_acc}
+          end)
+          |> case do
+            {_, []} ->
+              {callbacks, callback_functions}
+
+            {_, expressions} ->
+              function =
+                quote(
+                  do:
+                    def(__functions__(unquote(function_name)),
+                      do: unquote(Enum.reverse(expressions))
+                    )
+                )
+
+              arity = Utils.get_function_arity(state, operation, generator_operation)
+              callbacks_new = [{function_name, arity} | callbacks]
+              callback_functions_new = [function | callback_functions]
+              {callbacks_new, callback_functions_new}
+          end
+        else
+          {callbacks, callback_functions}
+        end
+      end)
+      |> case do
+        {[], []} ->
+          result
+
+        {callbacks, callback_functions} ->
+          Util.put_newlines(result) ++
+            [
+              Util.put_newlines(quote(do: @optional_callbacks(unquote(Enum.reverse(callbacks))))),
+              quote(do: @doc(false)),
+              quote(do: @impl(OpenAPIClient.Callback)),
+              quote(
+                do:
+                  @spec(
+                    __functions__(callback_functions()) :: [
+                      OpenAPIClient.Callback.function_option()
+                    ]
+                  )
+              )
+              | Enum.reverse(callback_functions)
+            ]
+      end
     end
 
     @impl OpenAPI.Renderer
@@ -389,7 +579,14 @@ if Mix.env() in [:dev, :test] do
             request_method: request_method
           } = operation
         ) do
-      [{_, %GeneratorOperation{params: all_params}}] =
+      [
+        {_,
+         %GeneratorOperation{
+           params: all_params,
+           type: operation_type,
+           normalized_request_path: normalized_request_path
+         }}
+      ] =
         :ets.lookup(:operations, {request_path, request_method})
 
       {static_params, dynamic_params} =
@@ -433,7 +630,8 @@ if Mix.env() in [:dev, :test] do
       operation_new = %Operation{
         operation
         | request_path_parameters: static_params,
-          responses: responses_new
+          responses: responses_new,
+          request_path: normalized_request_path
       }
 
       {:@, attribute_metadata,
@@ -466,15 +664,22 @@ if Mix.env() in [:dev, :test] do
 
       return_type_new = return_types |> Enum.reverse() |> Enum.reduce(&{:|, [], [&1, &2]})
 
+      additional_params =
+        if operation_type in [:callback, :webhook] do
+          []
+        else
+          [
+            {:base_url, quote(do: String.t() | URI.t())},
+            {:client_pipeline, quote(do: OpenAPIClient.Client.pipeline())}
+          ]
+        end
+
       opts_spec =
         dynamic_params
         |> Enum.map(fn %Param{name: name, value_type: type} ->
           {String.to_atom(name), implementation.render_type(state, type)}
         end)
-        |> Kernel.++([
-          {:base_url, quote(do: String.t() | URI.t())},
-          {:client_pipeline, quote(do: OpenAPIClient.Client.pipeline())}
-        ])
+        |> Kernel.++(additional_params)
         |> Enum.reverse()
         |> Enum.reduce(fn type, expression ->
           {:|, [], [type, expression]}
@@ -482,9 +687,16 @@ if Mix.env() in [:dev, :test] do
 
       arguments_new = List.replace_at(arguments, -1, [opts_spec])
 
+      attribute_atom =
+        if operation_type in [:callback, :webhook] do
+          :callback
+        else
+          :spec
+        end
+
       {:@, attribute_metadata,
        [
-         {:spec, spec_metadata,
+         {attribute_atom, spec_metadata,
           [
             {:"::", return_type_delimiter_metadata,
              [
@@ -498,16 +710,30 @@ if Mix.env() in [:dev, :test] do
     @impl OpenAPI.Renderer
     def render_operation_function(
           state,
-          %Operation{
-            function_name: function_name,
-            request_path: request_path,
-            request_method: request_method,
-            responses: responses
-          } = operation
+          %Operation{request_path: request_path, request_method: request_method} = operation
         ) do
-      [{_, %GeneratorOperation{params: all_params, param_renamings: param_renamings}}] =
+      [{_, %GeneratorOperation{type: operation_type} = generator_operation}] =
         :ets.lookup(:operations, {request_path, request_method})
 
+      if operation_type in [:callback, :webhook] do
+        []
+      else
+        do_render_operation_function(state, operation, generator_operation)
+      end
+    end
+
+    def do_render_operation_function(
+          state,
+          %Operation{
+            function_name: function_name,
+            responses: responses
+          } = operation,
+          %GeneratorOperation{
+            params: all_params,
+            param_renamings: param_renamings,
+            type: operation_type
+          }
+        ) do
       static_params =
         all_params
         |> Enum.flat_map(fn %GeneratorParam{param: param, static: static} ->
@@ -533,15 +759,19 @@ if Mix.env() in [:dev, :test] do
           do_expressions,
           fn
             {:=, _, [{:client, _, _} | _]} = _client_expression ->
-              client_pipeline_expression =
-                quote do
-                  client_pipeline = Keyword.get(opts, :client_pipeline)
-                end
+              if operation_type in [:callback, :webhook] do
+                []
+              else
+                client_pipeline_expression =
+                  quote do
+                    client_pipeline = Keyword.get(opts, :client_pipeline)
+                  end
 
-              base_url_expression =
-                quote do: base_url = opts[:base_url] || @base_url
+                base_url_expression =
+                  quote do: base_url = opts[:base_url] || @base_url
 
-              [client_pipeline_expression, base_url_expression]
+                [client_pipeline_expression, base_url_expression]
+              end
 
             {:=, _, [{:query, _, _} | _]} = _query_expression ->
               []

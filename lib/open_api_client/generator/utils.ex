@@ -44,7 +44,9 @@ if Mix.env() in [:dev, :test] do
 
     @type operation_config :: [
             {:params, operation_params_config()},
-            {:default_status_code_as_failure, boolean()}
+            {:default_status_code_as_failure, boolean()},
+            {:default_callback_module, module()},
+            {:default_webhook_module, module()}
           ]
 
     @type schema_field_config :: schema_type_config()

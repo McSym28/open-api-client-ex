@@ -14,9 +14,19 @@ if Mix.env() in [:dev, :test] do
         @impl OpenAPI.Processor
         defdelegate schema_module_and_type(state, schema), to: OpenAPIClient.Generator.Processor
 
+        @impl OpenAPI.Processor
+        defdelegate operation_module_names(state, operation_spec),
+          to: OpenAPIClient.Generator.Processor
+
+        @impl OpenAPI.Processor
+        defdelegate operation_function_name(state, operation_spec),
+          to: OpenAPIClient.Generator.Processor
+
         defoverridable ignore_operation?: 2,
                        operation_docstring: 3,
-                       schema_module_and_type: 2
+                       schema_module_and_type: 2,
+                       operation_module_names: 2,
+                       operation_function_name: 2
       end
     end
 
@@ -191,6 +201,35 @@ if Mix.env() in [:dev, :test] do
 
         operations_table = Utils.ensure_ets_table(:operations)
 
+        {type, normalized_request_path} =
+          case request_path do
+            "/__callbacks__" <> rest -> {:callback, rest}
+            "/__webhooks__" <> rest -> {:webhook, rest}
+            _ -> {:operation, request_path}
+          end
+
+        {normalized_request_path, non_operation_parameters} =
+          if type in [:callback, :webhook] do
+            %URI{query: query} = uri = URI.parse(normalized_request_path)
+
+            {non_operation_parameters, query_params_rest} =
+              (query || "")
+              |> URI.decode_query()
+              |> Map.split(["__name__", "__uuid__", "__parent_url__", "__parent_method__"])
+
+            query_new =
+              if map_size(query_params_rest) == 0 do
+                nil
+              else
+                URI.encode_query(query_params_rest)
+              end
+
+            {URI.to_string(%URI{uri | query: query_new}),
+             Map.delete(non_operation_parameters, "__uuid__")}
+          else
+            {normalized_request_path, %{}}
+          end
+
         :ets.insert(
           operations_table,
           {{request_path, request_method},
@@ -198,7 +237,10 @@ if Mix.env() in [:dev, :test] do
              config: operation_config,
              spec: operation_spec,
              params: all_params,
-             param_renamings: param_renamings
+             param_renamings: param_renamings,
+             type: type,
+             normalized_request_path: normalized_request_path,
+             non_operation_parameters: non_operation_parameters
            }}
         )
 
@@ -210,40 +252,49 @@ if Mix.env() in [:dev, :test] do
     def operation_docstring(
           state,
           %OperationSpec{"$oag_path": request_path, request_body: request_body} = operation_spec,
-          query_params
+          _query_params
         ) do
       request_method = OpenAPI.Processor.Operation.request_method(state, operation_spec)
 
-      case :ets.lookup(:operations, {request_path, request_method}) do
-        [{_, %GeneratorOperation{params: all_params}}] ->
-          {static_params, dynamic_params} =
-            all_params
-            |> Enum.group_by(
-              fn %GeneratorParam{static: static} -> static end,
-              fn %GeneratorParam{param: param} -> param end
-            )
-            |> then(fn map -> {Map.get(map, true, []), Map.get(map, false, [])} end)
+      [
+        {_,
+         %GeneratorOperation{
+           params: all_params,
+           type: operation_type,
+           normalized_request_path: normalized_request_path
+         }}
+      ] =
+        :ets.lookup(:operations, {request_path, request_method})
 
-          body_param =
-            case request_body do
-              %RequestBody{description: description} ->
-                [
-                  %Param{
-                    description: description,
-                    location: :query,
-                    name: "body",
-                    value_type: :null
-                  }
-                ]
+      {static_params, dynamic_params} =
+        all_params
+        |> Enum.group_by(
+          fn %GeneratorParam{static: static} -> static end,
+          fn %GeneratorParam{param: param} -> param end
+        )
+        |> then(fn map -> {Map.get(map, true, []), Map.get(map, false, [])} end)
 
-              _ ->
-                []
-            end
+      body_param =
+        case request_body do
+          %RequestBody{description: description} ->
+            [
+              %Param{
+                description: description,
+                location: :query,
+                name: "body",
+                value_type: :null
+              }
+            ]
 
-          client_pipeline_description =
-            "Client pipeline for making a request. Default value obtained through a call to `OpenAPIClient.Utils.get_config(__operation__, :client_pipeline)}"
+          _ ->
+            []
+        end
 
-          additional_dynamic_params = [
+      additional_dynamic_params =
+        if operation_type in [:callback, :webhook] do
+          []
+        else
+          [
             %Param{
               description: "Request's base URL. Default value is taken from `@base_url`",
               location: :header,
@@ -251,39 +302,33 @@ if Mix.env() in [:dev, :test] do
               value_type: :null
             },
             %Param{
-              description: client_pipeline_description,
+              description:
+                "Client pipeline for making a request. Default value obtained through a call to `OpenAPIClient.Utils.get_config(__operation__, :client_pipeline)}",
               location: :header,
               name: "client_pipeline",
               value_type: :null
             }
           ]
+        end
 
-          static_params = static_params ++ body_param
-          dynamic_params = dynamic_params ++ additional_dynamic_params
+      static_params = static_params ++ body_param
+      dynamic_params = dynamic_params ++ additional_dynamic_params
 
-          result =
-            OpenAPI.Processor.operation_docstring(
-              state,
-              operation_spec,
-              static_params ++ dynamic_params
-            )
+      result =
+        OpenAPI.Processor.operation_docstring(
+          state,
+          %OperationSpec{operation_spec | "$oag_path": normalized_request_path},
+          static_params ++ dynamic_params
+        )
 
-          if length(static_params) > 0 do
-            [%Param{name: name} | _] = dynamic_params
+      if length(static_params) > 0 do
+        [%Param{name: name} | _] = dynamic_params
 
-            result
-            |> String.replace("## Options", "## Arguments", global: false)
-            |> String.replace("  * `#{name}`:", "\n## Options\n\n  * `#{name}`:", global: false)
-          else
-            result
-          end
-
-        [] ->
-          OpenAPI.Processor.operation_docstring(
-            state,
-            operation_spec,
-            query_params
-          )
+        result
+        |> String.replace("## Options", "## Arguments", global: false)
+        |> String.replace("  * `#{name}`:", "\n## Options\n\n  * `#{name}`:", global: false)
+      else
+        result
       end
     end
 
@@ -292,6 +337,78 @@ if Mix.env() in [:dev, :test] do
       {module, type} = OpenAPI.Processor.schema_module_and_type(state, schema)
       process_schema(state, %Schema{schema | module_name: module, type_name: type}, [])
       {module, type}
+    end
+
+    @impl OpenAPI.Processor
+    def operation_module_names(
+          %OpenAPI.Processor.State{profile: profile} = state,
+          %OperationSpec{"$oag_path": request_path} = operation_spec
+        ) do
+      request_method = OpenAPI.Processor.Operation.request_method(state, operation_spec)
+
+      [{_, %GeneratorOperation{type: operation_type, config: operation_config}}] =
+        :ets.lookup(:operations, {request_path, request_method})
+
+      config = Application.get_env(:oapi_generator, profile)
+
+      if operation_type in [:callback, :webhook] do
+        default_module =
+          case operation_type do
+            :callback -> Keyword.get(operation_config, :default_callback_module, Callbacks)
+            :webhook -> Keyword.get(operation_config, :default_webhook_module, Callbacks)
+          end
+
+        config_new =
+          Keyword.update(
+            config || [],
+            :naming,
+            [default_operation_module: default_module],
+            &Keyword.put(&1, :default_operation_module, default_module)
+          )
+
+        Application.put_env(:oapi_generator, profile, config_new)
+      end
+
+      names = OpenAPI.Processor.operation_module_names(state, operation_spec)
+
+      if operation_type in [:callback, :webhook] do
+        if is_nil(config) do
+          Application.delete_env(:oapi_generator, profile)
+        else
+          Application.put_env(:oapi_generator, profile, config)
+        end
+      end
+
+      names
+    end
+
+    @impl OpenAPI.Processor
+    def operation_function_name(
+          state,
+          %OperationSpec{operation_id: operation_id, "$oag_path": request_path} = operation_spec
+        ) do
+      request_method = OpenAPI.Processor.Operation.request_method(state, operation_spec)
+
+      [
+        {_,
+         %GeneratorOperation{
+           type: operation_type,
+           non_operation_parameters: non_operation_parameters
+         }}
+      ] = :ets.lookup(:operations, {request_path, request_method})
+
+      operation_spec_new =
+        with true <- is_nil(operation_id),
+             true <- operation_type in [:callback, :webhook],
+             %URI{query: query} when not is_nil(query) <- URI.parse(request_path),
+             {:ok, name} when not is_nil(name) and name != "" <-
+               Map.fetch(non_operation_parameters, "__name__") do
+          %OperationSpec{operation_spec | operation_id: name}
+        else
+          _ -> operation_spec
+        end
+
+      OpenAPI.Processor.operation_function_name(state, operation_spec_new)
     end
 
     defp accumulate_schema_examples(nil, acc, _state), do: acc

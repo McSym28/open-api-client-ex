@@ -26,9 +26,11 @@ defmodule OpenAPIClient.Client.Operation do
           assigns: map(),
           request_base_url: url(),
           request_path: url(),
+          request_path_mask: url() | nil,
           request_method: method(),
           request_parameters: parameters(),
           request_parameter_types: [{parameter_type_key(), Schema.field_type()}],
+          request_parameter_args: [atom()],
           request_body: term() | nil,
           request_types: [request_schema()],
           response_body: term() | nil,
@@ -43,6 +45,7 @@ defmodule OpenAPIClient.Client.Operation do
   defstruct [
     :request_base_url,
     :request_path,
+    :request_path_mask,
     :request_method,
     :request_body,
     :response_body,
@@ -52,6 +55,7 @@ defmodule OpenAPIClient.Client.Operation do
     assigns: %{private: %{}},
     request_parameters: %{},
     request_parameter_types: [],
+    request_parameter_args: [],
     request_types: [],
     response_parameters: %{},
     response_types: []

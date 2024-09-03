@@ -44,6 +44,50 @@ paths:
           description: "Default result"
         "400":
           description: "Error"
+      callbacks:
+        myEvent:
+          "{$request.body#/callbackUrl}":
+            post:
+              parameters:
+                - in: header
+                  name: X-Required-Callback-Header
+                  description: Required callback header parameter
+                  required: true
+                  schema:
+                    type: string
+                  example: required_callback_header
+                - in: header
+                  name: X-Optional-Callback-Header
+                  description: Optional callback header parameter
+                  schema:
+                    type: string
+                  example: optional_callback_header
+                - in: query
+                  name: X-Required-Callback-Query
+                  description: Required callback query parameter
+                  required: true
+                  schema:
+                    type: string
+                  example: required-callback-query
+                - in: query
+                  name: X-Optional-Callback-Query
+                  description: Optional callback query parameter
+                  schema:
+                    type: string
+                  example: optional-callback-query
+              requestBody:
+                required: true
+                content:
+                  application/json:
+                    schema:
+                      "$ref": "#/components/schemas/CallbackRequest"
+              responses:
+                "200":
+                  description: "Acknowledgement"
+                  content:
+                    "application/json":
+                      schema:
+                        "$ref": "#/components/schemas/CallbackResponse"
   "/test/{path-param}":
     get:
       description: "Test endpoint"
@@ -231,3 +275,18 @@ components:
         - EnumWithDefault
       example:
         StrictEnum: STRICT_ENUM_1
+    CallbackRequest:
+      type: object
+      properties:
+        message:
+          type: string
+          example: Some event happened
+      required:
+        - message
+    CallbackResponse:
+      type: object
+      properties:
+        acknowledged:
+          type: boolean
+      required:
+        - acknowledged
