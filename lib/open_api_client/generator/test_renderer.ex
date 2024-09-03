@@ -8,6 +8,9 @@ if Mix.env() in [:dev, :test] do
         defdelegate render(state, file), to: OpenAPIClient.Generator.TestRenderer
 
         @impl OpenAPIClient.Generator.TestRenderer
+        defdelegate render_header(state, file), to: OpenAPIClient.Generator.TestRenderer
+
+        @impl OpenAPIClient.Generator.TestRenderer
         defdelegate module(state, file), to: OpenAPIClient.Generator.TestRenderer
 
         @impl OpenAPIClient.Generator.TestRenderer
@@ -32,6 +35,33 @@ if Mix.env() in [:dev, :test] do
                     to: OpenAPIClient.Generator.TestRenderer
 
         @impl OpenAPIClient.Generator.TestRenderer
+        defdelegate render_callback_controller_header(state, operation),
+          to: OpenAPIClient.Generator.TestRenderer
+
+        @impl OpenAPIClient.Generator.TestRenderer
+        defdelegate render_callback_controller_function(state, operation),
+          to: OpenAPIClient.Generator.TestRenderer
+
+        @impl OpenAPIClient.Generator.TestRenderer
+        defdelegate callback_module(state, file, operation, module_type),
+          to: OpenAPIClient.Generator.TestRenderer
+
+        @impl OpenAPIClient.Generator.TestRenderer
+        defdelegate callback_location(state, file, operation, module_type),
+          to: OpenAPIClient.Generator.TestRenderer
+
+        @impl OpenAPIClient.Generator.TestRenderer
+        defdelegate render_callback_header(state, operation),
+          to: OpenAPIClient.Generator.TestRenderer
+
+        @impl OpenAPIClient.Generator.TestRenderer
+        defdelegate render_callback(state, operation), to: OpenAPIClient.Generator.TestRenderer
+
+        @impl OpenAPIClient.Generator.TestRenderer
+        defdelegate render_callback_scope(state, operation),
+          to: OpenAPIClient.Generator.TestRenderer
+
+        @impl OpenAPIClient.Generator.TestRenderer
         defdelegate example(state, type, path), to: OpenAPIClient.Generator.TestRenderer
 
         @impl OpenAPIClient.Generator.TestRenderer
@@ -39,12 +69,20 @@ if Mix.env() in [:dev, :test] do
           to: OpenAPIClient.Generator.TestRenderer
 
         defoverridable render: 2,
+                       render_header: 2,
                        module: 2,
                        format: 2,
                        location: 2,
                        write: 2,
                        render_operation: 2,
                        render_operation_test: 4,
+                       render_callback_controller_header: 2,
+                       render_callback_controller_function: 2,
+                       callback_module: 4,
+                       callback_location: 4,
+                       render_callback_header: 2,
+                       render_callback: 2,
+                       render_callback_scope: 2,
                        example: 3,
                        decode_example: 4
       end
@@ -76,11 +114,14 @@ if Mix.env() in [:dev, :test] do
               | {OpenAPIClient.Client.Operation.url(), OpenAPIClient.Client.Operation.method()}
             )
 
-    @callback render(state :: State.t(), file :: File.t()) :: :ok
-    @callback module(state :: State.t(), file :: File.t()) :: module()
-    @callback format(state :: State.t(), file :: File.t()) :: iodata()
-    @callback location(state :: State.t(), file :: File.t()) :: String.t()
-    @callback write(state :: State.t(), file :: File.t()) :: :ok
+    @type callback_module_type :: :controller | :controller_test
+
+    @callback render(state :: State.t(), file :: RendererFile.t()) :: :ok
+    @callback render_header(state :: State.t(), file :: RendererFile.t()) :: Macro.t()
+    @callback module(state :: State.t(), file :: RendererFile.t()) :: module()
+    @callback format(state :: State.t(), file :: RendererFile.t()) :: iodata()
+    @callback location(state :: State.t(), file :: RendererFile.t()) :: String.t()
+    @callback write(state :: State.t(), file :: RendererFile.t()) :: :ok
     @callback render_operation(state :: State.t(), operation :: Operation.t()) :: Macro.t()
     @callback render_operation_test(
                 state :: State.t(),
@@ -91,6 +132,25 @@ if Mix.env() in [:dev, :test] do
                   {content_type :: String.t() | nil, schema :: OpenAPI.Processor.Type.t(),
                    status_code :: integer()}
               ) :: Macro.t()
+    @callback render_callback_controller_header(state :: State.t(), operation :: Operation.t()) ::
+                Macro.t()
+    @callback render_callback_controller_function(state :: State.t(), operation :: Operation.t()) ::
+                Macro.t()
+    @callback callback_module(
+                state :: State.t(),
+                file :: RendererFile.t(),
+                operation :: Operation.t(),
+                module_type :: callback_module_type()
+              ) :: module()
+    @callback callback_location(
+                state :: State.t(),
+                file :: RendererFile.t(),
+                operation :: Operation.t(),
+                module_type :: callback_module_type()
+              ) :: String.t()
+    @callback render_callback_header(state :: State.t(), operation :: Operation.t()) :: Macro.t()
+    @callback render_callback(state :: State.t(), operation :: Operation.t()) :: Macro.t()
+    @callback render_callback_scope(state :: State.t(), operation :: Operation.t()) :: Macro.t()
     @callback example(
                 state :: State.t(),
                 type ::
@@ -110,12 +170,20 @@ if Mix.env() in [:dev, :test] do
               ) :: {:ok, term()} | {:error, OpenAPIClient.Client.Error.t()}
 
     @optional_callbacks render: 2,
+                        render_header: 2,
                         module: 2,
                         format: 2,
                         location: 2,
                         write: 2,
                         render_operation: 2,
                         render_operation_test: 4,
+                        render_callback_controller_header: 2,
+                        render_callback_controller_function: 2,
+                        callback_module: 4,
+                        callback_location: 4,
+                        render_callback_header: 2,
+                        render_callback: 2,
+                        render_callback_scope: 2,
                         example: 3,
                         decode_example: 4
 
@@ -156,561 +224,137 @@ if Mix.env() in [:dev, :test] do
           :ok
 
         tests ->
-          module = implementation.module(state, file)
-
-          ast =
-            quote do
-              defmodule unquote(generate_module_name(state, module)) do
-                use ExUnit.Case, async: true
-                unquote(quote(do: import(Mox)) |> Util.put_newlines())
-
-                @httpoison OpenAPIClient.HTTPoisonMock
-                unquote(quote(do: @client(OpenAPIClient.ClientMock)) |> Util.put_newlines())
-
-                setup :verify_on_exit!
-
-                unquote_splicing(tests)
+          %RendererFile{file | ast: nil, contents: nil, location: nil}
+          |> then(&%RendererFile{&1 | module: implementation.module(state, &1)})
+          |> then(fn %RendererFile{module: module} = file ->
+            header =
+              state
+              |> implementation.render_header(file)
+              |> case do
+                [] -> []
+                expressions -> Util.put_newlines(expressions)
               end
-            end
 
-          %RendererFile{file | ast: ast, module: module, contents: nil, location: nil}
+            ast =
+              quote do
+                defmodule unquote(generate_module_name(state, module)) do
+                  unquote_splicing(header)
+                  unquote_splicing(tests)
+                end
+              end
+
+            %RendererFile{file | ast: ast}
+          end)
           |> then(&%RendererFile{&1 | contents: implementation.format(state, &1)})
           |> then(&%RendererFile{&1 | location: implementation.location(state, &1)})
           |> then(&implementation.write(state, &1))
       end
 
       non_operations
-      |> Enum.map(fn %Operation{
-                       module_name: module_name,
-                       function_name: function_name,
-                       request_path: request_path,
-                       request_method: request_method
-                     } = operation ->
-        behaviour_module = generate_module_name(state, module_name)
+      |> Enum.map(fn %Operation{module_name: module_name} = operation ->
+        %RendererFile{
+          file
+          | module: nil,
+            ast: nil,
+            contents: nil,
+            location: nil,
+            operations: [operation]
+        }
+        |> then(
+          &%RendererFile{
+            &1
+            | module: implementation.callback_module(state, &1, operation, :controller)
+          }
+        )
+        |> then(fn %RendererFile{module: module} = file ->
+          header =
+            state
+            |> implementation.render_callback_controller_header(operation)
+            |> case do
+              [] -> []
+              expressions -> Util.put_newlines(expressions)
+            end
 
-        behaviour_mock_module =
-          behaviour_module
-          |> Module.split()
-          |> List.update_at(-1, &"#{&1}Mock")
-          |> Module.concat()
+          function = implementation.render_callback_controller_function(state, operation)
 
-        controller_base_module =
-          state
-          |> Utils.get_oapi_generator_config(:base_module, "")
-          |> case do
-            "" -> []
-            "Elixir." <> _rest = module -> Module.split(module)
-            module when is_binary(module) -> Module.split("Elixir." <> module)
-            module -> Module.split(module)
-          end
-          |> List.update_at(0, &"#{&1}Web")
-          |> Module.concat()
-
-        controller_module_name =
-          function_name
-          |> Atom.to_string()
-          |> OpenAPI.Processor.Naming.normalize_identifier(:camel)
-          |> then(&"#{&1}Controller")
-
-        controller_filename = controller_module_name |> Macro.underscore() |> then(&"#{&1}.ex")
-
-        controller_base_location =
-          state
-          |> Utils.get_web_location()
-          |> Path.split()
-          |> List.insert_at(-1, "controllers")
-          |> Path.join()
-
-        controller_location =
-          Path.join([controller_base_location, Macro.underscore(module_name), controller_filename])
-
-        operation_profile =
-          Utils.get_config(state, :aliased_profile, state.renderer_state.profile)
-
-        ast =
-          quote do
-            defmodule unquote(
-                        Module.concat([
-                          controller_base_module,
-                          module_name,
-                          controller_module_name
-                        ])
-                      ) do
-              use unquote(controller_base_module), :controller
-
-              plug(OpenAPIClientWeb.Plugs.Callback,
-                implementation: unquote(behaviour_mock_module),
-                behaviour: unquote(behaviour_module),
-                function_name: unquote(function_name),
-                profile: unquote(operation_profile)
-              )
-
-              def unquote(function_name)(conn, _params) do
-                response_status_code =
-                  OpenAPIClientWeb.Plugs.Callback.get_response_status_code(conn)
-
-                response_body = OpenAPIClientWeb.Plugs.Callback.get_response_body(conn)
-                Plug.Conn.send_resp(conn, response_status_code, response_body)
+          ast =
+            quote do
+              defmodule unquote(Module.concat([get_web_base_module(state), module])) do
+                unquote_splicing(header)
+                unquote(function)
               end
             end
-          end
+
+          %RendererFile{file | ast: ast}
+        end)
+        |> then(&%RendererFile{&1 | contents: implementation.format(state, &1)})
+        |> then(
+          &%RendererFile{
+            &1
+            | location: implementation.callback_location(state, &1, operation, :controller)
+          }
+        )
+        |> then(&implementation.write(state, &1))
 
         %RendererFile{
           file
-          | ast: ast,
-            module: Module.concat([module_name, controller_module_name]),
+          | module: nil,
+            ast: nil,
             contents: nil,
-            location: controller_location
+            location: nil,
+            operations: [operation]
         }
+        |> then(
+          &%RendererFile{
+            &1
+            | module: implementation.callback_module(state, &1, operation, :controller_test)
+          }
+        )
+        |> then(fn %RendererFile{module: module} = file ->
+          state
+          |> implementation.render_callback(operation)
+          |> case do
+            nil ->
+              file
+
+            describe_ast ->
+              header =
+                state
+                |> implementation.render_callback_header(operation)
+                |> case do
+                  [] -> []
+                  expressions -> Util.put_newlines(expressions)
+                end
+
+              ast =
+                quote do
+                  defmodule unquote(Module.concat([get_web_base_module(state), module])) do
+                    unquote_splicing(header)
+                    unquote(describe_ast)
+                  end
+                end
+
+              %RendererFile{file | ast: ast}
+          end
+        end)
         |> then(&%RendererFile{&1 | contents: implementation.format(state, &1)})
+        |> then(
+          &%RendererFile{
+            &1
+            | location: implementation.callback_location(state, &1, operation, :controller_test)
+          }
+        )
         |> then(&implementation.write(state, &1))
 
-        operation_module = generate_module_name(state, module_name)
-
-        [{_, %GeneratorOperation{params: params, config: operation_config}}] =
-          :ets.lookup(:operations, {request_path, request_method})
-
-        implementation.render_operation(state, operation)
-        |> case do
-          {:describe, _, [_describe_message, [do: {:__block__, _, tests}]]} ->
-            tests_new =
-              Enum.map(tests, fn {:test, _, [test_message, [do: test_body]]} ->
-                test_body
-                |> Macro.prewalk(%{}, fn
-                  {:assert, _,
-                   [
-                     {:==, _,
-                      [
-                        function_result,
-                        {{:., _, [^operation_module, ^function_name]}, _, function_arg_values}
-                      ]}
-                   ]},
-                  acc ->
-                    function_arg_names =
-                      (Enum.flat_map(
-                         params,
-                         fn
-                           %GeneratorParam{param: %Param{name: name}, static: true} ->
-                             [String.to_atom(name)]
-
-                           _param ->
-                             []
-                         end
-                       ) ++ [:opts])
-                      |> then(fn names ->
-                        if Enum.count(function_arg_values) != Enum.count(names) do
-                          List.insert_at(names, -2, :body)
-                        else
-                          names
-                        end
-                      end)
-
-                    function_args =
-                      function_arg_names
-                      |> Enum.zip(function_arg_values)
-                      |> Enum.map(fn
-                        {:opts, opts} ->
-                          variable = Macro.var(:opts, nil)
-
-                          opts
-                          |> Keyword.drop([:base_url, :client_pipeline])
-                          |> Enum.map(fn {opt_key, opt_value} ->
-                            quote(
-                              do:
-                                assert(
-                                  {:ok, unquote(opt_value)} ==
-                                    Keyword.fetch(unquote(variable), unquote(opt_key))
-                                )
-                            )
-                          end)
-                          |> case do
-                            [] -> {Macro.var(:_opts, nil), []}
-                            asserts -> {variable, asserts}
-                          end
-
-                        {arg_name, arg_value} ->
-                          variable = Macro.var(arg_name, nil)
-                          {variable, [quote(do: assert(unquote(arg_value) == unquote(variable)))]}
-                      end)
-
-                    macro =
-                      quote(
-                        do:
-                          expect(@behaviour_module, unquote(function_name), fn unquote_splicing(
-                                                                                 Enum.map(
-                                                                                   function_args,
-                                                                                   fn {key,
-                                                                                       _asserts} ->
-                                                                                     key
-                                                                                   end
-                                                                                 )
-                                                                               ) ->
-                            unquote_splicing(
-                              Enum.flat_map(function_args, fn {_key, asserts} -> asserts end)
-                            )
-
-                            unquote(function_result)
-                          end)
-                      )
-
-                    acc_new = Map.put(acc, :callback_call_expect, macro)
-
-                    {:ok, acc_new}
-
-                  {:expect, _,
-                   [
-                     {:@, _, [{:httpoison, _, _}]},
-                     :request,
-                     {:fn, _,
-                      [
-                        {:->, _,
-                         [[request_method, _, _, _, _], {:__block__, _, expect_expressions}]}
-                      ]}
-                   ]},
-                  acc ->
-                    acc_new =
-                      expect_expressions
-                      |> Enum.reduce(
-                        acc,
-                        fn
-                          {:assert, _,
-                           [
-                             {:=, _,
-                              [
-                                {{:_, _, _}, query_param_value},
-                                {{:., _, [{:__aliases__, _, [:List]}, :keyfind]}, _,
-                                 [
-                                   {{:., _, [Access, :get]}, _, [{:options, _, _}, :params]},
-                                   query_param_name,
-                                   0
-                                 ]}
-                              ]}
-                           ]},
-                          acc ->
-                            Map.update(
-                              acc,
-                              :request_query_params,
-                              %{query_param_name => query_param_value},
-                              &Map.put(&1, query_param_name, query_param_value)
-                            )
-
-                          {:assert, _,
-                           [
-                             {:=, _,
-                              [
-                                {{:_, _, _}, header_param_value},
-                                {{:., _, [{:__aliases__, _, [:List]}, :keyfind]}, _,
-                                 [
-                                   {:headers, _, _},
-                                   header_param_name,
-                                   0
-                                 ]}
-                              ]}
-                           ]},
-                          acc ->
-                            Map.update(
-                              acc,
-                              :request_headers,
-                              %{header_param_name => header_param_value},
-                              &Map.put(&1, header_param_name, header_param_value)
-                            )
-
-                          {:assert, _,
-                           [
-                             {:==, _,
-                              [
-                                {:ok, request_content_type},
-                                {:with, _,
-                                 [
-                                   {:<-, _,
-                                    [
-                                      _,
-                                      {{:., _,
-                                        [
-                                          {:__aliases__, _, [:List]},
-                                          :keyfind
-                                        ]}, _,
-                                       [
-                                         {:headers, _, _},
-                                         "content-type",
-                                         0
-                                       ]}
-                                    ]}
-                                   | _
-                                 ]}
-                              ]}
-                           ]},
-                          acc ->
-                            Map.update(
-                              acc,
-                              :request_headers,
-                              %{"content-type" => request_content_type},
-                              &Map.put(&1, "content-type", request_content_type)
-                            )
-
-                          {:assert, _,
-                           [
-                             {:==, _,
-                              [
-                                {:ok, request_encoded_body},
-                                {{:., _, _}, [], [{:body, _, _} | []]}
-                              ]}
-                           ]},
-                          acc ->
-                            Map.put(acc, :request_encoded_body, request_encoded_body)
-
-                          {:assert, _,
-                           [
-                             {:=, _,
-                              [
-                                {:ok, {:body_encoded, _, _}},
-                                response_encoded_body
-                              ]}
-                           ]},
-                          acc ->
-                            Map.put(acc, :response_encoded_body, response_encoded_body)
-
-                          {:ok,
-                           {:%, _,
-                            [
-                              {:__aliases__, _, [:HTTPoison, :Response]},
-                              {:%{}, _, httpoison_response_args}
-                            ]}},
-                          acc ->
-                            Enum.reduce(httpoison_response_args, acc, fn
-                              {:status_code, response_status_code}, acc ->
-                                Map.put(acc, :response_status_code, response_status_code)
-
-                              {:headers, headers}, acc ->
-                                Enum.reduce(headers, acc, fn
-                                  {key, value}, acc ->
-                                    key_down = String.downcase(key)
-
-                                    Map.update(
-                                      acc,
-                                      :response_headers,
-                                      %{key_down => value},
-                                      &Map.put(&1, key_down, value)
-                                    )
-                                end)
-
-                              _, acc ->
-                                acc
-                            end)
-
-                          _expression, acc ->
-                            acc
-                        end
-                      )
-                      |> Map.put(:request_method, request_method)
-
-                    {:ok, acc_new}
-
-                  expression, acc ->
-                    {expression, acc}
-                end)
-                |> case do
-                  {_expression, render_parameters} ->
-                    query = URI.encode_query(render_parameters[:request_query_params] || [])
-
-                    url =
-                      "/__test__/#{Macro.underscore(module_name)}/#{function_name}"
-                      |> URI.parse()
-                      |> struct!(query: query)
-                      |> URI.to_string()
-
-                    request_body = render_parameters[:request_encoded_body]
-                    conn_call_args = [url] ++ if(request_body, do: [request_body], else: [])
-
-                    request_headers = render_parameters[:request_headers] || %{}
-
-                    conn_call =
-                      if map_size(request_headers) > 0 do
-                        request_headers
-                        |> Enum.reverse()
-                        |> Enum.reduce(Macro.var(:conn, nil), fn {name, value}, conn ->
-                          quote(
-                            do:
-                              unquote(conn)
-                              |> Plug.Conn.put_req_header(unquote(name), unquote(value))
-                          )
-                        end)
-                        |> then(fn conn ->
-                          quote(
-                            do:
-                              unquote(conn)
-                              |> unquote(render_parameters[:request_method])(
-                                unquote_splicing(conn_call_args)
-                              )
-                          )
-                        end)
-                      else
-                        quote(
-                          do:
-                            unquote(render_parameters[:request_method])(
-                              unquote_splicing([Macro.var(:conn, nil) | conn_call_args])
-                            )
-                        )
-                      end
-
-                    response_body = render_parameters[:response_encoded_body]
-
-                    test_message_new =
-                      test_message
-                      |> String.replace(~r/performs(\s+a\s+request)/, "processes\\1")
-                      |> String.replace(
-                        ~r/encodes(\s+[\w\d\.]+\s+from\s+request\'s\s+body)/,
-                        "decodes\\1"
-                      )
-                      |> String.replace(
-                        ~r/decodes(\s+[\w\d\.]+\s+from\s+response\'s\s+body)/,
-                        "encodes\\1"
-                      )
-
-                    quote do
-                      test unquote(test_message_new), %{conn: conn} do
-                        unquote(render_parameters[:callback_call_expect])
-
-                        conn = unquote(conn_call)
-
-                        unquote_splicing(
-                          (render_parameters[:response_headers] || [])
-                          |> Enum.map(fn {name, value} ->
-                            quote(
-                              do:
-                                assert(
-                                  [unquote(value)] ==
-                                    Plug.Conn.get_resp_header(conn, unquote(name))
-                                )
-                            )
-                          end)
-                          |> case do
-                            [] -> []
-                            asserts -> Util.put_newlines(asserts)
-                          end
-                        )
-
-                        unquote_splicing(
-                          if response_body do
-                            [
-                              quote(
-                                do:
-                                  assert(
-                                    encoded_body =
-                                      response(
-                                        conn,
-                                        unquote(render_parameters[:response_status_code])
-                                      )
-                                  )
-                              ),
-                              quote(do: assert({:ok, encoded_body} == unquote(response_body)))
-                            ]
-                          else
-                            [
-                              quote(
-                                do:
-                                  assert(
-                                    response(
-                                      conn,
-                                      unquote(render_parameters[:response_status_code])
-                                    )
-                                  )
-                              )
-                            ]
-                          end
-                        )
-                      end
-                    end
-                end
-              end)
-
-            controller_test_base_location =
-              state
-              |> Utils.get_web_test_location()
-              |> Path.split()
-              |> List.insert_at(-1, "controllers")
-              |> Path.join()
-
-            controller_test_filename =
-              String.replace_trailing(controller_filename, ".ex", "_test.exs")
-
-            controller_test_location =
-              Path.join([
-                controller_test_base_location,
-                Macro.underscore(module_name),
-                controller_test_filename
-              ])
-
-            controller_test_module_name = "#{controller_module_name}Test"
-
-            ast =
-              quote do
-                defmodule unquote(
-                            Module.concat([
-                              controller_base_module,
-                              module_name,
-                              controller_test_module_name
-                            ])
-                          ) do
-                  unquote(quote(do: use(OpenAPIClientWeb.ConnCase)) |> Util.put_newlines())
-                  unquote(quote(do: import(Mox)) |> Util.put_newlines())
-
-                  unquote(
-                    quote(do: @behaviour_module(unquote(behaviour_mock_module)))
-                    |> Util.put_newlines()
-                  )
-
-                  unquote(quote(do: setup(:verify_on_exit!)) |> Util.put_newlines())
-
-                  describe unquote("#{function_name}/2") do
-                    (unquote_splicing(tests_new))
-                  end
-                end
-              end
-
-            %RendererFile{
-              file
-              | ast: ast,
-                module: Module.concat([module_name, controller_test_module_name]),
-                contents: nil,
-                location: controller_test_location
-            }
-            |> then(&%RendererFile{&1 | contents: implementation.format(state, &1)})
-            |> then(&implementation.write(state, &1))
-
-          _ ->
-            :ok
-        end
-
-        route_scope =
-          quote(
-            do:
-              scope unquote("/#{function_name}") do
-                unquote_splicing(
-                  operation_config
-                  |> Keyword.get(:callback_controller_pipe_through, [])
-                  |> case do
-                    [] ->
-                      []
-
-                    [pipeline] ->
-                      [quote(do: pipe_through(unquote(pipeline))) |> Util.put_newlines()]
-
-                    pipelines ->
-                      [quote(do: pipe_through(unquote(pipelines))) |> Util.put_newlines()]
-                  end
-                )
-
-                unquote(request_method)(
-                  "/",
-                  unquote(Module.concat([controller_module_name])),
-                  unquote(function_name)
-                )
-              end
-          )
+        route_scope = implementation.render_callback_scope(state, operation)
 
         update_router_test_scope(state, fn test_scopes ->
-          module_scope_path = "/#{Macro.underscore(module_name)}"
+          module_scope_path =
+            module_name
+            |> Module.split()
+            |> Enum.map_join("/", &Macro.underscore/1)
+            |> then(&"/#{&1}")
+
           scoped_aliases = module_name |> Module.split() |> Enum.map(&String.to_atom/1)
 
           test_scopes
@@ -781,6 +425,31 @@ if Mix.env() in [:dev, :test] do
     end
 
     @impl __MODULE__
+    def callback_module(
+          state,
+          _file,
+          %Operation{module_name: module_name} = operation,
+          :controller
+        ) do
+      Module.concat([module_name, get_controller_module_name(state, operation)])
+    end
+
+    def callback_module(
+          %State{implementation: implementation} = state,
+          file,
+          operation,
+          :controller_test
+        ) do
+      state
+      |> implementation.callback_module(file, operation, :controller)
+      |> Module.split()
+      |> List.update_at(-1, &"#{&1}Test")
+      |> Module.concat()
+    end
+
+    @impl __MODULE__
+    def format(_state, %RendererFile{ast: nil} = _file), do: nil
+
     def format(_state, %RendererFile{ast: ast} = _file) do
       # All this effort just not to have parenthesis in `describe/*`, `test/*`, `pipeline/*` and `scope/*` calls
       ast
@@ -813,15 +482,50 @@ if Mix.env() in [:dev, :test] do
     end
 
     @impl __MODULE__
+    def callback_location(state, %RendererFile{module: module}, _operation, :controller) do
+      base_location =
+        state
+        |> Utils.get_web_location()
+        |> Path.split()
+        |> List.insert_at(-1, "controllers")
+        |> Path.join()
+
+      module
+      |> Module.split()
+      |> Enum.map(&Macro.underscore/1)
+      |> List.update_at(-1, &"#{&1}.ex")
+      |> then(&[base_location | &1])
+      |> Path.join()
+    end
+
+    def callback_location(state, %RendererFile{module: module}, _operation, :controller_test) do
+      base_location =
+        state
+        |> Utils.get_web_test_location()
+        |> Path.split()
+        |> List.insert_at(-1, "controllers")
+        |> Path.join()
+
+      module
+      |> Module.split()
+      |> Enum.map(&Macro.underscore/1)
+      |> List.update_at(-1, &"#{&1}.exs")
+      |> then(&[base_location | &1])
+      |> Path.join()
+    end
+
+    @impl __MODULE__
     def write(_state, %RendererFile{contents: nil} = _file), do: :ok
     def write(_state, %RendererFile{contents: ""} = _file), do: :ok
+
     def write(
           %State{
             renderer_state:
               %OpenAPI.Renderer.State{implementation: renderer_implementaion} = renderer_state
           } = _state,
           file
-        ), do: renderer_implementaion.write(renderer_state, file)
+        ),
+        do: renderer_implementaion.write(renderer_state, file)
 
     @impl __MODULE__
     def render_operation(
@@ -893,6 +597,511 @@ if Mix.env() in [:dev, :test] do
             end
           end
       end
+    end
+
+    @impl __MODULE__
+    def render_header(_state, _file) do
+      [
+        quote(do: use(ExUnit.Case, async: true)),
+        quote(do: import(Mox)) |> Util.put_newlines(),
+        quote(do: @httpoison(OpenAPIClient.HTTPoisonMock)),
+        quote(do: @client(OpenAPIClient.ClientMock)) |> Util.put_newlines(),
+        quote(do: setup(:verify_on_exit!))
+      ]
+    end
+
+    @impl __MODULE__
+    def render_callback_controller_header(
+          state,
+          %Operation{module_name: module_name, function_name: function_name} = _operation
+        ) do
+      behaviour_module = generate_module_name(state, module_name)
+
+      behaviour_mock_module =
+        behaviour_module
+        |> Module.split()
+        |> List.update_at(-1, &"#{&1}Mock")
+        |> Module.concat()
+
+      operation_profile =
+        Utils.get_config(state, :aliased_profile, state.renderer_state.profile)
+
+      web_base_module = get_web_base_module(state)
+
+      [
+        quote(do: use(unquote(web_base_module), :controller)) |> Util.put_newlines(),
+        quote(
+          do:
+            plug(OpenAPIClientWeb.Plugs.Callback,
+              implementation: unquote(behaviour_mock_module),
+              behaviour: unquote(behaviour_module),
+              function_name: unquote(function_name),
+              profile: unquote(operation_profile)
+            )
+        )
+      ]
+    end
+
+    @impl __MODULE__
+    def render_callback_controller_function(
+          _state,
+          %Operation{function_name: function_name} = _operation
+        ) do
+      quote(
+        do:
+          def unquote(function_name)(conn, _params) do
+            response_status_code =
+              OpenAPIClientWeb.Plugs.Callback.get_response_status_code(conn)
+
+            response_body = OpenAPIClientWeb.Plugs.Callback.get_response_body(conn)
+            Plug.Conn.send_resp(conn, response_status_code, response_body)
+          end
+      )
+    end
+
+    @impl __MODULE__
+    def render_callback_header(state, %Operation{module_name: module_name} = _operation) do
+      web_base_module = get_web_base_module(state)
+
+      behaviour_mock_module =
+        state
+        |> generate_module_name(module_name)
+        |> Module.split()
+        |> List.update_at(-1, &"#{&1}Mock")
+        |> Module.concat()
+
+      [
+        quote(do: use(unquote(Module.concat([web_base_module, ConnCase]))))
+        |> Util.put_newlines(),
+        quote(do: import(Mox)) |> Util.put_newlines(),
+        quote(do: @behaviour_module(unquote(behaviour_mock_module))) |> Util.put_newlines(),
+        quote(do: setup(:verify_on_exit!))
+      ]
+    end
+
+    @impl __MODULE__
+    def render_callback(
+          %State{implementation: implementation} = state,
+          %Operation{
+            request_path: request_path,
+            request_method: request_method,
+            module_name: module_name,
+            function_name: function_name
+          } = operation
+        ) do
+      operation_module = generate_module_name(state, module_name)
+
+      state
+      |> implementation.render_operation(operation)
+      |> case do
+        {:describe, _, [_describe_message, [do: {:__block__, _, tests}]]} ->
+          tests_new =
+            Enum.map(tests, fn {:test, _, [test_message, [do: test_body]]} ->
+              test_body
+              |> Macro.prewalk(%{}, fn
+                {:assert, _,
+                 [
+                   {:==, _,
+                    [
+                      function_result,
+                      {{:., _, [^operation_module, ^function_name]}, _, function_arg_values}
+                    ]}
+                 ]},
+                acc ->
+                  [{_, %GeneratorOperation{params: params}}] =
+                    :ets.lookup(:operations, {request_path, request_method})
+
+                  function_arg_names =
+                    (Enum.flat_map(
+                       params,
+                       fn
+                         %GeneratorParam{param: %Param{name: name}, static: true} ->
+                           [String.to_atom(name)]
+
+                         _param ->
+                           []
+                       end
+                     ) ++ [:opts])
+                    |> then(fn names ->
+                      if Enum.count(function_arg_values) != Enum.count(names) do
+                        List.insert_at(names, -2, :body)
+                      else
+                        names
+                      end
+                    end)
+
+                  function_args =
+                    function_arg_names
+                    |> Enum.zip(function_arg_values)
+                    |> Enum.map(fn
+                      {:opts, opts} ->
+                        variable = Macro.var(:opts, nil)
+
+                        opts
+                        |> Keyword.drop([:base_url, :client_pipeline])
+                        |> Enum.map(fn {opt_key, opt_value} ->
+                          quote(
+                            do:
+                              assert(
+                                {:ok, unquote(opt_value)} ==
+                                  Keyword.fetch(unquote(variable), unquote(opt_key))
+                              )
+                          )
+                        end)
+                        |> case do
+                          [] -> {Macro.var(:_opts, nil), []}
+                          asserts -> {variable, asserts}
+                        end
+
+                      {arg_name, arg_value} ->
+                        variable = Macro.var(arg_name, nil)
+                        {variable, [quote(do: assert(unquote(arg_value) == unquote(variable)))]}
+                    end)
+
+                  macro =
+                    quote(
+                      do:
+                        expect(@behaviour_module, unquote(function_name), fn unquote_splicing(
+                                                                               Enum.map(
+                                                                                 function_args,
+                                                                                 fn {key,
+                                                                                     _asserts} ->
+                                                                                   key
+                                                                                 end
+                                                                               )
+                                                                             ) ->
+                          unquote_splicing(
+                            Enum.flat_map(function_args, fn {_key, asserts} -> asserts end)
+                          )
+
+                          unquote(function_result)
+                        end)
+                    )
+
+                  acc_new = Map.put(acc, :callback_call_expect, macro)
+
+                  {:ok, acc_new}
+
+                {:expect, _,
+                 [
+                   {:@, _, [{:httpoison, _, _}]},
+                   :request,
+                   {:fn, _,
+                    [
+                      {:->, _,
+                       [[request_method, _, _, _, _], {:__block__, _, expect_expressions}]}
+                    ]}
+                 ]},
+                acc ->
+                  acc_new =
+                    expect_expressions
+                    |> Enum.reduce(
+                      acc,
+                      fn
+                        {:assert, _,
+                         [
+                           {:=, _,
+                            [
+                              {{:_, _, _}, query_param_value},
+                              {{:., _, [{:__aliases__, _, [:List]}, :keyfind]}, _,
+                               [
+                                 {{:., _, [Access, :get]}, _, [{:options, _, _}, :params]},
+                                 query_param_name,
+                                 0
+                               ]}
+                            ]}
+                         ]},
+                        acc ->
+                          Map.update(
+                            acc,
+                            :request_query_params,
+                            %{query_param_name => query_param_value},
+                            &Map.put(&1, query_param_name, query_param_value)
+                          )
+
+                        {:assert, _,
+                         [
+                           {:=, _,
+                            [
+                              {{:_, _, _}, header_param_value},
+                              {{:., _, [{:__aliases__, _, [:List]}, :keyfind]}, _,
+                               [
+                                 {:headers, _, _},
+                                 header_param_name,
+                                 0
+                               ]}
+                            ]}
+                         ]},
+                        acc ->
+                          Map.update(
+                            acc,
+                            :request_headers,
+                            %{header_param_name => header_param_value},
+                            &Map.put(&1, header_param_name, header_param_value)
+                          )
+
+                        {:assert, _,
+                         [
+                           {:==, _,
+                            [
+                              {:ok, request_content_type},
+                              {:with, _,
+                               [
+                                 {:<-, _,
+                                  [
+                                    _,
+                                    {{:., _,
+                                      [
+                                        {:__aliases__, _, [:List]},
+                                        :keyfind
+                                      ]}, _,
+                                     [
+                                       {:headers, _, _},
+                                       "content-type",
+                                       0
+                                     ]}
+                                  ]}
+                                 | _
+                               ]}
+                            ]}
+                         ]},
+                        acc ->
+                          Map.update(
+                            acc,
+                            :request_headers,
+                            %{"content-type" => request_content_type},
+                            &Map.put(&1, "content-type", request_content_type)
+                          )
+
+                        {:assert, _,
+                         [
+                           {:==, _,
+                            [
+                              {:ok, request_encoded_body},
+                              {{:., _, _}, [], [{:body, _, _} | []]}
+                            ]}
+                         ]},
+                        acc ->
+                          Map.put(acc, :request_encoded_body, request_encoded_body)
+
+                        {:assert, _,
+                         [
+                           {:=, _,
+                            [
+                              {:ok, {:body_encoded, _, _}},
+                              response_encoded_body
+                            ]}
+                         ]},
+                        acc ->
+                          Map.put(acc, :response_encoded_body, response_encoded_body)
+
+                        {:ok,
+                         {:%, _,
+                          [
+                            {:__aliases__, _, [:HTTPoison, :Response]},
+                            {:%{}, _, httpoison_response_args}
+                          ]}},
+                        acc ->
+                          Enum.reduce(httpoison_response_args, acc, fn
+                            {:status_code, response_status_code}, acc ->
+                              Map.put(acc, :response_status_code, response_status_code)
+
+                            {:headers, headers}, acc ->
+                              Enum.reduce(headers, acc, fn
+                                {key, value}, acc ->
+                                  key_down = String.downcase(key)
+
+                                  Map.update(
+                                    acc,
+                                    :response_headers,
+                                    %{key_down => value},
+                                    &Map.put(&1, key_down, value)
+                                  )
+                              end)
+
+                            _, acc ->
+                              acc
+                          end)
+
+                        _expression, acc ->
+                          acc
+                      end
+                    )
+                    |> Map.put(:request_method, request_method)
+
+                  {:ok, acc_new}
+
+                expression, acc ->
+                  {expression, acc}
+              end)
+              |> case do
+                {_expression, render_parameters} ->
+                  query = URI.encode_query(render_parameters[:request_query_params] || [])
+
+                  url =
+                    module_name
+                    |> Module.split()
+                    |> List.insert_at(-1, Atom.to_string(function_name))
+                    |> Enum.map_join("/", &Macro.underscore/1)
+                    |> then(&"/__test__/#{&1}")
+                    |> URI.parse()
+                    |> struct!(query: query)
+                    |> URI.to_string()
+
+                  request_body = render_parameters[:request_encoded_body]
+                  conn_call_args = [url] ++ if(request_body, do: [request_body], else: [])
+
+                  request_headers = render_parameters[:request_headers] || %{}
+
+                  conn_call =
+                    if map_size(request_headers) > 0 do
+                      request_headers
+                      |> Enum.reverse()
+                      |> Enum.reduce(Macro.var(:conn, nil), fn {name, value}, conn ->
+                        quote(
+                          do:
+                            unquote(conn)
+                            |> Plug.Conn.put_req_header(unquote(name), unquote(value))
+                        )
+                      end)
+                      |> then(fn conn ->
+                        quote(
+                          do:
+                            unquote(conn)
+                            |> unquote(render_parameters[:request_method])(
+                              unquote_splicing(conn_call_args)
+                            )
+                        )
+                      end)
+                    else
+                      quote(
+                        do:
+                          unquote(render_parameters[:request_method])(
+                            unquote_splicing([Macro.var(:conn, nil) | conn_call_args])
+                          )
+                      )
+                    end
+
+                  response_body = render_parameters[:response_encoded_body]
+
+                  test_message_new =
+                    test_message
+                    |> String.replace(~r/performs(\s+a\s+request)/, "processes\\1")
+                    |> String.replace(
+                      ~r/encodes(\s+[\w\d\.]+\s+from\s+request\'s\s+body)/,
+                      "decodes\\1"
+                    )
+                    |> String.replace(
+                      ~r/decodes(\s+[\w\d\.]+\s+from\s+response\'s\s+body)/,
+                      "encodes\\1"
+                    )
+
+                  quote do
+                    test unquote(test_message_new), %{conn: conn} do
+                      unquote(render_parameters[:callback_call_expect])
+
+                      conn = unquote(conn_call)
+
+                      unquote_splicing(
+                        (render_parameters[:response_headers] || [])
+                        |> Enum.map(fn {name, value} ->
+                          quote(
+                            do:
+                              assert(
+                                [unquote(value)] ==
+                                  Plug.Conn.get_resp_header(conn, unquote(name))
+                              )
+                          )
+                        end)
+                        |> case do
+                          [] -> []
+                          asserts -> Util.put_newlines(asserts)
+                        end
+                      )
+
+                      unquote_splicing(
+                        if response_body do
+                          [
+                            quote(
+                              do:
+                                assert(
+                                  encoded_body =
+                                    response(
+                                      conn,
+                                      unquote(render_parameters[:response_status_code])
+                                    )
+                                )
+                            ),
+                            quote(do: assert({:ok, encoded_body} == unquote(response_body)))
+                          ]
+                        else
+                          [
+                            quote(
+                              do:
+                                assert(
+                                  response(
+                                    conn,
+                                    unquote(render_parameters[:response_status_code])
+                                  )
+                                )
+                            )
+                          ]
+                        end
+                      )
+                    end
+                  end
+              end
+            end)
+
+          quote(
+            do:
+              describe unquote("#{function_name}/2") do
+                (unquote_splicing(tests_new))
+              end
+          )
+
+        _ ->
+          nil
+      end
+    end
+
+    @impl __MODULE__
+    def render_callback_scope(
+          state,
+          %Operation{
+            request_path: request_path,
+            request_method: request_method,
+            function_name: function_name
+          } = operation
+        ) do
+      [{_, %GeneratorOperation{config: operation_config}}] =
+        :ets.lookup(:operations, {request_path, request_method})
+
+      quote(
+        do:
+          scope unquote("/#{function_name}") do
+            unquote_splicing(
+              operation_config
+              |> Keyword.get(:callback_controller_pipe_through, [])
+              |> case do
+                [] ->
+                  []
+
+                [pipeline] ->
+                  [quote(do: pipe_through(unquote(pipeline))) |> Util.put_newlines()]
+
+                pipelines ->
+                  [quote(do: pipe_through(unquote(pipelines))) |> Util.put_newlines()]
+              end
+            )
+
+            unquote(request_method)(
+              "/",
+              unquote(Module.concat([get_controller_module_name(state, operation)])),
+              unquote(function_name)
+            )
+          end
+      )
     end
 
     @impl __MODULE__
@@ -1801,6 +2010,39 @@ if Mix.env() in [:dev, :test] do
           Process.put(:open_api_client_ex, Map.put(app_data, :schema_fields_agent, pid))
 
           pid
+      end
+    end
+
+    defp get_controller_module_name(_state, %Operation{function_name: function_name} = _operation) do
+      function_name
+      |> Atom.to_string()
+      |> OpenAPI.Processor.Naming.normalize_identifier(:camel)
+      |> then(&"#{&1}Controller")
+    end
+
+    defp get_web_base_module(state) do
+      state
+      |> Utils.get_config(:web_base_module)
+      |> case do
+        nil ->
+          state
+          |> Utils.get_oapi_generator_config(:base_module, "")
+          |> case do
+            "Elixir." <> _rest = module -> Module.split(module)
+            module when is_binary(module) and module != "" -> Module.split("Elixir." <> module)
+            module when is_atom(module) -> Module.split(module)
+          end
+          |> List.update_at(0, &"#{&1}Web")
+          |> Module.concat()
+
+        "Elixir." <> _rest = module ->
+          String.to_atom(module)
+
+        module when is_binary(module) and module != "" ->
+          String.to_atom("Elixir." <> module)
+
+        module when is_atom(module) ->
+          module
       end
     end
   end
