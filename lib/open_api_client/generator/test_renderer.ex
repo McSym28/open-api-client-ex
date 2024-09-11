@@ -414,6 +414,8 @@ if Mix.env() in [:dev, :test] do
           end
         end)
       end)
+
+      :ok
     end
 
     @impl __MODULE__
