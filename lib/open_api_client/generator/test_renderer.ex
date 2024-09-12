@@ -615,7 +615,12 @@ if Mix.env() in [:dev, :test] do
     @impl __MODULE__
     def render_callback_controller_header(
           state,
-          %Operation{module_name: module_name, function_name: function_name} = _operation
+          %Operation{
+            request_path: request_path,
+            request_method: request_method,
+            module_name: module_name,
+            function_name: function_name
+          } = _operation
         ) do
       behaviour_module = generate_module_name(state, module_name)
 
@@ -625,22 +630,35 @@ if Mix.env() in [:dev, :test] do
         |> List.update_at(-1, &"#{&1}Mock")
         |> Module.concat()
 
-      operation_profile =
-        Utils.get_config(state, :aliased_profile, state.renderer_state.profile)
-
       web_base_module = get_web_base_module(state)
+
+      [{_, %GeneratorOperation{config: operation_config}}] =
+        :ets.lookup(:operations, {request_path, request_method})
+
+      response_serializers_args =
+        operation_config
+        |> Keyword.get(:response_serializers_opts, [])
+        |> case do
+          [] -> [OpenAPIClient.Plugs.ResponseSerializers]
+          opts -> [OpenAPIClient.Plugs.ResponseSerializers, opts]
+        end
 
       [
         quote(do: use(unquote(web_base_module), :controller)) |> Util.put_newlines(),
         quote(
           do:
-            plug(OpenAPIClientWeb.Plugs.Callback,
+            plug(OpenAPIClient.Plugs.CallbackInitializer,
               implementation: unquote(behaviour_mock_module),
               behaviour: unquote(behaviour_module),
-              function_name: unquote(function_name),
-              profile: unquote(operation_profile)
+              function_name: unquote(function_name)
             )
-        )
+        ),
+        quote(do: plug(OpenAPIClient.Plugs.RequestTypedDecoder)),
+        quote(do: plug(OpenAPIClient.Plugs.FunctionCallDecoder)),
+        quote(do: plug(OpenAPIClient.Plugs.FunctionCall)),
+        quote(do: plug(OpenAPIClient.Plugs.FunctionResultEncoder)),
+        quote(do: plug(OpenAPIClient.Plugs.ResponseTypedEncoder)),
+        quote(do: plug(unquote_splicing(response_serializers_args)))
       ]
     end
 
@@ -649,16 +667,7 @@ if Mix.env() in [:dev, :test] do
           _state,
           %Operation{function_name: function_name} = _operation
         ) do
-      quote(
-        do:
-          def unquote(function_name)(conn, _params) do
-            response_status_code =
-              OpenAPIClientWeb.Plugs.Callback.get_response_status_code(conn)
-
-            response_body = OpenAPIClientWeb.Plugs.Callback.get_response_body(conn)
-            Plug.Conn.send_resp(conn, response_status_code, response_body)
-          end
-      )
+      quote(do: def(unquote(function_name)(conn, _params), do: Plug.Conn.send_resp(conn)))
     end
 
     @impl __MODULE__
@@ -676,7 +685,8 @@ if Mix.env() in [:dev, :test] do
         quote(do: use(unquote(Module.concat([web_base_module, ConnCase]))))
         |> Util.put_newlines(),
         quote(do: import(Mox)) |> Util.put_newlines(),
-        quote(do: @behaviour_module(unquote(behaviour_mock_module))) |> Util.put_newlines(),
+        quote(do: @behaviour_module(unquote(behaviour_mock_module))),
+        quote(do: @client(OpenAPIClientMock)) |> Util.put_newlines(),
         quote(do: setup(:verify_on_exit!))
       ]
     end
@@ -802,9 +812,9 @@ if Mix.env() in [:dev, :test] do
                       fn
                         {:assert, _,
                          [
-                           {:=, _,
+                           {:==, _,
                             [
-                              {{:_, _, _}, query_param_value},
+                              {query_param_name, query_param_value},
                               {{:., _, [{:__aliases__, _, [:List]}, :keyfind]}, _,
                                [
                                  {{:., _, [Access, :get]}, _, [{:options, _, _}, :params]},
@@ -823,9 +833,9 @@ if Mix.env() in [:dev, :test] do
 
                         {:assert, _,
                          [
-                           {:=, _,
+                           {:==, _,
                             [
-                              {{:_, _, _}, header_param_value},
+                              {header_param_name, header_param_value},
                               {{:., _, [{:__aliases__, _, [:List]}, :keyfind]}, _,
                                [
                                  {:headers, _, _},
@@ -847,24 +857,11 @@ if Mix.env() in [:dev, :test] do
                            {:==, _,
                             [
                               {:ok, request_content_type},
-                              {:with, _,
-                               [
-                                 {:<-, _,
-                                  [
-                                    _,
-                                    {{:., _,
-                                      [
-                                        {:__aliases__, _, [:List]},
-                                        :keyfind
-                                      ]}, _,
-                                     [
-                                       {:headers, _, _},
-                                       "content-type",
-                                       0
-                                     ]}
-                                  ]}
-                                 | _
-                               ]}
+                              {{:., _,
+                                [
+                                  {:__aliases__, _, [:OpenAPIClient, :Utils]},
+                                  :get_content_type
+                                ]}, _, [{:headers, _, _}]}
                             ]}
                          ]},
                         acc ->
@@ -931,6 +928,92 @@ if Mix.env() in [:dev, :test] do
                     )
                     |> Map.put(:request_method, request_method)
 
+                  {:ok, acc_new}
+
+                {:expect, _,
+                 [
+                   {:@, _,
+                    [
+                      {:client, _, _}
+                    ]},
+                   :operation,
+                   expect_body
+                 ]},
+                acc ->
+                  custom_params_assertions_callback =
+                    expect_body
+                    |> case do
+                      {:&, _,
+                       [
+                         {:/, _,
+                          [
+                            {{:., _, [{:__aliases__, _, [:OpenAPIClient]}, :operation]}, _, _},
+                            2
+                          ]}
+                       ]} ->
+                        []
+
+                      {:fn, _,
+                       [
+                         {:->, _, [[_, _], {:__block__, _, expect_expressions}]}
+                       ]} ->
+                        Enum.flat_map(
+                          expect_expressions,
+                          fn
+                            {:assert, _,
+                             [
+                               {:==, _,
+                                [
+                                  {:ok, _},
+                                  {{:., _, [{:__aliases__, _, [:Keyword]}, :fetch]}, _,
+                                   [
+                                     {{:., _,
+                                       [
+                                         {:state, _, _},
+                                         key
+                                       ]}, _, _},
+                                     :required_new_param
+                                   ]}
+                                ]}
+                             ]} = expression
+                            when key in [:function_args, :function_opts] ->
+                              [expression]
+
+                            _expression ->
+                              []
+                          end
+                        )
+                    end
+                    |> case do
+                      [] ->
+                        quote(do: &OpenAPIClient.callback/1)
+
+                      asserts ->
+                        {:fn, [],
+                         [
+                           {:->, [],
+                            [
+                              [Macro.var(:conn, nil)],
+                              quote do
+                                state = OpenAPIClient.get_state(conn)
+                                unquote_splicing(asserts)
+                                OpenAPIClient.callback(conn)
+                              end
+                            ]}
+                         ]}
+                    end
+
+                  macro =
+                    quote(
+                      do:
+                        expect(
+                          @client,
+                          :callback,
+                          unquote(custom_params_assertions_callback)
+                        )
+                    )
+
+                  acc_new = Map.put(acc, :client_call_expect, macro)
                   {:ok, acc_new}
 
                 expression, acc ->
@@ -1000,6 +1083,8 @@ if Mix.env() in [:dev, :test] do
 
                   quote do
                     test unquote(test_message_new), %{conn: conn} do
+                      unquote(render_parameters[:client_call_expect])
+
                       unquote(render_parameters[:callback_call_expect])
 
                       conn = unquote(conn_call)

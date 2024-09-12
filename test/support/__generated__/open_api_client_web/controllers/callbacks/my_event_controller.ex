@@ -1,16 +1,20 @@
 defmodule OpenAPIClientWeb.Callbacks.MyEventController do
   use OpenAPIClientWeb, :controller
 
-  plug(OpenAPIClientWeb.Plugs.Callback,
+  plug(OpenAPIClient.Plugs.CallbackInitializer,
     implementation: OpenAPIClient.CallbacksMock,
     behaviour: OpenAPIClient.Callbacks,
-    function_name: :my_event,
-    profile: :test
+    function_name: :my_event
   )
 
+  plug(OpenAPIClient.Plugs.RequestTypedDecoder)
+  plug(OpenAPIClient.Plugs.FunctionCallDecoder)
+  plug(OpenAPIClient.Plugs.FunctionCall)
+  plug(OpenAPIClient.Plugs.FunctionResultEncoder)
+  plug(OpenAPIClient.Plugs.ResponseTypedEncoder)
+  plug(OpenAPIClient.Plugs.ResponseSerializers, serializers: [json: [json_encoder: Jason]])
+
   def my_event(conn, _params) do
-    response_status_code = OpenAPIClientWeb.Plugs.Callback.get_response_status_code(conn)
-    response_body = OpenAPIClientWeb.Plugs.Callback.get_response_body(conn)
-    Plug.Conn.send_resp(conn, response_status_code, response_body)
+    Plug.Conn.send_resp(conn)
   end
 end

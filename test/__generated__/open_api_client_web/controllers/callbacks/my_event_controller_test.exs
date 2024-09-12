@@ -4,12 +4,15 @@ defmodule OpenAPIClientWeb.Callbacks.MyEventControllerTest do
   import Mox
 
   @behaviour_module OpenAPIClient.CallbacksMock
+  @client OpenAPIClientMock
 
   setup :verify_on_exit!
 
   describe "my_event/2" do
     test "[200] processes a request, decodes CallbackRequest from request's body and encodes CallbackResponse from response's body",
          %{conn: conn} do
+      expect(@client, :callback, &OpenAPIClient.callback/1)
+
       expect(@behaviour_module, :my_event, fn x_required_callback_query,
                                               x_required_callback_header,
                                               body,
