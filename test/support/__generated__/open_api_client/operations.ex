@@ -52,7 +52,7 @@ defmodule OpenAPIClient.Operations do
           | {:optional_new_param_with_default, String.t()}
           | {:base_url, String.t() | URI.t()}
           | {:pipeline, OpenAPIClient.pipeline()}
-        ]) :: {:ok, OpenAPIClient.TestSchema.t()} | {:error, OpenAPIClient.Client.Error.t()}
+        ]) :: {:ok, OpenAPIClient.TestSchema.t()} | {:error, OpenAPIClient.Error.t()}
   def get_test(path_param, required_header, required_new_param, opts \\ []) do
     pipeline = opts[:pipeline] || OpenAPIClient.Utils.get_config(:test, :operation_pipeline)
     base_url = opts[:base_url] || @base_url
@@ -132,7 +132,7 @@ defmodule OpenAPIClient.Operations do
              :config_strict_enum_1 | :config_strict_enum_2 | :config_strict_enum_3}
           | {:base_url, String.t() | URI.t()}
           | {:pipeline, OpenAPIClient.pipeline()}
-        ]) :: :ok | :error | {:error, OpenAPIClient.Client.Error.t()}
+        ]) :: :ok | :error | {:error, OpenAPIClient.Error.t()}
   def set_test(body, opts \\ []) do
     pipeline = opts[:pipeline] || OpenAPIClient.Utils.get_config(:test, :operation_pipeline)
     base_url = opts[:base_url] || @base_url

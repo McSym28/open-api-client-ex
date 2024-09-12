@@ -12,20 +12,9 @@ defmodule OpenAPIClient.Utils do
     |> Enum.member?(behaviour)
   end
 
-  @spec get_config(OpenAPIClient.Client.Operation.t() | Plug.Conn.t() | atom(), atom(), term()) ::
-          term()
-  @spec get_config(OpenAPIClient.Client.Operation.t() | Plug.Conn.t() | atom(), atom()) :: term()
+  @spec get_config(Plug.Conn.t() | atom(), atom(), term()) :: term()
+  @spec get_config(Plug.Conn.t() | atom(), atom()) :: term()
   def get_config(operation_or_profile, key, default \\ nil)
-
-  def get_config(
-        %OpenAPIClient.Client.Operation{assigns: %{private: private_assigns}},
-        key,
-        default
-      ) do
-    private_assigns
-    |> Map.get(:__profile__)
-    |> get_config(key, default)
-  end
 
   def get_config(%Plug.Conn{} = conn, key, default) do
     conn

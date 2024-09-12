@@ -32,13 +32,13 @@ if Mix.env() in [:dev, :test] do
             common_pattern() | String.t() | list(operation_param_name_pattern())
     @type operation_param_location_pattern ::
             common_pattern()
-            | OpenAPIClient.Client.Operation.common_parameter_location()
+            | OpenAPIClient.State.common_parameter_location()
             | list(operation_param_location_pattern())
 
     @type operation_params_config :: [
             {any_pattern() | {operation_param_name_pattern(), operation_param_location_pattern()},
              operation_param_config()}
-            | {{String.t(), OpenAPIClient.Client.Operation.custom_parameter_location()},
+            | {{String.t(), OpenAPIClient.State.custom_parameter_location()},
                operation_custom_param_config()}
           ]
 

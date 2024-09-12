@@ -108,10 +108,10 @@ if Mix.env() in [:dev, :test] do
               String.t()
               | nonempty_list(non_neg_integer())
               | {:parameter, atom(), String.t()}
-              | {:request_body, OpenAPIClient.Client.Operation.content_type()}
-              | {:response_body, OpenAPIClient.Client.Operation.response_status_code(),
-                 OpenAPIClient.Client.Operation.content_type()}
-              | {OpenAPIClient.Client.Operation.url(), OpenAPIClient.Client.Operation.method()}
+              | {:request_body, OpenAPIClient.State.content_type()}
+              | {:response_body, OpenAPIClient.State.response_status_code(),
+                 OpenAPIClient.State.content_type()}
+              | {OpenAPIClient.State.url(), OpenAPIClient.State.method()}
             )
 
     @type callback_module_type :: :controller | :controller_test
@@ -167,7 +167,7 @@ if Mix.env() in [:dev, :test] do
                 type ::
                   OpenAPIClient.Schema.type() | GeneratorSchema.t() | OpenAPI.Processor.Type.t(),
                 path :: type_example_path()
-              ) :: {:ok, term()} | {:error, OpenAPIClient.Client.Error.t()}
+              ) :: {:ok, term()} | {:error, OpenAPIClient.Error.t()}
 
     @optional_callbacks render: 2,
                         render_header: 2,

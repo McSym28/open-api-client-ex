@@ -1,6 +1,5 @@
 defmodule OpenAPIClient.Client.TypedDecoder do
-  alias OpenAPIClient.Utils
-  alias OpenAPIClient.Client.Error
+  alias OpenAPIClient.{Error, Utils}
 
   @type result :: {:ok, term()} | {:error, Error.t()}
   @type path ::
@@ -8,10 +7,10 @@ defmodule OpenAPIClient.Client.TypedDecoder do
             String.t()
             | nonempty_list(non_neg_integer())
             | {:parameter, atom(), String.t()}
-            | {:request_body, OpenAPIClient.Client.Operation.content_type() | nil}
-            | {:response_body, OpenAPIClient.Client.Operation.response_status_code(),
-               OpenAPIClient.Client.Operation.content_type() | nil}
-            | {OpenAPIClient.Client.Operation.url(), OpenAPIClient.Client.Operation.method()}
+            | {:request_body, OpenAPIClient.State.content_type() | nil}
+            | {:response_body, OpenAPIClient.State.response_status_code(),
+               OpenAPIClient.State.content_type() | nil}
+            | {OpenAPIClient.State.url(), OpenAPIClient.State.method()}
           )
 
   @callback decode(

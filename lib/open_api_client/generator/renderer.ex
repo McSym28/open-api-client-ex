@@ -612,7 +612,7 @@ if Mix.env() in [:dev, :test] do
         |> List.keystore(
           598,
           0,
-          {598, %{"application/json" => {:const, quote(do: OpenAPIClient.Client.Error.t())}}}
+          {598, %{"application/json" => {:const, quote(do: OpenAPIClient.Error.t())}}}
         )
         |> Enum.map_reduce({false, false}, fn
           {status_code, schemas} = response, {_atom_success, atom_failure}

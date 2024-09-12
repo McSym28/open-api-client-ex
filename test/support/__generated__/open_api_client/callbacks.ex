@@ -24,8 +24,7 @@ defmodule OpenAPIClient.Callbacks do
   """
   @callback my_event(String.t(), String.t(), OpenAPIClient.CallbackRequest.t(), [
               {:x_optional_callback_query, String.t()} | {:x_optional_callback_header, String.t()}
-            ]) ::
-              {:ok, OpenAPIClient.CallbackResponse.t()} | {:error, OpenAPIClient.Client.Error.t()}
+            ]) :: {:ok, OpenAPIClient.CallbackResponse.t()} | {:error, OpenAPIClient.Error.t()}
 
   @optional_callbacks my_event: 4
 
