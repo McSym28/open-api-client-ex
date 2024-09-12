@@ -47,7 +47,8 @@ defmodule OpenAPIClient.Callbacks do
       ],
       request_types: [{"application/json", {OpenAPIClient.CallbackRequest, :t}}],
       response_types: [{200, [{"application/json", {OpenAPIClient.CallbackResponse, :t}}]}],
-      request_parameter_args: [:x_required_callback_query, :x_required_callback_header]
+      request_parameter_args: [:x_required_callback_query, :x_required_callback_header],
+      profile: :test
     ]
   end
 end

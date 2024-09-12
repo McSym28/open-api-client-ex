@@ -503,15 +503,16 @@ if Mix.env() in [:dev, :test] do
                    :request_parameter_types,
                    :request_types,
                    :response_types,
-                   :response_parameter_types
+                   :response_parameter_types,
+                   :profile
                  ] ->
               function_acc_new = [expression | function_acc]
               {expression, function_acc_new}
 
-            {:__args__, value} = expression, function_acc ->
+            {:function_args, value} = expression, function_acc ->
               value
-              |> Keyword.drop([:body])
               |> Keyword.keys()
+              |> Kernel.--([:body])
               |> case do
                 [] ->
                   {expression, function_acc}
