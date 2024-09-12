@@ -20,7 +20,6 @@ config :logger, :console, format: "$time [$level] $message\n"
 config :open_api_client_ex,
   "$base": [
     client_pipeline: OpenAPIClient.Client.BasicHTTPoisonPipeline,
-    callback_pipeline: OpenAPIClient.Client.BasicCallbackPipeline,
     decoders: [
       {"application/json", {Jason, :decode, []}}
     ],
