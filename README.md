@@ -15,7 +15,7 @@ AJ Foster](https://github.com/aj-foster))
 - Added docstring generation for path and header parameters. Docstring now has two blocks `## Arguments` for required parameters without defaults and `## Options` for all the other parameters
 - Added `@enforce_keys` for required schema fields
 - "Fixed" processing of `2XX` response status codes and provided a way to set "successiveness" for `default` response status codes
-- Added client module and pipeline (based on [pluggable](https://hex.pm/packages/pluggable)) to use generated operation. At this point library provides only a naive pipeline implementation for [httpoison](https://hex.pm/packages/httpoison) HTTP client. Library users can implement their own use it as a default one. Additionally library provides a way to configure decoders and encoders for different `Content-Type`s
+- Added client module and pipeline (based on `Plug`) to use generated operation. At this point library provides only a naive pipeline implementation for [httpoison](https://hex.pm/packages/httpoison) HTTP client. Library users can implement their own use it as a default one. Additionally library provides a way to configure decoders and encoders for different `Content-Type`s
 - Generated operation tests based on spec examples
 
 ## TODOs

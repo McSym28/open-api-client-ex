@@ -36,7 +36,6 @@ defmodule OpenAPIClient.MixProject do
   # Type `mix help deps` for examples and options.
   defp deps do
     [
-      {:pluggable, "~> 1.1"},
       {:plug, "~> 1.16"},
       {:oapi_generator,
        github: "McSym28/open-api-generator",
