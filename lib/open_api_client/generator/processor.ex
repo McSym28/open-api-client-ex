@@ -604,7 +604,7 @@ if Mix.env() in [:dev, :test] do
               end)
             else
               typed_decoder =
-                Utils.get_config(state, :typed_decoder, OpenAPIClient.Client.TypedDecoder)
+                Utils.get_config(state, :typed_decoder, OpenAPIClient.TypedDecoder)
 
               typed_decoder.decode(default, {:enum, enum_options_new}, path, typed_decoder)
             end
@@ -665,7 +665,7 @@ if Mix.env() in [:dev, :test] do
         case schema_spec do
           %SchemaSpec{default: default} when not is_nil(default) ->
             typed_decoder =
-              Utils.get_config(state, :typed_decoder, OpenAPIClient.Client.TypedDecoder)
+              Utils.get_config(state, :typed_decoder, OpenAPIClient.TypedDecoder)
 
             {:ok, default_new} = typed_decoder.decode(default, type, path, typed_decoder)
             default_new
@@ -703,7 +703,7 @@ if Mix.env() in [:dev, :test] do
         {:ok,
          Keyword.get_lazy(config, :value, fn ->
            typed_decoder =
-             Utils.get_config(state, :typed_decoder, OpenAPIClient.Client.TypedDecoder)
+             Utils.get_config(state, :typed_decoder, OpenAPIClient.TypedDecoder)
 
            case typed_decoder.decode(value, enum_type, path, typed_decoder) do
              {:ok, value_decoded} when is_atom(value_decoded) -> value_decoded

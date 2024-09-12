@@ -1209,7 +1209,7 @@ if Mix.env() in [:dev, :test] do
         Utils.get_config(
           state,
           :typed_decoder,
-          OpenAPIClient.Client.TypedDecoder
+          OpenAPIClient.TypedDecoder
         )
 
       path = [{request_path, request_method}]
@@ -1665,7 +1665,7 @@ if Mix.env() in [:dev, :test] do
            path
          )
          when not is_nil(value) and not is_tuple(value) do
-      typed_encoder = Utils.get_config(state, :typed_encoder, OpenAPIClient.Client.TypedEncoder)
+      typed_encoder = Utils.get_config(state, :typed_encoder, OpenAPIClient.TypedEncoder)
       type_new = Utils.schema_type_to_readable_type(state, type, schema_type)
       {:ok, value_encoded} = typed_encoder.encode(value, type_new, path, typed_encoder)
       value_encoded
@@ -1706,7 +1706,7 @@ if Mix.env() in [:dev, :test] do
         ) do
       ExampleSchemaFieldsAgent.update(ensure_schema_fields_agent(), generator_schema)
 
-      typed_decoder = Utils.get_config(state, :typed_decoder, OpenAPIClient.Client.TypedDecoder)
+      typed_decoder = Utils.get_config(state, :typed_decoder, OpenAPIClient.TypedDecoder)
 
       case typed_decoder.decode(value, {@example_schema, type}, path, @example_typed_decoder) do
         {:ok, decoded_value} when output_format == :struct ->
@@ -1765,7 +1765,7 @@ if Mix.env() in [:dev, :test] do
       else
         _ ->
           typed_decoder =
-            Utils.get_config(state, :typed_decoder, OpenAPIClient.Client.TypedDecoder)
+            Utils.get_config(state, :typed_decoder, OpenAPIClient.TypedDecoder)
 
           typed_decoder.decode(value, {module, type}, path, @example_typed_decoder)
       end
@@ -1825,7 +1825,7 @@ if Mix.env() in [:dev, :test] do
     end
 
     def decode_example(state, value, type, path) do
-      typed_decoder = Utils.get_config(state, :typed_decoder, OpenAPIClient.Client.TypedDecoder)
+      typed_decoder = Utils.get_config(state, :typed_decoder, OpenAPIClient.TypedDecoder)
       typed_decoder.decode(value, type, path, @example_typed_decoder)
     end
 
@@ -2056,7 +2056,7 @@ if Mix.env() in [:dev, :test] do
           {:ok, pid} = ExampleSchemaFieldsAgent.start_link()
 
           Mox.defmock(@example_schema, for: OpenAPIClient.Schema)
-          Mox.defmock(@example_typed_decoder, for: OpenAPIClient.Client.TypedDecoder)
+          Mox.defmock(@example_typed_decoder, for: OpenAPIClient.TypedDecoder)
 
           stub(@example_schema, :__fields__, fn _type ->
             %GeneratorSchema{schema_fields: schema_fields} = ExampleSchemaFieldsAgent.get(pid)

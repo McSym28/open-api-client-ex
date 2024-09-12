@@ -1,4 +1,4 @@
-defmodule OpenAPIClient.Client.TypedDecoder do
+defmodule OpenAPIClient.TypedDecoder do
   alias OpenAPIClient.{Error, Utils}
 
   @type result :: {:ok, term()} | {:error, Error.t()}

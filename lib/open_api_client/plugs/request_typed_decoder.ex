@@ -4,8 +4,8 @@ defmodule OpenAPIClient.Plugs.RequestTypedDecoder do
   using types provided by the `oapi_generator` library
 
   Accepts the following `opts`:
-  * `:typed_decoder` - Module that implements `OpenAPIClient.Client.TypedDecoder` behaviour.
-  Default value obtained through a call to `OpenAPIClient.Utils.get_config(conn, :typed_decoder, OpenAPIClient.Client.TypedDecoder)`
+  * `:typed_decoder` - Module that implements `OpenAPIClient.TypedDecoder` behaviour.
+  Default value obtained through a call to `OpenAPIClient.Utils.get_config(conn, :typed_decoder, OpenAPIClient.TypedDecoder)`
   * `:body_reader` - MFA to read `:body_params`. By default the `OpenAPIClient.State.read_body_params/2` is
   being called, which currently removes the `"_json"` for JSON parser (and possible `"_body"` key).
 
@@ -42,7 +42,7 @@ defmodule OpenAPIClient.Plugs.RequestTypedDecoder do
         OpenAPIClient.Utils.get_config(
           conn,
           :typed_decoder,
-          OpenAPIClient.Client.TypedDecoder
+          OpenAPIClient.TypedDecoder
         )
       end)
 

@@ -5,7 +5,7 @@ defmodule OpenAPIClient.Plugs.ResponseTypedEncoder do
   The response type is selected based on the `:status` and State's `:response_types`
 
   Accepts the following `opts`:
-  * `:typed_encoder` - Module that implements `OpenAPIClient.Client.TypedEncoder` behaviour. Default value obtained through a call to `OpenAPIClient.Utils.get_config(conn, :typed_encoder, OpenAPIClient.Client.TypedEncoder)`
+  * `:typed_encoder` - Module that implements `OpenAPIClient.TypedEncoder` behaviour. Default value obtained through a call to `OpenAPIClient.Utils.get_config(conn, :typed_encoder, OpenAPIClient.TypedEncoder)`
 
   """
 
@@ -32,7 +32,7 @@ defmodule OpenAPIClient.Plugs.ResponseTypedEncoder do
           OpenAPIClient.Utils.get_config(
             conn,
             :typed_encoder,
-            OpenAPIClient.Client.TypedEncoder
+            OpenAPIClient.TypedEncoder
           )
         end)
 

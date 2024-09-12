@@ -5,7 +5,7 @@ defmodule OpenAPIClient.Plugs.ResponseTypedDecoder do
   The response type is selected based on the `:status` and State's `:response_types`
 
   Accepts the following `opts`:
-  * `:typed_decoder` - Module that implements `OpenAPIClient.Client.TypedDecoder` behaviour. Default value obtained through a call to `OpenAPIClient.Utils.get_config(conn, :typed_decoder, OpenAPIClient.Client.TypedDecoder)`
+  * `:typed_decoder` - Module that implements `OpenAPIClient.TypedDecoder` behaviour. Default value obtained through a call to `OpenAPIClient.Utils.get_config(conn, :typed_decoder, OpenAPIClient.TypedDecoder)`
 
   """
 
@@ -32,7 +32,7 @@ defmodule OpenAPIClient.Plugs.ResponseTypedDecoder do
           OpenAPIClient.Utils.get_config(
             conn,
             :typed_decoder,
-            OpenAPIClient.Client.TypedDecoder
+            OpenAPIClient.TypedDecoder
           )
         end)
 
