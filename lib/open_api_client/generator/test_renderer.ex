@@ -39,6 +39,10 @@ if Mix.env() in [:dev, :test] do
           to: OpenAPIClient.Generator.TestRenderer
 
         @impl OpenAPIClient.Generator.TestRenderer
+        defdelegate render_callback_controller_spec(state, operation),
+          to: OpenAPIClient.Generator.TestRenderer
+
+        @impl OpenAPIClient.Generator.TestRenderer
         defdelegate render_callback_controller_function(state, operation),
           to: OpenAPIClient.Generator.TestRenderer
 
@@ -77,6 +81,7 @@ if Mix.env() in [:dev, :test] do
                        render_operation: 2,
                        render_operation_test: 4,
                        render_callback_controller_header: 2,
+                       render_callback_controller_spec: 2,
                        render_callback_controller_function: 2,
                        callback_module: 4,
                        callback_location: 4,
@@ -134,7 +139,12 @@ if Mix.env() in [:dev, :test] do
               ) :: Macro.t()
     @callback render_callback_controller_header(state :: State.t(), operation :: Operation.t()) ::
                 Macro.t()
-    @callback render_callback_controller_function(state :: State.t(), operation :: Operation.t()) ::
+    @callback render_callback_controller_spec(state :: State.t(), operation :: Operation.t()) ::
+                Macro.t()
+    @callback render_callback_controller_function(
+                state :: State.t(),
+                operation :: Operation.t()
+              ) ::
                 Macro.t()
     @callback callback_module(
                 state :: State.t(),
@@ -178,6 +188,7 @@ if Mix.env() in [:dev, :test] do
                         render_operation: 2,
                         render_operation_test: 4,
                         render_callback_controller_header: 2,
+                        render_callback_controller_spec: 2,
                         render_callback_controller_function: 2,
                         callback_module: 4,
                         callback_location: 4,
@@ -275,12 +286,14 @@ if Mix.env() in [:dev, :test] do
               expressions -> Util.put_newlines(expressions)
             end
 
+          spec = implementation.render_callback_controller_spec(state, operation)
           function = implementation.render_callback_controller_function(state, operation)
 
           ast =
             quote do
               defmodule unquote(Module.concat([get_web_base_module(state), module])) do
                 unquote_splicing(header)
+                unquote(spec)
                 unquote(function)
               end
             end
@@ -660,6 +673,20 @@ if Mix.env() in [:dev, :test] do
         quote(do: plug(OpenAPIClient.Plugs.ResponseTypedEncoder)),
         quote(do: plug(unquote_splicing(response_serializers_args)))
       ]
+    end
+
+    @impl __MODULE__
+    def render_callback_controller_spec(
+          _state,
+          %Operation{function_name: function_name} = _operation
+        ) do
+      quote(
+        do:
+          @spec(
+            unquote(function_name)(conn :: Plug.Conn.t(), params :: Plug.Conn.params()) ::
+              Plug.Conn.t()
+          )
+      )
     end
 
     @impl __MODULE__

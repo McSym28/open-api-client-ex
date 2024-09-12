@@ -14,6 +14,7 @@ defmodule OpenAPIClientWeb.Callbacks.MyEventController do
   plug(OpenAPIClient.Plugs.ResponseTypedEncoder)
   plug(OpenAPIClient.Plugs.ResponseSerializers, serializers: [json: [json_encoder: Jason]])
 
+  @spec my_event(conn :: Plug.Conn.t(), params :: Plug.Conn.params()) :: Plug.Conn.t()
   def my_event(conn, _params) do
     Plug.Conn.send_resp(conn)
   end
