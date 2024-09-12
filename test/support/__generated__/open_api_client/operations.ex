@@ -32,7 +32,8 @@ defmodule OpenAPIClient.Operations do
     * `optional_new_param`: Optional additional parameter
     * `optional_new_param_with_default`: Optional additional parameter. Default value is `"new_param_value"`
     * `base_url`: Request's base URL. Default value is taken from `@base_url`
-    * `client_pipeline`: Client pipeline for making a request. Default value obtained through a call to `OpenAPIClient.Utils.get_config(__operation__, :client_pipeline)}
+    * `pipeline`: Operation pipeline for making a request. Default value obtained through a call to `OpenAPIClient.Utils.get_config(:test, :operation_pipeline)}
+    * `client`: Module that implements `OpenAPIClient` behaviour. Default value obtained through a call to `OpenAPIClient.Utils.get_config(:test, :client, OpenAPIClient)`
 
   """
   @spec get_test(String.t(), String.t(), String.t(), [
@@ -50,61 +51,61 @@ defmodule OpenAPIClient.Operations do
           | {:optional_new_param, String.t()}
           | {:optional_new_param_with_default, String.t()}
           | {:base_url, String.t() | URI.t()}
-          | {:client_pipeline, OpenAPIClient.Client.pipeline()}
+          | {:pipeline, OpenAPIClient.pipeline()}
         ]) :: {:ok, OpenAPIClient.TestSchema.t()} | {:error, OpenAPIClient.Client.Error.t()}
   def get_test(path_param, required_header, required_new_param, opts \\ []) do
-    client_pipeline = Keyword.get(opts, :client_pipeline)
+    pipeline = opts[:pipeline] || OpenAPIClient.Utils.get_config(:test, :operation_pipeline)
     base_url = opts[:base_url] || @base_url
-    client = OpenAPIClient.Utils.get_config(:test, :client, OpenAPIClient.Client)
+    client = opts[:client] || OpenAPIClient.Utils.get_config(:test, :client, OpenAPIClient)
 
-    %OpenAPIClient.Client.Operation{
-      request_base_url: base_url,
-      request_path: "/test/{path_param}",
-      request_method: :get,
-      request_parameter_types: [
-        {{:path_param, :path}, {"path-param", {:string, :generic}}},
-        {{:date_query_with_default, :query},
-         {"date_query_with_default", {:string, :date}, ~D[2022-12-15]}},
-        {{:datetime_query, :query}, {"datetime_query", {:string, :date_time}}},
-        {{:optional_query, :query}, {"optional_query", {:string, :generic}}},
-        {{:x_enum_query, :query},
-         {"X-Enum-Query",
-          {:enum, [{:enum_1, "ENUM_1"}, {:enum_2, "ENUM_2"}, {:enum_3, "ENUM_3"}, :not_strict]}}},
-        {{:x_enum_query_with_default, :query},
-         {"X-Enum-Query-With-Default",
-          {:enum, [{:enum_7, "ENUM_7"}, {:enum_8, "ENUM_8"}, {:enum_9, "ENUM_9"}, :not_strict]},
-          :enum_9}},
-        {{:x_integer_non_standard_format_query, :query},
-         {"X-Integer-Non-Standard-Format-Query", {:integer, "int69"}}},
-        {{:x_integer_standard_format_query, :query},
-         {"X-Integer-Standard-Format-Query", {:integer, :int32}}},
-        {{:x_static_flag, :query}, {"X-Static-Flag", {:enum, [true, :not_strict]}, true}},
-        {{:date_header_with_default, :header},
-         {"X-Date-Header-With-Default", {:string, :date}, ~D[2024-01-23]}},
-        {{:optional_header, :header},
-         {"X-Optional-Header", {:string, :generic},
-          fn -> Application.get_env(:open_api_client_ex, :required_header) end}},
-        {{:optional_header_new_param, :custom},
-         {"optional_header_new_param", {:string, :generic}}},
-        {{:required_header, :header}, {"X-Required-Header", {:string, :generic}}},
-        {{:optional_new_param, :custom}, {"optional_new_param", {:string, :generic}}},
-        {{:optional_new_param_with_default, :custom},
-         {"optional_new_param_with_default", {:string, :generic}, "new_param_value"}},
-        {{:required_new_param, :custom}, {"required_new_param", {:string, :generic}}}
-      ],
-      response_types: [{200, [{"application/json", {OpenAPIClient.TestSchema, :t}}]}]
-    }
-    |> OpenAPIClient.Client.Operation.put_private(
-      __args__: [
-        path_param: path_param,
-        required_header: required_header,
-        required_new_param: required_new_param
-      ],
-      __call__: {__MODULE__, :get_test},
-      __opts__: opts,
-      __profile__: :test
+    client.operation(
+      %OpenAPIClient.State{
+        request_base_url: base_url,
+        request_path: "/test/{path_param}",
+        method: :get,
+        request_parameter_types: [
+          {{:path_param, :path}, {"path-param", {:string, :generic}}},
+          {{:date_query_with_default, :query},
+           {"date_query_with_default", {:string, :date}, ~D[2022-12-15]}},
+          {{:datetime_query, :query}, {"datetime_query", {:string, :date_time}}},
+          {{:optional_query, :query}, {"optional_query", {:string, :generic}}},
+          {{:x_enum_query, :query},
+           {"X-Enum-Query",
+            {:enum, [{:enum_1, "ENUM_1"}, {:enum_2, "ENUM_2"}, {:enum_3, "ENUM_3"}, :not_strict]}}},
+          {{:x_enum_query_with_default, :query},
+           {"X-Enum-Query-With-Default",
+            {:enum, [{:enum_7, "ENUM_7"}, {:enum_8, "ENUM_8"}, {:enum_9, "ENUM_9"}, :not_strict]},
+            :enum_9}},
+          {{:x_integer_non_standard_format_query, :query},
+           {"X-Integer-Non-Standard-Format-Query", {:integer, "int69"}}},
+          {{:x_integer_standard_format_query, :query},
+           {"X-Integer-Standard-Format-Query", {:integer, :int32}}},
+          {{:x_static_flag, :query}, {"X-Static-Flag", {:enum, [true, :not_strict]}, true}},
+          {{:date_header_with_default, :header},
+           {"X-Date-Header-With-Default", {:string, :date}, ~D[2024-01-23]}},
+          {{:optional_header, :header},
+           {"X-Optional-Header", {:string, :generic},
+            fn -> Application.get_env(:open_api_client_ex, :required_header) end}},
+          {{:optional_header_new_param, :custom},
+           {"optional_header_new_param", {:string, :generic}}},
+          {{:required_header, :header}, {"X-Required-Header", {:string, :generic}}},
+          {{:optional_new_param, :custom}, {"optional_new_param", {:string, :generic}}},
+          {{:optional_new_param_with_default, :custom},
+           {"optional_new_param_with_default", {:string, :generic}, "new_param_value"}},
+          {{:required_new_param, :custom}, {"required_new_param", {:string, :generic}}}
+        ],
+        response_types: [{200, [{"application/json", {OpenAPIClient.TestSchema, :t}}]}],
+        function_args: [
+          path_param: path_param,
+          required_header: required_header,
+          required_new_param: required_new_param
+        ],
+        function_call: {__MODULE__, :get_test},
+        function_opts: opts,
+        profile: :test
+      },
+      pipeline
     )
-    |> client.perform(client_pipeline)
   end
 
   @doc """
@@ -121,7 +122,8 @@ defmodule OpenAPIClient.Operations do
     * `string_header`: ["X-String-Header"] String header parameter
     * `x_config_strict_enum_header`: ["X-Config-Strict-Enum-Header"] Enum header parameter that has it's "strcictness" set through config
     * `base_url`: Request's base URL. Default value is taken from `@base_url`
-    * `client_pipeline`: Client pipeline for making a request. Default value obtained through a call to `OpenAPIClient.Utils.get_config(__operation__, :client_pipeline)}
+    * `pipeline`: Operation pipeline for making a request. Default value obtained through a call to `OpenAPIClient.Utils.get_config(:test, :operation_pipeline)}
+    * `client`: Module that implements `OpenAPIClient` behaviour. Default value obtained through a call to `OpenAPIClient.Utils.get_config(:test, :client, OpenAPIClient)`
 
   """
   @spec set_test(OpenAPIClient.TestRequestSchema.t(), [
@@ -129,36 +131,35 @@ defmodule OpenAPIClient.Operations do
           | {:x_config_strict_enum_header,
              :config_strict_enum_1 | :config_strict_enum_2 | :config_strict_enum_3}
           | {:base_url, String.t() | URI.t()}
-          | {:client_pipeline, OpenAPIClient.Client.pipeline()}
+          | {:pipeline, OpenAPIClient.pipeline()}
         ]) :: :ok | :error | {:error, OpenAPIClient.Client.Error.t()}
   def set_test(body, opts \\ []) do
-    client_pipeline = Keyword.get(opts, :client_pipeline)
+    pipeline = opts[:pipeline] || OpenAPIClient.Utils.get_config(:test, :operation_pipeline)
     base_url = opts[:base_url] || @base_url
-    client = OpenAPIClient.Utils.get_config(:test, :client, OpenAPIClient.Client)
+    client = opts[:client] || OpenAPIClient.Utils.get_config(:test, :client, OpenAPIClient)
 
-    %OpenAPIClient.Client.Operation{
-      request_base_url: base_url,
-      request_path: "/test",
-      request_body: body,
-      request_method: :post,
-      request_parameter_types: [
-        {{:string_header, :header}, {"X-String-Header", {:string, :generic}}},
-        {{:x_config_strict_enum_header, :header},
-         {"X-Config-Strict-Enum-Header",
-          {:enum,
-           config_strict_enum_1: "CONFIG_STRICT_ENUM_1",
-           config_strict_enum_2: "CONFIG_STRICT_ENUM_2",
-           config_strict_enum_3: "CONFIG_STRICT_ENUM_3"}}}
-      ],
-      request_types: [{"application/json", {OpenAPIClient.TestRequestSchema, :t}}],
-      response_types: [{"2XX", :null}, {true, :null}, {400, :null}]
-    }
-    |> OpenAPIClient.Client.Operation.put_private(
-      __args__: [body: body],
-      __call__: {__MODULE__, :set_test},
-      __opts__: opts,
-      __profile__: :test
+    client.operation(
+      %OpenAPIClient.State{
+        request_base_url: base_url,
+        request_path: "/test",
+        method: :post,
+        request_parameter_types: [
+          {{:string_header, :header}, {"X-String-Header", {:string, :generic}}},
+          {{:x_config_strict_enum_header, :header},
+           {"X-Config-Strict-Enum-Header",
+            {:enum,
+             config_strict_enum_1: "CONFIG_STRICT_ENUM_1",
+             config_strict_enum_2: "CONFIG_STRICT_ENUM_2",
+             config_strict_enum_3: "CONFIG_STRICT_ENUM_3"}}}
+        ],
+        request_types: [{"application/json", {OpenAPIClient.TestRequestSchema, :t}}],
+        response_types: [{"2XX", :null}, {true, :null}, {400, :null}],
+        function_args: [body: body],
+        function_call: {__MODULE__, :set_test},
+        function_opts: opts,
+        profile: :test
+      },
+      pipeline
     )
-    |> client.perform(client_pipeline)
   end
 end

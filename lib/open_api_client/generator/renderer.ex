@@ -670,7 +670,7 @@ if Mix.env() in [:dev, :test] do
         else
           [
             {:base_url, quote(do: String.t() | URI.t())},
-            {:client_pipeline, quote(do: OpenAPIClient.Client.pipeline())}
+            {:pipeline, quote(do: OpenAPIClient.pipeline())}
           ]
         end
 
@@ -763,12 +763,18 @@ if Mix.env() in [:dev, :test] do
                 []
               else
                 client_pipeline_expression =
-                  quote do
-                    client_pipeline = Keyword.get(opts, :client_pipeline)
-                  end
+                  quote(
+                    do:
+                      pipeline =
+                        opts[:pipeline] ||
+                          OpenAPIClient.Utils.get_config(
+                            unquote(operation_profile),
+                            :operation_pipeline
+                          )
+                  )
 
                 base_url_expression =
-                  quote do: base_url = opts[:base_url] || @base_url
+                  quote(do: base_url = opts[:base_url] || @base_url)
 
                 [client_pipeline_expression, base_url_expression]
               end
@@ -780,157 +786,171 @@ if Mix.env() in [:dev, :test] do
              [
                {:%{}, _map_metadata, map_arguments}
              ]} = _call_expression ->
-              {operation_assigns, private_assigns} =
-                Enum.flat_map_reduce(map_arguments, %{__profile__: operation_profile}, fn
-                  {:url, value}, acc ->
-                    value_new =
-                      String.replace(value, ~r/\{([^\}]+?)\}/, fn word ->
-                        word
-                        |> String.split(["{", "}"])
-                        |> Enum.at(1)
-                        |> then(fn old_name ->
-                          name = Map.get(param_renamings, {old_name, :path}, old_name)
-                          "{#{name}}"
+              state_assigns =
+                Enum.reduce(
+                  map_arguments,
+                  [{:profile, operation_profile}, {:request_base_url, Macro.var(:base_url, nil)}],
+                  fn
+                    {:url, value}, acc ->
+                      value_new =
+                        String.replace(value, ~r/\{([^\}]+?)\}/, fn word ->
+                          word
+                          |> String.split(["{", "}"])
+                          |> Enum.at(1)
+                          |> then(fn old_name ->
+                            name = Map.get(param_renamings, {old_name, :path}, old_name)
+                            "{#{name}}"
+                          end)
                         end)
-                      end)
 
-                    {[{:request_path, value_new}], acc}
+                      [{:request_path, value_new} | acc]
 
-                  {:method, value}, acc ->
-                    parameters =
-                      Enum.map(all_params, fn
-                        %GeneratorParam{
-                          param: %Param{name: name, location: location, value_type: type},
-                          schema_type: %SchemaType{default: default} = schema_type,
-                          old_name: old_name,
-                          custom: is_custom
-                        }
-                        when not is_nil(default) ->
-                          atom = String.to_atom(name)
-                          location_new = if is_custom, do: :custom, else: location
-                          type_new = Utils.schema_type_to_readable_type(state, type, schema_type)
+                    {:method, value}, acc ->
+                      parameters =
+                        Enum.map(all_params, fn
+                          %GeneratorParam{
+                            param: %Param{name: name, location: location, value_type: type},
+                            schema_type: %SchemaType{default: default} = schema_type,
+                            old_name: old_name,
+                            custom: is_custom
+                          }
+                          when not is_nil(default) ->
+                            atom = String.to_atom(name)
+                            location_new = if is_custom, do: :custom, else: location
 
-                          default_new =
-                            case default do
-                              {_, _, _} -> quote(do: fn -> unquote(default) end)
-                              _ -> default
+                            type_new =
+                              Utils.schema_type_to_readable_type(state, type, schema_type)
+
+                            default_new =
+                              case default do
+                                {_, _, _} -> quote(do: fn -> unquote(default) end)
+                                _ -> default
+                              end
+
+                            {{atom, location_new},
+                             quote(
+                               do: {unquote(old_name), unquote(type_new), unquote(default_new)}
+                             )}
+
+                          %GeneratorParam{
+                            param: %Param{name: name, location: location, value_type: type},
+                            schema_type: schema_type,
+                            old_name: old_name,
+                            custom: is_custom
+                          } ->
+                            atom = String.to_atom(name)
+                            location_new = if is_custom, do: :custom, else: location
+
+                            type_new =
+                              Utils.schema_type_to_readable_type(state, type, schema_type)
+
+                            {{atom, location_new}, {old_name, type_new}}
+                        end)
+
+                      acc_new =
+                        if(Enum.empty?(parameters),
+                          do: acc,
+                          else: [{:request_parameter_types, parameters} | acc]
+                        )
+
+                      [{:method, value} | acc_new]
+
+                    {:body, _value}, acc ->
+                      acc
+
+                    {:query, _}, acc ->
+                      acc
+
+                    {:request, value}, acc ->
+                      [{:request_types, value} | acc]
+
+                    {:response, _value}, acc ->
+                      items =
+                        responses
+                        |> Enum.sort_by(fn
+                          {status_code, _schemas} when is_integer(status_code) -> status_code
+                          {<<digit::utf8, "XX">>, _schemas} -> (digit - ?0 + 1) * 100 - 2
+                          {true, _schemas} -> 299
+                          {false, _schemas} -> 599
+                        end)
+                        |> Enum.map(fn
+                          {status_or_default, schemas} when map_size(schemas) == 0 ->
+                            quote do
+                              {unquote(status_or_default), :null}
                             end
 
-                          {{atom, location_new},
-                           quote(do: {unquote(old_name), unquote(type_new), unquote(default_new)})}
+                          {status_or_default, schemas} ->
+                            schema_types =
+                              Enum.map(schemas, fn {content_type, type} ->
+                                quote do
+                                  {unquote(content_type),
+                                   unquote(Util.to_readable_type(state, type))}
+                                end
+                              end)
 
-                        %GeneratorParam{
-                          param: %Param{name: name, location: location, value_type: type},
-                          schema_type: schema_type,
-                          old_name: old_name,
-                          custom: is_custom
-                        } ->
-                          atom = String.to_atom(name)
-                          location_new = if is_custom, do: :custom, else: location
-                          type_new = Utils.schema_type_to_readable_type(state, type, schema_type)
-                          {{atom, location_new}, {old_name, type_new}}
-                      end)
+                            quote do
+                              {unquote(status_or_default), unquote(schema_types)}
+                            end
+                        end)
 
-                    {[
-                       {:request_method, value}
-                       | if(Enum.empty?(parameters),
-                           do: [],
-                           else: [{:request_parameter_types, parameters}]
-                         )
-                     ], acc}
+                      [{:response_types, items} | acc]
 
-                  {:body, value}, acc ->
-                    {[{:request_body, value}], acc}
+                    {:opts, value}, acc ->
+                      [{:function_opts, value} | acc]
 
-                  {:query, _}, acc ->
-                    {[], acc}
+                    {:args, value}, acc ->
+                      [{:function_args, value} | acc]
 
-                  {:request, value}, acc ->
-                    {[{:request_types, value}], acc}
+                    {:call, {_module, _function}}, acc ->
+                      [{:function_call, quote(do: {__MODULE__, unquote(function_name)})} | acc]
+                  end
+                )
 
-                  {:response, _value}, acc ->
-                    items =
-                      responses
-                      |> Enum.sort_by(fn
-                        {status_code, _schemas} when is_integer(status_code) -> status_code
-                        {<<digit::utf8, "XX">>, _schemas} -> (digit - ?0 + 1) * 100 - 2
-                        {true, _schemas} -> 299
-                        {false, _schemas} -> 599
-                      end)
-                      |> Enum.map(fn
-                        {status_or_default, schemas} when map_size(schemas) == 0 ->
-                          quote do
-                            {unquote(status_or_default), :null}
-                          end
+              state_assigns =
+                Enum.sort_by(
+                  state_assigns,
+                  fn
+                    {:request_base_url = key, _} ->
+                      {0, key}
 
-                        {status_or_default, schemas} ->
-                          schema_types =
-                            Enum.map(schemas, fn {content_type, type} ->
-                              quote do
-                                {unquote(content_type),
-                                 unquote(Util.to_readable_type(state, type))}
-                              end
-                            end)
+                    {:request_path = key, _} ->
+                      {1, key}
 
-                          quote do
-                            {unquote(status_or_default), unquote(schema_types)}
-                          end
-                      end)
+                    {:method = key, _} ->
+                      {2, key}
 
-                    {[{:response_types, items}], acc}
+                    {:profile = key, _} ->
+                      {40, key}
 
-                  {:opts, value}, acc ->
-                    acc_new = Map.put(acc, :__opts__, value)
-                    {[], acc_new}
+                    {key, _} ->
+                      key_string = Atom.to_string(key)
 
-                  {:args, []}, acc ->
-                    {[], acc}
-
-                  {:args, args}, acc ->
-                    acc_new = Map.put(acc, :__args__, args)
-                    {[], acc_new}
-
-                  {:call, {_module, _function}}, acc ->
-                    acc_new =
-                      Map.put(acc, :__call__, quote(do: {__MODULE__, unquote(function_name)}))
-
-                    {[], acc_new}
-                end)
-
-              operation_assigns = [
-                {:request_base_url, Macro.var(:base_url, nil)} | operation_assigns
-              ]
-
-              operation =
-                quote do
-                  %OpenAPIClient.Client.Operation{unquote_splicing(operation_assigns)}
-                end
-
-              operation =
-                quote do
-                  unquote(operation)
-                  |> OpenAPIClient.Client.Operation.put_private(
-                    unquote(
-                      private_assigns
-                      |> Enum.sort_by(fn {key, _} -> key end)
-                    )
-                  )
-                end
+                      cond do
+                        String.starts_with?(key_string, "request_") -> {10, key}
+                        String.starts_with?(key_string, "response_") -> {20, key}
+                        String.starts_with?(key_string, "function_") -> {30, key}
+                        :else -> {50, key}
+                      end
+                  end
+                )
 
               [
                 quote(
                   do:
                     client =
-                      OpenAPIClient.Utils.get_config(
-                        unquote(operation_profile),
-                        :client,
-                        OpenAPIClient.Client
-                      )
+                      opts[:client] ||
+                        OpenAPIClient.Utils.get_config(
+                          unquote(operation_profile),
+                          :client,
+                          OpenAPIClient
+                        )
                 ),
                 quote(
                   do:
-                    unquote(operation)
-                    |> client.perform(client_pipeline)
+                    client.operation(
+                      %OpenAPIClient.State{unquote_splicing(state_assigns)},
+                      pipeline
+                    )
                 )
               ]
 

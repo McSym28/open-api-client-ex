@@ -37,6 +37,7 @@ defmodule OpenAPIClient.MixProject do
   defp deps do
     [
       {:pluggable, "~> 1.1"},
+      {:plug, "~> 1.16"},
       {:oapi_generator,
        github: "McSym28/open-api-generator",
        ref: "6e5292042c953fce1c4ebcb8421c2b03d062a772",
@@ -46,8 +47,8 @@ defmodule OpenAPIClient.MixProject do
       {:mox, "~> 1.2", only: [:dev, :test]},
       {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false},
       {:excoveralls, "~> 0.18", only: :test},
-      {:phoenix, "~> 1.7", only: :test, optional: true},
-      {:bandit, "~> 1.5", only: :test, optional: true}
+      {:phoenix, "~> 1.7", only: :test},
+      {:bandit, "~> 1.5", only: :test}
     ]
   end
 

@@ -294,6 +294,8 @@ if Mix.env() in [:dev, :test] do
         if operation_type in [:callback, :webhook] do
           []
         else
+          operation_profile = Utils.get_config(state, :aliased_profile, state.profile)
+
           [
             %Param{
               description: "Request's base URL. Default value is taken from `@base_url`",
@@ -303,9 +305,16 @@ if Mix.env() in [:dev, :test] do
             },
             %Param{
               description:
-                "Client pipeline for making a request. Default value obtained through a call to `OpenAPIClient.Utils.get_config(__operation__, :client_pipeline)}",
+                "Operation pipeline for making a request. Default value obtained through a call to `OpenAPIClient.Utils.get_config(#{inspect(operation_profile)}, :operation_pipeline)}",
               location: :header,
-              name: "client_pipeline",
+              name: "pipeline",
+              value_type: :null
+            },
+            %Param{
+              description:
+                "Module that implements `OpenAPIClient` behaviour. Default value obtained through a call to `OpenAPIClient.Utils.get_config(#{inspect(operation_profile)}, :client, OpenAPIClient)`",
+              location: :header,
+              name: "client",
               value_type: :null
             }
           ]

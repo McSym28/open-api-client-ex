@@ -35,16 +35,18 @@ config :oapi_generator,
 config :open_api_client_ex,
   "$base": [
     httpoison: OpenAPIClient.HTTPoisonMock,
-    client: OpenAPIClient.ClientMock
+    client: OpenAPIClientMock
   ],
   test: [
     callback_pipeline: OpenAPIClient.Client.TestCallbackPipeline,
+    operation_pipeline: OpenApiClient.JasonHTTPoisonOperationPipeline,
     base_url: "https://example.com",
     test_location: "test/__generated__/open_api_client",
     web_location: "test/support/__generated__/open_api_client_web",
     web_test_location: "test/__generated__/open_api_client_web",
     operations: [
-      {:*, [params: []]},
+      {:*,
+       [params: [], response_serializers_opts: [serializers: [{:json, json_encoder: Jason}]]]},
       {{[:*], [:delete]}, []},
       {{["/non_existing", ~r/non-matching-regex/], [:*]}, []},
       {{"/test/{path-param}", :get},

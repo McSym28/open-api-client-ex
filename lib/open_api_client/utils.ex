@@ -12,16 +12,29 @@ defmodule OpenAPIClient.Utils do
     |> Enum.member?(behaviour)
   end
 
-  @spec get_config(OpenAPIClient.Client.Operation.t() | atom(), atom(), term()) :: term()
-  @spec get_config(OpenAPIClient.Client.Operation.t() | atom(), atom()) :: term()
+  @spec get_config(OpenAPIClient.Client.Operation.t() | Plug.Conn.t() | atom(), atom(), term()) ::
+          term()
+  @spec get_config(OpenAPIClient.Client.Operation.t() | Plug.Conn.t() | atom(), atom()) :: term()
   def get_config(operation_or_profile, key, default \\ nil)
 
   def get_config(
-        %OpenAPIClient.Client.Operation{assigns: %{private: %{__profile__: profile}}},
+        %OpenAPIClient.Client.Operation{assigns: %{private: private_assigns}},
         key,
         default
       ) do
-    get_config(profile, key, default)
+    private_assigns
+    |> Map.get(:__profile__)
+    |> get_config(key, default)
+  end
+
+  def get_config(%Plug.Conn{} = conn, key, default) do
+    conn
+    |> OpenAPIClient.get_state()
+    |> case do
+      %OpenAPIClient.State{profile: profile} -> profile
+      nil -> nil
+    end
+    |> get_config(key, default)
   end
 
   def get_config(profile, key, default) do
@@ -42,6 +55,17 @@ defmodule OpenAPIClient.Utils do
 
       config ->
         Keyword.get(config, key, default)
+    end
+  end
+
+  @spec get_content_type(headers :: Plug.Conn.headers()) ::
+          {:ok, String.t()} | {:error, :not_found | :invalid_format}
+  def get_content_type(headers) do
+    with {"content-type", ct} <- List.keyfind(headers, "content-type", 0, {:error, :not_found}) do
+      case Plug.Conn.Utils.content_type(ct) do
+        {:ok, type, subtype, _params} -> {:ok, "#{type}/#{subtype}"}
+        :error -> {:error, :invalid_format}
+      end
     end
   end
 
