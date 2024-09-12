@@ -3,28 +3,21 @@ defmodule OpenAPIClient.OperationsTest do
   import Mox
 
   @httpoison OpenAPIClient.HTTPoisonMock
-  @client OpenAPIClient.ClientMock
+  @client OpenAPIClientMock
 
   setup :verify_on_exit!
 
   describe "set_test/2" do
     test "[298] performs a request and encodes TestRequestSchema from request's body" do
-      expect(@client, :perform, &OpenAPIClient.Client.perform/2)
+      expect(@client, :operation, &OpenAPIClient.operation/2)
 
       expect(@httpoison, :request, fn :post, "https://example.com/test", body, headers, _ ->
-        assert {_, "string_header"} = List.keyfind(headers, "x-string-header", 0)
+        assert {"x-string-header", "string_header"} == List.keyfind(headers, "x-string-header", 0)
 
-        assert {_, "CONFIG_STRICT_ENUM_1"} =
+        assert {"x-config-strict-enum-header", "CONFIG_STRICT_ENUM_1"} ==
                  List.keyfind(headers, "x-config-strict-enum-header", 0)
 
-        assert {:ok, "application/json"} ==
-                 (with {_, content_type_request} <- List.keyfind(headers, "content-type", 0),
-                       {:ok, {media_type, media_subtype, _parameters}} =
-                         OpenAPIClient.Client.Operation.parse_content_type_header(
-                           content_type_request
-                         ) do
-                    {:ok, "#{media_type}/#{media_subtype}"}
-                  end)
+        assert {:ok, "application/json"} == OpenAPIClient.Utils.get_content_type(headers)
 
         assert {:ok,
                 %{
@@ -54,22 +47,15 @@ defmodule OpenAPIClient.OperationsTest do
     end
 
     test "[299] performs a request and encodes TestRequestSchema from request's body" do
-      expect(@client, :perform, &OpenAPIClient.Client.perform/2)
+      expect(@client, :operation, &OpenAPIClient.operation/2)
 
       expect(@httpoison, :request, fn :post, "https://example.com/test", body, headers, _ ->
-        assert {_, "string_header"} = List.keyfind(headers, "x-string-header", 0)
+        assert {"x-string-header", "string_header"} == List.keyfind(headers, "x-string-header", 0)
 
-        assert {_, "CONFIG_STRICT_ENUM_1"} =
+        assert {"x-config-strict-enum-header", "CONFIG_STRICT_ENUM_1"} ==
                  List.keyfind(headers, "x-config-strict-enum-header", 0)
 
-        assert {:ok, "application/json"} ==
-                 (with {_, content_type_request} <- List.keyfind(headers, "content-type", 0),
-                       {:ok, {media_type, media_subtype, _parameters}} =
-                         OpenAPIClient.Client.Operation.parse_content_type_header(
-                           content_type_request
-                         ) do
-                    {:ok, "#{media_type}/#{media_subtype}"}
-                  end)
+        assert {:ok, "application/json"} == OpenAPIClient.Utils.get_content_type(headers)
 
         assert {:ok,
                 %{
@@ -99,22 +85,15 @@ defmodule OpenAPIClient.OperationsTest do
     end
 
     test "[400] performs a request and encodes TestRequestSchema from request's body" do
-      expect(@client, :perform, &OpenAPIClient.Client.perform/2)
+      expect(@client, :operation, &OpenAPIClient.operation/2)
 
       expect(@httpoison, :request, fn :post, "https://example.com/test", body, headers, _ ->
-        assert {_, "string_header"} = List.keyfind(headers, "x-string-header", 0)
+        assert {"x-string-header", "string_header"} == List.keyfind(headers, "x-string-header", 0)
 
-        assert {_, "CONFIG_STRICT_ENUM_1"} =
+        assert {"x-config-strict-enum-header", "CONFIG_STRICT_ENUM_1"} ==
                  List.keyfind(headers, "x-config-strict-enum-header", 0)
 
-        assert {:ok, "application/json"} ==
-                 (with {_, content_type_request} <- List.keyfind(headers, "content-type", 0),
-                       {:ok, {media_type, media_subtype, _parameters}} =
-                         OpenAPIClient.Client.Operation.parse_content_type_header(
-                           content_type_request
-                         ) do
-                    {:ok, "#{media_type}/#{media_subtype}"}
-                  end)
+        assert {:ok, "application/json"} == OpenAPIClient.Utils.get_content_type(headers)
 
         assert {:ok,
                 %{
@@ -146,14 +125,15 @@ defmodule OpenAPIClient.OperationsTest do
 
   describe "get_test/4" do
     test "[200] performs a request and decodes TestSchema from response's body" do
-      expect(@client, :perform, fn operation, pipeline ->
-        args = OpenAPIClient.Client.Operation.get_private(operation, :__args__)
-        opts = OpenAPIClient.Client.Operation.get_private(operation, :__opts__)
-        assert {:ok, "string"} == Keyword.fetch(opts, :optional_header_new_param)
-        assert {:ok, "string"} == Keyword.fetch(opts, :optional_new_param)
-        assert {:ok, "new_param_value"} == Keyword.fetch(opts, :optional_new_param_with_default)
-        assert {:ok, "string"} == Keyword.fetch(args, :required_new_param)
-        OpenAPIClient.Client.perform(operation, pipeline)
+      expect(@client, :operation, fn state, pipeline ->
+        assert {:ok, "string"} == Keyword.fetch(state.function_opts, :optional_header_new_param)
+        assert {:ok, "string"} == Keyword.fetch(state.function_opts, :optional_new_param)
+
+        assert {:ok, "new_param_value"} ==
+                 Keyword.fetch(state.function_opts, :optional_new_param_with_default)
+
+        assert {:ok, "string"} == Keyword.fetch(state.function_args, :required_new_param)
+        OpenAPIClient.operation(state, pipeline)
       end)
 
       expect(@httpoison, :request, fn :get,
@@ -161,17 +141,36 @@ defmodule OpenAPIClient.OperationsTest do
                                       _,
                                       headers,
                                       options ->
-        assert {_, "2022-12-15"} = List.keyfind(options[:params], "date_query_with_default", 0)
-        assert {_, "2024-01-02T01:23:45Z"} = List.keyfind(options[:params], "datetime_query", 0)
-        assert {_, "optional-query"} = List.keyfind(options[:params], "optional_query", 0)
-        assert {_, "ENUM_1"} = List.keyfind(options[:params], "X-Enum-Query", 0)
-        assert {_, "ENUM_9"} = List.keyfind(options[:params], "X-Enum-Query-With-Default", 0)
-        assert {_, "1"} = List.keyfind(options[:params], "X-Integer-Non-Standard-Format-Query", 0)
-        assert {_, "1"} = List.keyfind(options[:params], "X-Integer-Standard-Format-Query", 0)
-        assert {_, "true"} = List.keyfind(options[:params], "X-Static-Flag", 0)
-        assert {_, "2024-01-23"} = List.keyfind(headers, "x-date-header-with-default", 0)
-        assert {_, "optional_header"} = List.keyfind(headers, "x-optional-header", 0)
-        assert {_, "required_header"} = List.keyfind(headers, "x-required-header", 0)
+        assert {"date_query_with_default", "2022-12-15"} ==
+                 List.keyfind(options[:params], "date_query_with_default", 0)
+
+        assert {"datetime_query", "2024-01-02T01:23:45Z"} ==
+                 List.keyfind(options[:params], "datetime_query", 0)
+
+        assert {"optional_query", "optional-query"} ==
+                 List.keyfind(options[:params], "optional_query", 0)
+
+        assert {"X-Enum-Query", "ENUM_1"} == List.keyfind(options[:params], "X-Enum-Query", 0)
+
+        assert {"X-Enum-Query-With-Default", "ENUM_9"} ==
+                 List.keyfind(options[:params], "X-Enum-Query-With-Default", 0)
+
+        assert {"X-Integer-Non-Standard-Format-Query", "1"} ==
+                 List.keyfind(options[:params], "X-Integer-Non-Standard-Format-Query", 0)
+
+        assert {"X-Integer-Standard-Format-Query", "1"} ==
+                 List.keyfind(options[:params], "X-Integer-Standard-Format-Query", 0)
+
+        assert {"X-Static-Flag", "true"} == List.keyfind(options[:params], "X-Static-Flag", 0)
+
+        assert {"x-date-header-with-default", "2024-01-23"} ==
+                 List.keyfind(headers, "x-date-header-with-default", 0)
+
+        assert {"x-optional-header", "optional_header"} ==
+                 List.keyfind(headers, "x-optional-header", 0)
+
+        assert {"x-required-header", "required_header"} ==
+                 List.keyfind(headers, "x-required-header", 0)
 
         assert {:ok, body_encoded} =
                  Jason.encode(%{

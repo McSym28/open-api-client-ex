@@ -607,7 +607,7 @@ if Mix.env() in [:dev, :test] do
         quote(do: use(ExUnit.Case, async: true)),
         quote(do: import(Mox)) |> Util.put_newlines(),
         quote(do: @httpoison(OpenAPIClient.HTTPoisonMock)),
-        quote(do: @client(OpenAPIClient.ClientMock)) |> Util.put_newlines(),
+        quote(do: @client(OpenAPIClientMock)) |> Util.put_newlines(),
         quote(do: setup(:verify_on_exit!))
       ]
     end
@@ -740,7 +740,7 @@ if Mix.env() in [:dev, :test] do
                         variable = Macro.var(:opts, nil)
 
                         opts
-                        |> Keyword.drop([:base_url, :client_pipeline])
+                        |> Keyword.drop([:base_url, :pipeline])
                         |> Enum.map(fn {opt_key, opt_value} ->
                           quote(
                             do:
@@ -1180,8 +1180,6 @@ if Mix.env() in [:dev, :test] do
             call_arguments: [],
             call_opts: [base_url: @test_example_url],
             custom_params_assertions: [],
-            custom_params_assertions_args: false,
-            custom_params_assertions_opts: false,
             httpoison_request_assertions: [],
             httpoison_response_assignmets: [],
             httpoison_response_fields: [{:status_code, status_code}],
@@ -1232,20 +1230,18 @@ if Mix.env() in [:dev, :test] do
                         assert(
                           {:ok, unquote(param_example_decoded)} ==
                             Keyword.fetch(
-                              unquote(Macro.var(if(static, do: :args, else: :opts), nil)),
+                              unquote(
+                                if(static,
+                                  do: quote(do: state.function_args),
+                                  else: quote(do: state.function_opts)
+                                )
+                              ),
                               unquote(String.to_atom(name))
                             )
                         )
                     )
                     | &1
                   ]
-                )
-                |> Map.replace!(
-                  if(static,
-                    do: :custom_params_assertions_args,
-                    else: :custom_params_assertions_opts
-                  ),
-                  true
                 )
               else
                 case location do
@@ -1270,7 +1266,7 @@ if Mix.env() in [:dev, :test] do
                         quote(
                           do:
                             assert(
-                              {_, unquote(to_string(param_example))} =
+                              {unquote(old_name), unquote(to_string(param_example))} ==
                                 List.keyfind(options[:params], unquote(old_name), 0)
                             )
                         )
@@ -1290,7 +1286,8 @@ if Mix.env() in [:dev, :test] do
                         quote(
                           do:
                             assert(
-                              {_, unquote(to_string(param_example))} =
+                              {unquote(String.downcase(old_name)),
+                               unquote(to_string(param_example))} ==
                                 List.keyfind(headers, unquote(String.downcase(old_name)), 0)
                             )
                         )
@@ -1319,14 +1316,7 @@ if Mix.env() in [:dev, :test] do
                     do:
                       assert(
                         {:ok, unquote(content_type)} ==
-                          with {_, content_type_request} <-
-                                 List.keyfind(headers, "content-type", 0),
-                               {:ok, {media_type, media_subtype, _parameters}} =
-                                 OpenAPIClient.Client.Operation.parse_content_type_header(
-                                   content_type_request
-                                 ) do
-                            {:ok, "#{media_type}/#{media_subtype}"}
-                          end
+                          OpenAPIClient.Utils.get_content_type(headers)
                       )
                   )
                   | &1
@@ -1412,41 +1402,20 @@ if Mix.env() in [:dev, :test] do
         |> Enum.reverse()
         |> case do
           [] ->
-            quote(do: &OpenAPIClient.Client.perform/2)
+            quote(do: &OpenAPIClient.operation/2)
 
-          params ->
+          asserts ->
             {:fn, [],
              [
                {:->, [],
                 [
                   [
-                    Macro.var(:operation, nil),
+                    Macro.var(:state, nil),
                     Macro.var(:pipeline, nil)
                   ],
                   quote do
-                    unquote_splicing(
-                      Util.clean_list([
-                        if(render_parameters[:custom_params_assertions_args],
-                          do:
-                            quote(
-                              do:
-                                args =
-                                  OpenAPIClient.Client.Operation.get_private(operation, :__args__)
-                            )
-                        ),
-                        if(render_parameters[:custom_params_assertions_opts],
-                          do:
-                            quote(
-                              do:
-                                opts =
-                                  OpenAPIClient.Client.Operation.get_private(operation, :__opts__)
-                            )
-                        )
-                      ])
-                    )
-
-                    unquote_splicing(params)
-                    OpenAPIClient.Client.perform(operation, pipeline)
+                    unquote_splicing(asserts)
+                    OpenAPIClient.operation(state, pipeline)
                   end
                 ]}
              ]}
@@ -1456,7 +1425,7 @@ if Mix.env() in [:dev, :test] do
         test unquote(test_message) do
           expect(
             @client,
-            :perform,
+            :operation,
             unquote(custom_params_assertions_callback)
           )
 
