@@ -29,7 +29,7 @@ defmodule OpenAPIClient do
       )
       |> set_state(state)
       |> put_request_content_type_header(state)
-      |> Plug.run([{pipeline, []}])
+      |> Plug.run(OpenAPIClient.Utils.normalize_pipeline(pipeline))
       |> get_state()
 
     result
