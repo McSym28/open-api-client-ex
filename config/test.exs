@@ -38,7 +38,7 @@ config :open_api_client_ex,
     client: OpenAPIClientMock
   ],
   test: [
-    operation_pipeline: OpenApiClient.JasonHTTPoisonOperationPipeline,
+    operation_pipeline: OpenAPIClient.JasonHTTPoisonOperationPipeline,
     base_url: "https://example.com",
     test_location: "test/__generated__/open_api_client",
     web_location: "test/support/__generated__/open_api_client_web",

@@ -6,7 +6,7 @@ defmodule OpenAPIClient.Plugs.RequestTypedEncoder do
   Accepts the following `opts`:
   * `:typed_encoder` - Module that implements `OpenAPIClient.TypedEncoder` behaviour.
   Default value obtained through a call to `OpenAPIClient.Utils.get_config(conn, :typed_encoder, OpenAPIClient.TypedEncoder)`
-  * `:body_reader` - MFA to read `:request_body` from `OpenApiClient.State`. By default the `OpenAPIClient.State.read_body/2` is
+  * `:body_reader` - MFA to read `:request_body` from `OpenAPIClient.State`. By default the `OpenAPIClient.State.read_body/2` is
   being called.
 
   """

@@ -1,5 +1,5 @@
 if Code.ensure_loaded?(Jason) and Code.ensure_loaded?(HTTPoison) do
-  defmodule OpenApiClient.JasonHTTPoisonOperationPipeline do
+  defmodule OpenAPIClient.JasonHTTPoisonOperationPipeline do
     use Plug.Builder
 
     plug(OpenAPIClient.Plugs.FunctionCallEncoder)
