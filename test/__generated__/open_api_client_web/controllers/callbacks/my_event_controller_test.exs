@@ -20,11 +20,12 @@ defmodule OpenAPIClientWeb.Callbacks.MyEventControllerTest do
         assert "required-callback-query" == x_required_callback_query
         assert "required_callback_header" == x_required_callback_header
         assert %OpenAPIClient.CallbackRequest{message: "Some event happened"} == body
+        assert {:ok, "optional-callback-query"} == Keyword.fetch(opts, :x_optional_callback_query)
 
         assert {:ok, "optional_callback_header"} ==
                  Keyword.fetch(opts, :x_optional_callback_header)
 
-        assert {:ok, "optional-callback-query"} == Keyword.fetch(opts, :x_optional_callback_query)
+        assert {:ok, 1} == Keyword.fetch(opts, :x_optional_callback_cookie)
         {:ok, %OpenAPIClient.CallbackResponse{acknowledged: true}}
       end)
 
@@ -32,6 +33,7 @@ defmodule OpenAPIClientWeb.Callbacks.MyEventControllerTest do
         conn
         |> Plug.Conn.put_req_header("x-required-callback-header", "required_callback_header")
         |> Plug.Conn.put_req_header("x-optional-callback-header", "optional_callback_header")
+        |> Plug.Conn.put_req_header("cookie", "X-Optional-Callback-Cookie=1")
         |> Plug.Conn.put_req_header("content-type", "application/json")
         |> post(
           "/__test__/callbacks/my_event?X-Optional-Callback-Query=optional-callback-query&X-Required-Callback-Query=required-callback-query",

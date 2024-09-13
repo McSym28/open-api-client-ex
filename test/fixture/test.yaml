@@ -75,6 +75,11 @@ paths:
                   schema:
                     type: string
                   example: optional-callback-query
+                - in: cookie
+                  name: X-Optional-Callback-Cookie
+                  description: Optional callback cookie parameter
+                  schema:
+                    type: integer
               requestBody:
                 required: true
                 content:
@@ -167,6 +172,11 @@ paths:
               - ENUM_1
               - ENUM_2
               - ENUM_3
+        - in: cookie
+          name: X-Boolean-Cookie
+          description: Boolean cookie parameter
+          schema:
+            type: boolean
         - in: query
           name: X-Enum-Query-With-Default
           description: Enum query parameter with default

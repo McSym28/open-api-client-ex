@@ -7,6 +7,7 @@ if Code.ensure_loaded?(HTTPoison) do
     * `:httpoison` - `HTTPoison` module. Default value obtained through a call to `OpenAPIClient.Utils.get_config(conn, :httpoison, HTTPoison)`.
     * `:headers` - Default `HTTPoison.request/5` `:headers`.
     * `:query_params` - Default `HTTPoison.request/5` query params (passed through `[:options, :params]`).
+    * `:cookies` - Default `HTTPoison.request/5` cookies (passed as `"Cookie"` headers).
     * `:options` - Default `HTTPoison.request/5` `:options`.
 
     """
@@ -19,6 +20,7 @@ if Code.ensure_loaded?(HTTPoison) do
             {:httpoison, module()}
             | {:headers, %{String.t() => String.t()} | [{String.t(), String.t()}]}
             | {:query_params, %{String.t() => String.t()} | [{String.t(), String.t()}]}
+            | {:cookies, %{String.t() => String.t()} | [{String.t(), String.t()}]}
             | {:options, keyword()}
     @type options :: [option()]
 
@@ -36,6 +38,12 @@ if Code.ensure_loaded?(HTTPoison) do
 
       url = Plug.Conn.request_url(conn)
 
+      %Plug.Conn{query_params: query_params, req_cookies: cookies} =
+        conn =
+        conn
+        |> Plug.Conn.fetch_query_params()
+        |> Plug.Conn.fetch_cookies()
+
       body =
         conn
         |> OpenAPIClient.get_state()
@@ -44,14 +52,17 @@ if Code.ensure_loaded?(HTTPoison) do
           nil -> nil
         end
 
+      cookies =
+        opts
+        |> Keyword.get(:cookies, [])
+        |> Enum.to_list()
+        |> Kernel.++(Enum.to_list(cookies))
+
       headers =
         opts
         |> Keyword.get(:headers, [])
-        |> Map.new()
-        |> Map.merge(Map.new(headers))
-        |> Map.to_list()
-
-      %Plug.Conn{query_params: query_params} = conn = Plug.Conn.fetch_query_params(conn)
+        |> Enum.to_list()
+        |> Kernel.++(headers)
 
       params =
         opts
@@ -63,7 +74,8 @@ if Code.ensure_loaded?(HTTPoison) do
       options =
         opts
         |> Keyword.get(:options, [])
-        |> Keyword.update(:params, params, &Keyword.merge(&1, params))
+        |> Keyword.update(:params, params, &OpenAPIClient.Utils.config_merge(&1, params))
+        |> Keyword.update(:hackney, [cookie: cookies], &Keyword.merge(&1, cookie: cookies))
 
       conn
       |> OpenAPIClient.State.parse_method()

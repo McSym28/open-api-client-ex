@@ -31,6 +31,7 @@ defmodule OpenAPIClient.Operations do
     * `optional_header_new_param`: Optional additional header parameter
     * `optional_new_param`: Optional additional parameter
     * `optional_new_param_with_default`: Optional additional parameter. Default value is `"new_param_value"`
+    * `x_boolean_cookie`: ["X-Boolean-Cookie"] Boolean cookie parameter
     * `base_url`: Request's base URL. Default value is taken from `@base_url`
     * `pipeline`: Operation pipeline for making a request. Default value obtained through a call to `OpenAPIClient.Utils.get_config(:test, :operation_pipeline)}
     * `client`: Module that implements `OpenAPIClient` behaviour. Default value obtained through a call to `OpenAPIClient.Utils.get_config(:test, :client, OpenAPIClient)`
@@ -50,6 +51,7 @@ defmodule OpenAPIClient.Operations do
           | {:optional_header_new_param, String.t()}
           | {:optional_new_param, String.t()}
           | {:optional_new_param_with_default, String.t()}
+          | {:x_boolean_cookie, boolean}
           | {:base_url, String.t() | URI.t()}
           | {:pipeline, OpenAPIClient.pipeline()}
         ]) :: {:ok, OpenAPIClient.TestSchema.t()} | {:error, OpenAPIClient.Error.t()}
@@ -65,6 +67,8 @@ defmodule OpenAPIClient.Operations do
         method: :get,
         request_parameter_types: [
           {{:path_param, :path}, {"path-param", {:string, :generic}}},
+          {{:required_header, :header}, {"X-Required-Header", {:string, :generic}}},
+          {{:required_new_param, :custom}, {"required_new_param", {:string, :generic}}},
           {{:date_query_with_default, :query},
            {"date_query_with_default", {:string, :date}, ~D[2022-12-15]}},
           {{:datetime_query, :query}, {"datetime_query", {:string, :date_time}}},
@@ -88,11 +92,10 @@ defmodule OpenAPIClient.Operations do
             fn -> Application.get_env(:open_api_client_ex, :required_header) end}},
           {{:optional_header_new_param, :custom},
            {"optional_header_new_param", {:string, :generic}}},
-          {{:required_header, :header}, {"X-Required-Header", {:string, :generic}}},
           {{:optional_new_param, :custom}, {"optional_new_param", {:string, :generic}}},
           {{:optional_new_param_with_default, :custom},
            {"optional_new_param_with_default", {:string, :generic}, "new_param_value"}},
-          {{:required_new_param, :custom}, {"required_new_param", {:string, :generic}}}
+          {{:x_boolean_cookie, :cookie}, {"X-Boolean-Cookie", :boolean}}
         ],
         response_types: [{200, [{"application/json", {OpenAPIClient.TestSchema, :t}}]}],
         function_args: [

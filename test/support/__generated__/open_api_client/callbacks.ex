@@ -20,10 +20,13 @@ defmodule OpenAPIClient.Callbacks do
 
     * `x_optional_callback_query`: ["X-Optional-Callback-Query"] Optional callback query parameter
     * `x_optional_callback_header`: ["X-Optional-Callback-Header"] Optional callback header parameter
+    * `x_optional_callback_cookie`: ["X-Optional-Callback-Cookie"] Optional callback cookie parameter
 
   """
   @callback my_event(String.t(), String.t(), OpenAPIClient.CallbackRequest.t(), [
-              {:x_optional_callback_query, String.t()} | {:x_optional_callback_header, String.t()}
+              {:x_optional_callback_query, String.t()}
+              | {:x_optional_callback_header, String.t()}
+              | {:x_optional_callback_cookie, integer}
             ]) :: {:ok, OpenAPIClient.CallbackResponse.t()} | {:error, OpenAPIClient.Error.t()}
 
   @optional_callbacks my_event: 4
@@ -35,14 +38,15 @@ defmodule OpenAPIClient.Callbacks do
     [
       request_path_mask: "/{*request.body.callbackUrl*}",
       request_parameter_types: [
-        {{:x_optional_callback_query, :query},
-         {"X-Optional-Callback-Query", {:string, :generic}}},
         {{:x_required_callback_query, :query},
          {"X-Required-Callback-Query", {:string, :generic}}},
+        {{:x_required_callback_header, :header},
+         {"X-Required-Callback-Header", {:string, :generic}}},
+        {{:x_optional_callback_query, :query},
+         {"X-Optional-Callback-Query", {:string, :generic}}},
         {{:x_optional_callback_header, :header},
          {"X-Optional-Callback-Header", {:string, :generic}}},
-        {{:x_required_callback_header, :header},
-         {"X-Required-Callback-Header", {:string, :generic}}}
+        {{:x_optional_callback_cookie, :cookie}, {"X-Optional-Callback-Cookie", :integer}}
       ],
       request_types: [{"application/json", {OpenAPIClient.CallbackRequest, :t}}],
       response_types: [{200, [{"application/json", {OpenAPIClient.CallbackResponse, :t}}]}],

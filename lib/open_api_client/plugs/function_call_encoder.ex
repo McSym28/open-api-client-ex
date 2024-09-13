@@ -48,6 +48,7 @@ defmodule OpenAPIClient.Plugs.FunctionCallEncoder do
             :path -> update_state_map(state, :request_path_params, name_atom, value)
             :query -> update_state_map(state, :request_query_params, name_atom, value)
             :header -> update_state_map(state, :request_headers, name_atom, value)
+            :cookie -> update_state_map(state, :request_cookies, name_atom, value)
             :custom -> update_state_map(state, :request_custom_params, name_atom, value)
             _ -> state
           end

@@ -24,4 +24,4 @@ AJ Foster](https://github.com/aj-foster))
 - [ ] Wait for [open-api-generator](https://github.com/aj-foster/open-api-generator)'s release with my changes and use [hex.pm's version](https://hex.pm/packages/oapi_generator)
 - [ ] Publish package to [hex.pm](https://hex.pm/)
 - [ ] Publish documentation to [hexdocs.pm](https://hexdocs.pm/)
-- [ ] Process cookie parameters
+- [X] Process cookie parameters

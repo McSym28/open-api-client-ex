@@ -1,7 +1,7 @@
 defmodule OpenAPIClient.Plugs.RequestTypedEncoder do
   @moduledoc """
-  A plug for encoding `:request_body`, `:request_headers`, `:request_path_params` and `:request_query_params`
-  using types provided by the `oapi_generator` library
+  A plug for encoding `:request_body`, `:request_path_params`, `:request_query_params`, `:request_headers`
+  and `:request_cookies` using types provided by the `oapi_generator` library
 
   Accepts the following `opts`:
   * `:typed_encoder` - Module that implements `OpenAPIClient.TypedEncoder` behaviour.
@@ -29,9 +29,10 @@ defmodule OpenAPIClient.Plugs.RequestTypedEncoder do
       request_path: request_path,
       method: method,
       request_parameter_types: parameter_types,
-      request_headers: headers,
+      request_path_params: path_params,
       request_query_params: query_params,
-      request_path_params: path_params
+      request_headers: headers,
+      request_cookies: cookies
     } = OpenAPIClient.get_state(conn)
 
     typed_encoder =
@@ -45,13 +46,15 @@ defmodule OpenAPIClient.Plugs.RequestTypedEncoder do
 
     path_rest = [{request_path, method}]
 
-    headers = Map.new(headers, fn {key, value} -> {{key, :header}, value} end)
-    query_params = Map.new(query_params, fn {key, value} -> {{key, :query}, value} end)
     path_params = Map.new(path_params, fn {key, value} -> {{key, :path}, value} end)
+    query_params = Map.new(query_params, fn {key, value} -> {{key, :query}, value} end)
+    headers = Map.new(headers, fn {key, value} -> {{key, :header}, value} end)
+    cookies = Map.new(cookies, fn {key, value} -> {{key, :cookie}, value} end)
 
-    headers
+    path_params
     |> Map.merge(query_params)
-    |> Map.merge(path_params)
+    |> Map.merge(headers)
+    |> Map.merge(cookies)
     |> Enum.flat_map(fn {{name_atom, location}, value} ->
       parameter_types
       |> List.keyfind({name_atom, location}, 0)
@@ -129,6 +132,10 @@ defmodule OpenAPIClient.Plugs.RequestTypedEncoder do
 
               {:parameter, :header = _location, name} ->
                 Plug.Conn.put_req_header(conn, String.downcase(name), to_string(encoded_value))
+
+              {:parameter, :cookie = _location, name} ->
+                conn
+                |> update_conn_map(:req_cookies, name, to_string(encoded_value))
             end
 
           {:cont, conn_new}

@@ -40,8 +40,8 @@ defmodule OpenAPIClient.OperationsTest do
                    number_enum: 2.0,
                    strict_enum: :strict_enum_3
                  },
-                 x_config_strict_enum_header: :config_strict_enum_1,
                  string_header: "string_header",
+                 x_config_strict_enum_header: :config_strict_enum_1,
                  base_url: "https://example.com"
                )
     end
@@ -78,8 +78,8 @@ defmodule OpenAPIClient.OperationsTest do
                    number_enum: 2.0,
                    strict_enum: :strict_enum_3
                  },
-                 x_config_strict_enum_header: :config_strict_enum_1,
                  string_header: "string_header",
+                 x_config_strict_enum_header: :config_strict_enum_1,
                  base_url: "https://example.com"
                )
     end
@@ -116,8 +116,8 @@ defmodule OpenAPIClient.OperationsTest do
                    number_enum: 2.0,
                    strict_enum: :strict_enum_3
                  },
-                 x_config_strict_enum_header: :config_strict_enum_1,
                  string_header: "string_header",
+                 x_config_strict_enum_header: :config_strict_enum_1,
                  base_url: "https://example.com"
                )
     end
@@ -126,13 +126,13 @@ defmodule OpenAPIClient.OperationsTest do
   describe "get_test/4" do
     test "[200] performs a request and decodes TestSchema from response's body" do
       expect(@client, :operation, fn state, pipeline ->
+        assert {:ok, "string"} == Keyword.fetch(state.function_args, :required_new_param)
         assert {:ok, "string"} == Keyword.fetch(state.function_opts, :optional_header_new_param)
         assert {:ok, "string"} == Keyword.fetch(state.function_opts, :optional_new_param)
 
         assert {:ok, "new_param_value"} ==
                  Keyword.fetch(state.function_opts, :optional_new_param_with_default)
 
-        assert {:ok, "string"} == Keyword.fetch(state.function_args, :required_new_param)
         OpenAPIClient.operation(state, pipeline)
       end)
 
@@ -141,6 +141,9 @@ defmodule OpenAPIClient.OperationsTest do
                                       _,
                                       headers,
                                       options ->
+        assert {"x-required-header", "required_header"} ==
+                 List.keyfind(headers, "x-required-header", 0)
+
         assert {"date_query_with_default", "2022-12-15"} ==
                  List.keyfind(options[:params], "date_query_with_default", 0)
 
@@ -169,8 +172,8 @@ defmodule OpenAPIClient.OperationsTest do
         assert {"x-optional-header", "optional_header"} ==
                  List.keyfind(headers, "x-optional-header", 0)
 
-        assert {"x-required-header", "required_header"} ==
-                 List.keyfind(headers, "x-required-header", 0)
+        assert {"X-Boolean-Cookie", "true"} ==
+                 List.keyfind(options[:hackney][:cookie], "X-Boolean-Cookie", 0)
 
         assert {:ok, body_encoded} =
                  Jason.encode(%{
@@ -200,19 +203,20 @@ defmodule OpenAPIClient.OperationsTest do
                 string: "another_string"
               }} ==
                OpenAPIClient.Operations.get_test("some_id", "required_header", "string",
-                 optional_new_param_with_default: "new_param_value",
-                 optional_new_param: "string",
-                 optional_header_new_param: "string",
-                 optional_header: "optional_header",
-                 date_header_with_default: ~D[2024-01-23],
-                 x_static_flag: true,
-                 x_integer_standard_format_query: 1,
-                 x_integer_non_standard_format_query: 1,
-                 x_enum_query_with_default: :enum_9,
-                 x_enum_query: :enum_1,
-                 optional_query: "optional-query",
-                 datetime_query: ~U[2024-01-02 01:23:45Z],
                  date_query_with_default: ~D[2022-12-15],
+                 datetime_query: ~U[2024-01-02 01:23:45Z],
+                 optional_query: "optional-query",
+                 x_enum_query: :enum_1,
+                 x_enum_query_with_default: :enum_9,
+                 x_integer_non_standard_format_query: 1,
+                 x_integer_standard_format_query: 1,
+                 x_static_flag: true,
+                 date_header_with_default: ~D[2024-01-23],
+                 optional_header: "optional_header",
+                 optional_header_new_param: "string",
+                 optional_new_param: "string",
+                 optional_new_param_with_default: "new_param_value",
+                 x_boolean_cookie: true,
                  base_url: "https://example.com"
                )
     end

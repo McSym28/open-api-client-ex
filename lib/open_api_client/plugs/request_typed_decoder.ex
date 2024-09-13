@@ -1,6 +1,6 @@
 defmodule OpenAPIClient.Plugs.RequestTypedDecoder do
   @moduledoc """
-  A plug for decoding `:body_params`, `:req_headers`, `:path_params` and `:query_params`
+  A plug for decoding `:body_params`, `:path_params`, `:query_params`, `:req_headers` and `:req_cookies`
   using types provided by the `oapi_generator` library
 
   Accepts the following `opts`:
@@ -25,7 +25,12 @@ defmodule OpenAPIClient.Plugs.RequestTypedDecoder do
   @impl Plug
   @spec call(Plug.Conn.t(), options()) :: Plug.Conn.t()
   def call(conn, opts) do
-    %Plug.Conn{req_headers: headers, path_params: path_params, query_params: query_params} =
+    %Plug.Conn{
+      path_params: path_params,
+      query_params: query_params,
+      req_headers: headers,
+      req_cookies: cookies
+    } =
       conn =
       conn
       |> Plug.Conn.fetch_query_params()
@@ -48,9 +53,10 @@ defmodule OpenAPIClient.Plugs.RequestTypedDecoder do
 
     path_rest = [{request_path, method}]
 
-    headers = Map.new(headers, fn {key, value} -> {{String.downcase(key), :header}, value} end)
-    query_params = Map.new(query_params, fn {key, value} -> {{key, :query}, value} end)
     path_params = Map.new(path_params, fn {key, value} -> {{key, :path}, value} end)
+    query_params = Map.new(query_params, fn {key, value} -> {{key, :query}, value} end)
+    headers = Map.new(headers, fn {key, value} -> {{String.downcase(key), :header}, value} end)
+    cookies = Map.new(cookies, fn {key, value} -> {{key, :cookie}, value} end)
 
     parameter_types =
       Enum.map(parameter_types, fn
@@ -64,9 +70,10 @@ defmodule OpenAPIClient.Plugs.RequestTypedDecoder do
           other
       end)
 
-    headers
+    path_params
     |> Map.merge(query_params)
-    |> Map.merge(path_params)
+    |> Map.merge(headers)
+    |> Map.merge(cookies)
     |> Enum.flat_map(fn {{name, location}, value} ->
       parameter_types
       |> find_parameter(name, location)
@@ -119,7 +126,7 @@ defmodule OpenAPIClient.Plugs.RequestTypedDecoder do
                 state_new = %OpenAPIClient.State{state | request_body: decoded_value}
                 OpenAPIClient.set_state(conn, state_new)
 
-              {:parameter, :path = location, name} ->
+              {:parameter, location, name} ->
                 parameter_types
                 |> find_parameter(name, location)
                 |> case do
@@ -127,29 +134,24 @@ defmodule OpenAPIClient.Plugs.RequestTypedDecoder do
                     conn
 
                   {{name_atom, _location}, _parameter_type} ->
-                    update_conn_state_map(conn, :request_path_params, name_atom, decoded_value)
-                end
+                    map_key =
+                      case location do
+                        :path -> :request_path_params
+                        :query -> :request_query_params
+                        :header -> :request_headers
+                        :cookie -> :request_cookies
+                      end
 
-              {:parameter, :query = location, name} ->
-                parameter_types
-                |> find_parameter(name, location)
-                |> case do
-                  nil ->
-                    conn
+                    %OpenAPIClient.State{} = state = OpenAPIClient.get_state(conn)
 
-                  {{name_atom, _location}, _parameter_type} ->
-                    update_conn_state_map(conn, :request_query_params, name_atom, decoded_value)
-                end
+                    state_new =
+                      update_in(
+                        state,
+                        [Access.key!(map_key)],
+                        &Map.put(&1, name_atom, decoded_value)
+                      )
 
-              {:parameter, :header = location, name} ->
-                parameter_types
-                |> find_parameter(name, location)
-                |> case do
-                  nil ->
-                    conn
-
-                  {{name_atom, _location}, _parameter_type} ->
-                    update_conn_state_map(conn, :request_headers, name_atom, decoded_value)
+                    OpenAPIClient.set_state(conn, state_new)
                 end
             end
 
@@ -173,11 +175,5 @@ defmodule OpenAPIClient.Plugs.RequestTypedDecoder do
       {{_name_atom, ^location}, {^name, _type}} = parameter -> parameter
       _ -> nil
     end)
-  end
-
-  defp update_conn_state_map(conn, map_key, key, value) do
-    %OpenAPIClient.State{} = state = OpenAPIClient.get_state(conn)
-    state_new = update_in(state, [Access.key!(map_key)], &Map.put(&1, key, value))
-    OpenAPIClient.set_state(conn, state_new)
   end
 end

@@ -15,21 +15,24 @@ defmodule OpenAPIClient.Plugs.FunctionCallDecoder do
     %OpenAPIClient.State{
       request_parameter_types: parameter_types,
       request_parameter_args: parameter_args,
-      request_headers: headers,
       request_path_params: path_params,
       request_query_params: query_params,
+      request_headers: headers,
+      request_cookies: cookies,
       request_custom_params: custom_params
     } = state = OpenAPIClient.get_state(conn)
 
-    headers = Map.new(headers, fn {key, value} -> {{key, :header}, value} end)
-    query_params = Map.new(query_params, fn {key, value} -> {{key, :query}, value} end)
     path_params = Map.new(path_params, fn {key, value} -> {{key, :path}, value} end)
+    query_params = Map.new(query_params, fn {key, value} -> {{key, :query}, value} end)
+    headers = Map.new(headers, fn {key, value} -> {{key, :header}, value} end)
+    cookies = Map.new(cookies, fn {key, value} -> {{key, :cookie}, value} end)
     custom_params = Map.new(custom_params, fn {key, value} -> {{key, :custom}, value} end)
 
     parameters =
-      headers
+      path_params
       |> Map.merge(query_params)
-      |> Map.merge(path_params)
+      |> Map.merge(headers)
+      |> Map.merge(cookies)
       |> Map.merge(custom_params)
 
     {function_args, function_opts} =

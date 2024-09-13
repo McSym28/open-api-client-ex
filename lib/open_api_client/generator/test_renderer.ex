@@ -875,8 +875,8 @@ if Mix.env() in [:dev, :test] do
                           Map.update(
                             acc,
                             :request_headers,
-                            %{header_param_name => header_param_value},
-                            &Map.put(&1, header_param_name, header_param_value)
+                            [{header_param_name, header_param_value}],
+                            &[{header_param_name, header_param_value} | &1]
                           )
 
                         {:assert, _,
@@ -895,8 +895,33 @@ if Mix.env() in [:dev, :test] do
                           Map.update(
                             acc,
                             :request_headers,
-                            %{"content-type" => request_content_type},
-                            &Map.put(&1, "content-type", request_content_type)
+                            [{"content-type", request_content_type}],
+                            &[{"content-type", request_content_type} | &1]
+                          )
+
+                        {:assert, _,
+                         [
+                           {:==, _,
+                            [
+                              {cookie_param_name, cookie_param_value},
+                              {{:., _, [{:__aliases__, _, [:List]}, :keyfind]}, _,
+                               [
+                                 {{:., _, [Access, :get]}, _,
+                                  [
+                                    {{:., _, [Access, :get]}, _, [{:options, _, _}, :hackney]},
+                                    :cookie
+                                  ]},
+                                 cookie_param_name,
+                                 0
+                               ]}
+                            ]}
+                         ]},
+                        acc ->
+                          Map.update(
+                            acc,
+                            :request_headers,
+                            [{"cookie", "#{cookie_param_name}=#{cookie_param_value}"}],
+                            &[{"cookie", "#{cookie_param_name}=#{cookie_param_value}"} | &1]
                           )
 
                         {:assert, _,
@@ -1063,10 +1088,17 @@ if Mix.env() in [:dev, :test] do
                   request_body = render_parameters[:request_encoded_body]
                   conn_call_args = [url] ++ if(request_body, do: [request_body], else: [])
 
-                  request_headers = render_parameters[:request_headers] || %{}
+                  request_headers = render_parameters[:request_headers] || []
 
                   conn_call =
-                    if map_size(request_headers) > 0 do
+                    if Enum.empty?(request_headers) do
+                      quote(
+                        do:
+                          unquote(render_parameters[:request_method])(
+                            unquote_splicing([Macro.var(:conn, nil) | conn_call_args])
+                          )
+                      )
+                    else
                       request_headers
                       |> Enum.reverse()
                       |> Enum.reduce(Macro.var(:conn, nil), fn {name, value}, conn ->
@@ -1085,13 +1117,6 @@ if Mix.env() in [:dev, :test] do
                             )
                         )
                       end)
-                    else
-                      quote(
-                        do:
-                          unquote(render_parameters[:request_method])(
-                            unquote_splicing([Macro.var(:conn, nil) | conn_call_args])
-                          )
-                      )
                     end
 
                   response_body = render_parameters[:response_encoded_body]
@@ -1290,7 +1315,7 @@ if Mix.env() in [:dev, :test] do
               quote(do: _)
             ],
             call_arguments: [],
-            call_opts: [base_url: @test_example_url],
+            call_opts: [],
             custom_params_assertions: [],
             httpoison_request_assertions: [],
             httpoison_response_assignmets: [],
@@ -1401,6 +1426,26 @@ if Mix.env() in [:dev, :test] do
                               {unquote(String.downcase(old_name)),
                                unquote(to_string(param_example))} ==
                                 List.keyfind(headers, unquote(String.downcase(old_name)), 0)
+                            )
+                        )
+                        | &1
+                      ]
+                    )
+
+                  :cookie ->
+                    acc_new
+                    |> Map.update!(
+                      :httpoison_request_arguments,
+                      &List.replace_at(&1, 4, quote(do: options))
+                    )
+                    |> Map.update!(
+                      :httpoison_request_assertions,
+                      &[
+                        quote(
+                          do:
+                            assert(
+                              {unquote(old_name), unquote(to_string(param_example))} ==
+                                List.keyfind(options[:hackney][:cookie], unquote(old_name), 0)
                             )
                         )
                         | &1
@@ -1575,7 +1620,10 @@ if Mix.env() in [:dev, :test] do
                    unquote(module_name).unquote(function_name)(
                      unquote_splicing(
                        Enum.reverse([
-                         render_parameters[:call_opts] | render_parameters[:call_arguments]
+                         Enum.reverse([
+                           {:base_url, @test_example_url} | render_parameters[:call_opts]
+                         ])
+                         | render_parameters[:call_arguments]
                        ])
                      )
                    )

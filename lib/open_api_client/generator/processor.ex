@@ -186,17 +186,19 @@ if Mix.env() in [:dev, :test] do
 
         all_params =
           Enum.sort_by(all_params, fn %GeneratorParam{
-                                        param: %Param{name: name, location: location}
+                                        param: %Param{name: name, location: location},
+                                        static: is_static
                                       } ->
             location_integer =
               case location do
                 :path -> 0
                 :query -> 1
                 :header -> 2
+                :cookie -> 3
                 _ -> 100
               end
 
-            {location_integer, name}
+            {not is_static, location_integer, name}
           end)
 
         operations_table = Utils.ensure_ets_table(:operations)
