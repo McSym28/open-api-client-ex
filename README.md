@@ -17,6 +17,7 @@ AJ Foster](https://github.com/aj-foster))
 - "Fixed" processing of `2XX` response status codes and provided a way to set "successiveness" for `default` response status codes
 - Added client module and pipeline (based on `Plug`) to use generated operation. At this point library provides only a naive pipeline implementation for [httpoison](https://hex.pm/packages/httpoison) HTTP client. Library users can implement their own use it as a default one. Additionally library provides a way to configure decoders and encoders for different `Content-Type`s
 - Generated operation tests based on spec examples
+- Added proccessing for callbacks and webhooks (including tests)
 
 ## TODOs
 - [ ] Add documentation
