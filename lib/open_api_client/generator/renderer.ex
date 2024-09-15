@@ -675,18 +675,24 @@ if Mix.env() in [:dev, :test] do
           ]
         end
 
-      opts_spec =
-        dynamic_params
-        |> Enum.map(fn %Param{name: name, value_type: type} ->
-          {String.to_atom(name), implementation.render_type(state, type)}
-        end)
-        |> Kernel.++(additional_params)
-        |> Enum.reverse()
-        |> Enum.reduce(fn type, expression ->
-          {:|, [], [type, expression]}
-        end)
+      arguments_new =
+        case dynamic_params do
+          [] ->
+            []
 
-      arguments_new = List.replace_at(arguments, -1, [opts_spec])
+          _ ->
+            dynamic_params
+            |> Enum.map(fn %Param{name: name, value_type: type} ->
+              {String.to_atom(name), implementation.render_type(state, type)}
+            end)
+            |> Kernel.++(additional_params)
+            |> Enum.reverse()
+            |> Enum.reduce(fn type, expression ->
+              {:|, [], [type, expression]}
+            end)
+            |> then(&[&1])
+        end
+        |> then(&List.replace_at(arguments, -1, &1))
 
       attribute_atom =
         if operation_type in [:callback, :webhook] do

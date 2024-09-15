@@ -333,11 +333,19 @@ if Mix.env() in [:dev, :test] do
         )
 
       if length(static_params) > 0 do
-        [%Param{name: name} | _] = dynamic_params
+        first_dynamic_param_name =
+          case dynamic_params do
+            [] -> nil
+            [%Param{name: name} | _] -> name
+          end
 
         result
         |> String.replace("## Options", "## Arguments", global: false)
-        |> String.replace("  * `#{name}`:", "\n## Options\n\n  * `#{name}`:", global: false)
+        |> String.replace(
+          "  * `#{first_dynamic_param_name}`:",
+          "\n## Options\n\n  * `#{first_dynamic_param_name}`:",
+          global: false
+        )
       else
         result
       end
