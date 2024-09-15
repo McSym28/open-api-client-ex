@@ -1912,7 +1912,7 @@ if Mix.env() in [:dev, :test] do
         state
         |> Utils.get_web_location()
         |> Path.split()
-        |> List.insert_at(-1, "controllers")
+        |> List.insert_at(-1, "router.ex")
         |> Path.join()
 
       with {:ok, binary} <- File.read(router_location),
