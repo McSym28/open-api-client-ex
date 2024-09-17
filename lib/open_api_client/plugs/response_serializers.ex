@@ -44,9 +44,9 @@ defmodule OpenAPIClient.Plugs.ResponseSerializers do
            |> Plug.Conn.put_req_header("content-type", ct)
            |> OpenAPIClient.Plugs.Serializers.call(opts) do
       %OpenAPIClient.State{request_body: response_body} = OpenAPIClient.get_state(conn)
-      Plug.Conn.resp(original_conn, status_code, response_body)
+      Plug.Conn.resp(original_conn, status_code, response_body || "")
     else
-      _ -> original_conn
+      _ -> Plug.Conn.resp(original_conn, status_code, "")
     end
   rescue
     e in OpenAPIClient.Plugs.Serializers.SerializeError -> raise SerializeError, exception: e
