@@ -678,7 +678,7 @@ if Mix.env() in [:dev, :test] do
       arguments_new =
         case dynamic_params do
           [] ->
-            []
+            arguments
 
           _ ->
             dynamic_params
@@ -691,8 +691,8 @@ if Mix.env() in [:dev, :test] do
               {:|, [], [type, expression]}
             end)
             |> then(&[&1])
+            |> then(&List.replace_at(arguments, -1, &1))
         end
-        |> then(&List.replace_at(arguments, -1, &1))
 
       attribute_atom =
         if operation_type in [:callback, :webhook] do
