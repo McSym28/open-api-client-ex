@@ -2,7 +2,7 @@ defmodule OpenAPIClientWeb.Callbacks.MyEventController do
   use OpenAPIClientWeb, :controller
 
   plug(OpenAPIClient.Plugs.CallbackInitializer,
-    implementation: OpenAPIClient.CallbacksMock,
+    implementation: {:mock, OpenAPIClient.CallbacksMock},
     behaviour: OpenAPIClient.Callbacks,
     function_name: :my_event
   )

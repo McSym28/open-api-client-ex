@@ -8,7 +8,7 @@ defmodule OpenAPIClient.Plugs.CallbackInitializer do
   @behaviour Plug
 
   @type option ::
-          {:implementation, module()}
+          {:implementation, module() | {:mock, module()}}
           | {:behaviour, module()}
           | {:function_name, atom()}
   @type options :: [option()]
@@ -16,13 +16,16 @@ defmodule OpenAPIClient.Plugs.CallbackInitializer do
   @impl Plug
   @spec init(opts :: options()) :: options()
   def init(opts) do
-    implementation =
+    {implementation, implementation_loaded?} =
       opts
       |> Keyword.fetch(:implementation)
       |> case do
+        {:ok, {:mock, implementation}} ->
+          {implementation, is_module?(implementation)}
+
         {:ok, implementation} ->
-          if OpenAPIClient.Utils.is_module?(implementation) do
-            implementation
+          if is_module?(implementation) do
+            {implementation, true}
           else
             raise("`#{inspect(implementation)}` is not a module")
           end
@@ -36,18 +39,22 @@ defmodule OpenAPIClient.Plugs.CallbackInitializer do
       |> Keyword.fetch(:function_name)
       |> case do
         {:ok, function_name} ->
-          :exports
-          |> implementation.module_info()
-          |> Enum.any?(fn
-            {^function_name, _arity} -> true
-            {_function_name, _arity} -> false
-          end)
-          |> if do
-            function_name
+          if implementation_loaded? do
+            :exports
+            |> implementation.module_info()
+            |> Enum.any?(fn
+              {^function_name, _arity} -> true
+              {_function_name, _arity} -> false
+            end)
+            |> if do
+              function_name
+            else
+              raise(
+                "`#{inspect(implementation)}` does not export function `#{inspect(function_name)}`"
+              )
+            end
           else
-            raise(
-              "`#{inspect(implementation)}` does not export function `#{inspect(function_name)}`"
-            )
+            function_name
           end
 
         :error ->
@@ -60,7 +67,11 @@ defmodule OpenAPIClient.Plugs.CallbackInitializer do
       |> case do
         {:ok, behaviour} ->
           cond do
-            not OpenAPIClient.Utils.does_implement_behaviour?(implementation, behaviour) ->
+            not is_module?(behaviour) ->
+              raise("`#{inspect(behaviour)}` is not a module")
+
+            implementation_loaded? and
+                not OpenAPIClient.Utils.does_implement_behaviour?(implementation, behaviour) ->
               raise(
                 "`#{inspect(implementation)}` does not implement behaviour `#{inspect(behaviour)}`"
               )
@@ -81,21 +92,25 @@ defmodule OpenAPIClient.Plugs.CallbackInitializer do
           end
 
         :error ->
-          (implementation.module_info(:attributes) || [])
-          |> Keyword.get(:behaviour, [])
-          |> Enum.flat_map(fn behaviour ->
-            if function_exported?(behaviour, :behaviour_info, 1) and
-                 :callbacks
-                 |> behaviour.behaviour_info()
-                 |> Enum.any?(fn
-                   {^function_name, _arity} -> true
-                   {_function_name, _arity} -> false
-                 end) do
-              [behaviour]
-            else
-              []
-            end
-          end)
+          if implementation_loaded? do
+            (implementation.module_info(:attributes) || [])
+            |> Keyword.get(:behaviour, [])
+            |> Enum.flat_map(fn behaviour ->
+              if is_module?(behaviour) and function_exported?(behaviour, :behaviour_info, 1) and
+                   :callbacks
+                   |> behaviour.behaviour_info()
+                   |> Enum.any?(fn
+                     {^function_name, _arity} -> true
+                     {_function_name, _arity} -> false
+                   end) do
+                [behaviour]
+              else
+                []
+              end
+            end)
+          else
+            []
+          end
           |> case do
             [behaviour] -> behaviour
             _ -> raise("`:behaviour` is not set")
@@ -133,5 +148,21 @@ defmodule OpenAPIClient.Plugs.CallbackInitializer do
     }
     |> struct!(behaviour.__functions__(function_name))
     |> then(&OpenAPIClient.set_state(conn, &1))
+  end
+
+  # Taken from https://elixirforum.com/t/is-it-possible-to-detect-if-code-is-executing-at-compile-time/57728/11
+  defp compiling?() do
+    case Process.get(:elixir_compiler_pid) do
+      nil -> false
+      pid when is_pid(pid) -> true
+    end
+  end
+
+  defp is_module?(atom) do
+    if compiling?() do
+      match?({:module, _module}, Code.ensure_compiled(atom))
+    else
+      OpenAPIClient.Utils.is_module?(atom)
+    end
   end
 end

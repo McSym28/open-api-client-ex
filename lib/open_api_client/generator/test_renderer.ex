@@ -661,7 +661,7 @@ if Mix.env() in [:dev, :test] do
         quote(
           do:
             plug(OpenAPIClient.Plugs.CallbackInitializer,
-              implementation: unquote(behaviour_mock_module),
+              implementation: {:mock, unquote(behaviour_mock_module)},
               behaviour: unquote(behaviour_module),
               function_name: unquote(function_name)
             )

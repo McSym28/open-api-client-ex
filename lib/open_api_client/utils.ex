@@ -1,8 +1,7 @@
 defmodule OpenAPIClient.Utils do
   @spec is_module?(atom()) :: boolean()
   def is_module?(atom) when is_atom(atom) do
-    Code.ensure_loaded(atom)
-    function_exported?(atom, :module_info, 1)
+    Code.ensure_loaded?(atom)
   end
 
   @spec does_implement_behaviour?(module(), atom()) :: boolean()
