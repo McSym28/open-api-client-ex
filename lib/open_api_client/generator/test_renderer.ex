@@ -362,13 +362,20 @@ if Mix.env() in [:dev, :test] do
         route_scope = implementation.render_callback_scope(state, operation)
 
         update_router_test_scope(state, fn test_scopes ->
+          scope_prefix_parts = get_web_module_prefix_parts(state)
+
           module_scope_path =
             module_name
             |> Module.split()
+            |> then(&Kernel.++(scope_prefix_parts, &1))
             |> Enum.map_join("/", &Macro.underscore/1)
             |> then(&"/#{&1}")
 
-          scoped_aliases = module_name |> Module.split() |> Enum.map(&String.to_atom/1)
+          scoped_aliases =
+            module_name
+            |> Module.split()
+            |> then(&Kernel.++(scope_prefix_parts, &1))
+            |> Enum.map(&String.to_atom/1)
 
           test_scopes
           |> Enum.map_reduce(false, fn
@@ -419,7 +426,7 @@ if Mix.env() in [:dev, :test] do
                 [
                   quote(
                     do:
-                      scope unquote(module_scope_path), unquote(module_name) do
+                      scope unquote(module_scope_path), unquote(Module.concat(scoped_aliases)) do
                         unquote(route_scope)
                       end
                   )
@@ -507,6 +514,7 @@ if Mix.env() in [:dev, :test] do
 
       module
       |> Module.split()
+      |> then(&Kernel.++(get_web_module_prefix_parts(state), &1))
       |> Enum.map(&Macro.underscore/1)
       |> List.update_at(-1, &"#{&1}.ex")
       |> then(&[base_location | &1])
@@ -523,6 +531,7 @@ if Mix.env() in [:dev, :test] do
 
       module
       |> Module.split()
+      |> then(&Kernel.++(get_web_module_prefix_parts(state), &1))
       |> Enum.map(&Macro.underscore/1)
       |> List.update_at(-1, &"#{&1}.exs")
       |> then(&[base_location | &1])
@@ -643,8 +652,6 @@ if Mix.env() in [:dev, :test] do
         |> List.update_at(-1, &"#{&1}Mock")
         |> Module.concat()
 
-      web_base_module = get_web_base_module(state)
-
       [{_, %GeneratorOperation{config: operation_config}}] =
         :ets.lookup(:operations, {request_path, request_method})
 
@@ -657,7 +664,7 @@ if Mix.env() in [:dev, :test] do
         end
 
       [
-        quote(do: use(unquote(web_base_module), :controller)) |> Util.put_newlines(),
+        quote(do: use(unquote(get_web_main_module(state)), :controller)) |> Util.put_newlines(),
         quote(
           do:
             plug(OpenAPIClient.Plugs.CallbackInitializer,
@@ -699,8 +706,6 @@ if Mix.env() in [:dev, :test] do
 
     @impl __MODULE__
     def render_callback_header(state, %Operation{module_name: module_name} = _operation) do
-      web_base_module = get_web_base_module(state)
-
       behaviour_mock_module =
         state
         |> generate_module_name(module_name)
@@ -709,7 +714,7 @@ if Mix.env() in [:dev, :test] do
         |> Module.concat()
 
       [
-        quote(do: use(unquote(Module.concat([web_base_module, ConnCase]))))
+        quote(do: use(unquote(Module.concat([get_web_main_module(state), ConnCase]))))
         |> Util.put_newlines(),
         quote(do: import(Mox)) |> Util.put_newlines(),
         quote(do: @behaviour_module(unquote(behaviour_mock_module))),
@@ -1079,6 +1084,7 @@ if Mix.env() in [:dev, :test] do
                     module_name
                     |> Module.split()
                     |> List.insert_at(-1, Atom.to_string(function_name))
+                    |> then(&Kernel.++(get_web_module_prefix_parts(state), &1))
                     |> Enum.map_join("/", &Macro.underscore/1)
                     |> then(&"/__test__/#{&1}")
                     |> URI.parse()
@@ -2175,6 +2181,18 @@ if Mix.env() in [:dev, :test] do
         module when is_atom(module) ->
           module
       end
+    end
+
+    defp get_web_main_module(state) do
+      state
+      |> get_web_base_module()
+      |> Module.split()
+      |> Enum.take(1)
+      |> Module.concat()
+    end
+
+    defp get_web_module_prefix_parts(state) do
+      state |> get_web_base_module() |> Module.split() |> Enum.drop(1)
     end
   end
 end
