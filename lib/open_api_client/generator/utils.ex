@@ -252,9 +252,9 @@ if Mix.env() in [:dev, :test] do
           |> get_oapi_generator_config(:location, "")
           |> Path.split()
           |> case do
-            [] -> "test"
-            ["lib"] -> "test"
-            ["lib", app_name] -> ["test", app_name]
+            [] -> ["test"]
+            ["lib"] -> ["test"]
+            ["lib", app_name | rest] -> ["test", app_name | rest]
           end
           |> Path.join()
       end
@@ -278,7 +278,7 @@ if Mix.env() in [:dev, :test] do
           |> get_oapi_generator_config(:location, "")
           |> Path.split()
           |> case do
-            ["lib", app_name] -> ["test", "support", "#{app_name}_web"]
+            ["lib", app_name | _rest] -> ["test", "support", "#{app_name}_web"]
           end
           |> Path.join()
       end
