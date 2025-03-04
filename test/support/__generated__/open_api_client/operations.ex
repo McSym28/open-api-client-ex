@@ -54,6 +54,7 @@ defmodule OpenAPIClient.Operations do
           | {:x_boolean_cookie, boolean}
           | {:base_url, String.t() | URI.t()}
           | {:pipeline, OpenAPIClient.pipeline()}
+          | {:client, module()}
         ]) :: {:ok, OpenAPIClient.TestSchema.t()} | {:error, OpenAPIClient.Error.t()}
   def get_test(path_param, required_header, required_new_param, opts \\ []) do
     pipeline = opts[:pipeline] || OpenAPIClient.Utils.get_config(:test, :operation_pipeline)
@@ -135,6 +136,7 @@ defmodule OpenAPIClient.Operations do
              :config_strict_enum_1 | :config_strict_enum_2 | :config_strict_enum_3}
           | {:base_url, String.t() | URI.t()}
           | {:pipeline, OpenAPIClient.pipeline()}
+          | {:client, module()}
         ]) :: :ok | :error | {:error, OpenAPIClient.Error.t()}
   def set_test(body, opts \\ []) do
     pipeline = opts[:pipeline] || OpenAPIClient.Utils.get_config(:test, :operation_pipeline)

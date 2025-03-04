@@ -671,7 +671,8 @@ if Mix.env() in [:dev, :test] do
         else
           [
             {:base_url, quote(do: String.t() | URI.t())},
-            {:pipeline, quote(do: OpenAPIClient.pipeline())}
+            {:pipeline, quote(do: OpenAPIClient.pipeline())},
+            {:client, quote(do: module())}
           ]
         end
 
