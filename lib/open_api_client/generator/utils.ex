@@ -223,16 +223,19 @@ if Mix.env() in [:dev, :test] do
     def get_function_arity(
           _state,
           %OpenAPI.Processor.Operation{request_body: request_body},
-          %OpenAPIClient.Generator.Operation{params: params}
-        ),
-        do:
-          Enum.reduce(
-            params,
-            if(length(request_body) == 0, do: 1, else: 2),
-            fn %OpenAPIClient.Generator.Param{static: static}, arity ->
-              arity + if(static, do: 1, else: 0)
-            end
-          )
+          %OpenAPIClient.Generator.Operation{params: all_params, type: operation_type}
+        ) do
+      grouped_params =
+        Enum.group_by(all_params, fn %OpenAPIClient.Generator.Param{static: static} -> static end)
+
+      has_dynamic_params =
+        not (grouped_params |> Map.get(false, []) |> Enum.empty?()) or
+          operation_type not in [:callback, :webhook]
+
+      if(length(request_body) == 0, do: 0, else: 1) +
+        (grouped_params |> Map.get(true, []) |> length()) +
+        if(has_dynamic_params, do: 1, else: 0)
+    end
 
     @spec get_test_location(
             OpenAPI.Processor.State.t()

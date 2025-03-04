@@ -44,7 +44,12 @@ defmodule OpenAPIClient do
     } = state = OpenAPIClient.get_state(conn)
 
     function_result =
-      apply(module, function_name, Keyword.values(function_args) ++ [function_opts])
+      apply(
+        module,
+        function_name,
+        Keyword.values(function_args) ++
+          if(Enum.empty?(function_opts), do: [], else: [function_opts])
+      )
 
     state_new = %OpenAPIClient.State{state | result: function_result}
     OpenAPIClient.set_state(conn, state_new)

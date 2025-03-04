@@ -1,11 +1,11 @@
 defmodule OpenAPIClient.Callbacks do
   @moduledoc """
-  Provides API callback related to callbacks
+  Provides API callbacks related to callbacks
   """
 
   @behaviour OpenAPIClient.Callback
 
-  @type callback_functions :: :my_event
+  @type callback_functions :: :my_event | :my_event_error
 
   @doc """
   post `/{*request.body.callbackUrl*}`
@@ -28,12 +28,31 @@ defmodule OpenAPIClient.Callbacks do
               | {:x_optional_callback_header, String.t()}
               | {:x_optional_callback_cookie, integer}
             ]) :: {:ok, OpenAPIClient.CallbackResponse.t()} | {:error, OpenAPIClient.Error.t()}
+  @doc """
+  post `/{*request.body.callbackUrl*}/error`
 
-  @optional_callbacks my_event: 4
+  ## Arguments
+
+    * `body`
+
+  """
+  @callback my_event_error(OpenAPIClient.CallbackRequest.t()) ::
+              {:ok, OpenAPIClient.CallbackResponse.t()} | {:error, OpenAPIClient.Error.t()}
+
+  @optional_callbacks my_event_error: 1, my_event: 4
 
   @doc false
   @impl OpenAPIClient.Callback
   @spec __functions__(callback_functions()) :: [OpenAPIClient.Callback.function_option()]
+  def __functions__(:my_event_error) do
+    [
+      request_path_mask: "/{*request.body.callbackUrl*}/error",
+      request_types: [{"application/json", {OpenAPIClient.CallbackRequest, :t}}],
+      response_types: [{200, [{"application/json", {OpenAPIClient.CallbackResponse, :t}}]}],
+      profile: :test
+    ]
+  end
+
   def __functions__(:my_event) do
     [
       request_path_mask: "/{*request.body.callbackUrl*}",

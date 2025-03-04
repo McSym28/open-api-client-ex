@@ -93,6 +93,22 @@ paths:
                     "application/json":
                       schema:
                         "$ref": "#/components/schemas/CallbackResponse"
+        myEventError:
+          "{$request.body#/callbackUrl}/error":
+            post:
+              requestBody:
+                required: true
+                content:
+                  application/json:
+                    schema:
+                      "$ref": "#/components/schemas/CallbackRequest"
+              responses:
+                "200":
+                  description: "Acknowledgement"
+                  content:
+                    "application/json":
+                      schema:
+                        "$ref": "#/components/schemas/CallbackResponse"
   "/test/{path-param}":
     get:
       description: "Test endpoint"

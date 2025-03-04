@@ -752,20 +752,19 @@ if Mix.env() in [:dev, :test] do
                     ]}
                  ]},
                 acc ->
-                  [{_, %GeneratorOperation{params: params}}] =
+                  [{_, %GeneratorOperation{params: all_params}}] =
                     :ets.lookup(:operations, {request_path, request_method})
 
-                  function_arg_names =
-                    (Enum.flat_map(
-                       params,
-                       fn
-                         %GeneratorParam{param: %Param{name: name}, static: true} ->
-                           [String.to_atom(name)]
+                  grouped_params =
+                    Enum.group_by(all_params, fn %GeneratorParam{static: static} -> static end)
 
-                         _param ->
-                           []
-                       end
-                     ) ++ [:opts])
+                  function_arg_names =
+                    grouped_params
+                    |> Map.get(true, [])
+                    |> Enum.map(fn %GeneratorParam{param: %Param{name: name}} ->
+                      String.to_atom(name)
+                    end)
+                    |> List.insert_at(-1, :opts)
                     |> then(fn names ->
                       if Enum.count(function_arg_values) != Enum.count(names) do
                         List.insert_at(names, -2, :body)
@@ -777,12 +776,12 @@ if Mix.env() in [:dev, :test] do
                   function_args =
                     function_arg_names
                     |> Enum.zip(function_arg_values)
-                    |> Enum.map(fn
+                    |> Enum.flat_map(fn
                       {:opts, opts} ->
                         variable = Macro.var(:opts, nil)
 
                         opts
-                        |> Keyword.drop([:base_url, :pipeline])
+                        |> Keyword.drop([:base_url, :pipeline, :client])
                         |> Enum.map(fn {opt_key, opt_value} ->
                           quote(
                             do:
@@ -793,13 +792,19 @@ if Mix.env() in [:dev, :test] do
                           )
                         end)
                         |> case do
-                          [] -> {Macro.var(:_opts, nil), []}
-                          asserts -> {variable, asserts}
+                          [] ->
+                            grouped_params
+                            |> Map.get(false, [])
+                            |> Enum.empty?()
+                            |> if(do: [], else: [{Macro.var(:_opts, nil), []}])
+
+                          asserts ->
+                            [{variable, asserts}]
                         end
 
                       {arg_name, arg_value} ->
                         variable = Macro.var(arg_name, nil)
-                        {variable, [quote(do: assert(unquote(arg_value) == unquote(variable)))]}
+                        [{variable, [quote(do: assert(unquote(arg_value) == unquote(variable)))]}]
                     end)
 
                   macro =
