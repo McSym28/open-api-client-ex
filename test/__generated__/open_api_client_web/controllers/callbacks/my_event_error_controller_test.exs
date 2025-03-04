@@ -21,7 +21,7 @@ defmodule OpenAPIClientWeb.Callbacks.MyEventErrorControllerTest do
       conn =
         conn
         |> Plug.Conn.put_req_header("content-type", "application/json")
-        |> post("/__test__/callbacks/my_event_error?", %{"message" => "Some event happened"})
+        |> post("/__test__/callbacks/my_event_error", %{"message" => "Some event happened"})
 
       assert ["application/json"] == Plug.Conn.get_resp_header(conn, "content-type")
 

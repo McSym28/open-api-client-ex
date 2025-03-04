@@ -1093,7 +1093,7 @@ if Mix.env() in [:dev, :test] do
                     |> Enum.map_join("/", &Macro.underscore/1)
                     |> then(&"/__test__/#{&1}")
                     |> URI.parse()
-                    |> struct!(query: query)
+                    |> struct!(query: if(query != "", do: query))
                     |> URI.to_string()
 
                   request_body = render_parameters[:request_encoded_body]
