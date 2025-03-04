@@ -938,12 +938,16 @@ if Mix.env() in [:dev, :test] do
                          [
                            {:==, _,
                             [
-                              {:ok, request_encoded_body},
+                              {:ok, request_decoded_body},
                               {{:., _, _}, [], [{:body, _, _} | []]}
                             ]}
                          ]},
                         acc ->
-                          Map.put(acc, :request_encoded_body, request_encoded_body)
+                          Map.put(
+                            acc,
+                            :request_decoded_body,
+                            request_decoded_body
+                          )
 
                         {:assert, _,
                          [
@@ -1096,8 +1100,35 @@ if Mix.env() in [:dev, :test] do
                     |> struct!(query: if(query != "", do: query))
                     |> URI.to_string()
 
-                  request_body = render_parameters[:request_encoded_body]
-                  conn_call_args = [url] ++ if(request_body, do: [request_body], else: [])
+                  request_body_encoded_asserts =
+                    with {:ok, headers} <- Map.fetch(render_parameters, :request_headers),
+                         {"content-type", content_type} <-
+                           List.keyfind(headers, "content-type", 0),
+                         {:ok, decoded_body} <-
+                           Map.fetch(render_parameters, :request_decoded_body) do
+                      [
+                        quote do
+                          assert {:ok, body_encoded} =
+                                   unquote(
+                                     apply_body_converter(
+                                       state,
+                                       decoded_body,
+                                       content_type,
+                                       :encoders
+                                     )
+                                   )
+                        end
+                      ]
+                    else
+                      _ -> []
+                    end
+
+                  conn_call_args =
+                    [url] ++
+                      if(Enum.empty?(request_body_encoded_asserts),
+                        do: [],
+                        else: [Macro.var(:body_encoded, nil)]
+                      )
 
                   request_headers = render_parameters[:request_headers] || []
 
@@ -1150,6 +1181,7 @@ if Mix.env() in [:dev, :test] do
 
                       unquote(render_parameters[:callback_call_expect])
 
+                      unquote_splicing(request_body_encoded_asserts)
                       conn = unquote(conn_call)
 
                       unquote_splicing(

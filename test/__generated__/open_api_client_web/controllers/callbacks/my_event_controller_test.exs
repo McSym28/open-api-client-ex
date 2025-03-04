@@ -29,6 +29,8 @@ defmodule OpenAPIClientWeb.Callbacks.MyEventControllerTest do
         {:ok, %OpenAPIClient.CallbackResponse{acknowledged: true}}
       end)
 
+      assert {:ok, body_encoded} = Jason.encode(%{"message" => "Some event happened"})
+
       conn =
         conn
         |> Plug.Conn.put_req_header("x-required-callback-header", "required_callback_header")
@@ -37,7 +39,7 @@ defmodule OpenAPIClientWeb.Callbacks.MyEventControllerTest do
         |> Plug.Conn.put_req_header("content-type", "application/json")
         |> post(
           "/__test__/callbacks/my_event?X-Optional-Callback-Query=optional-callback-query&X-Required-Callback-Query=required-callback-query",
-          %{"message" => "Some event happened"}
+          body_encoded
         )
 
       assert ["application/json"] == Plug.Conn.get_resp_header(conn, "content-type")
