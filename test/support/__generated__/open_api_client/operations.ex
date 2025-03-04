@@ -37,6 +37,8 @@ defmodule OpenAPIClient.Operations do
     * `client`: Module that implements `OpenAPIClient` behaviour. Default value obtained through a call to `OpenAPIClient.Utils.get_config(:test, :client, OpenAPIClient)`
 
   """
+  @spec get_test(String.t(), String.t(), String.t()) ::
+          {:ok, OpenAPIClient.TestSchema.t()} | {:error, OpenAPIClient.Error.t()}
   @spec get_test(String.t(), String.t(), String.t(), [
           {:date_query_with_default, Date.t()}
           | {:datetime_query, DateTime.t()}
@@ -130,6 +132,8 @@ defmodule OpenAPIClient.Operations do
     * `client`: Module that implements `OpenAPIClient` behaviour. Default value obtained through a call to `OpenAPIClient.Utils.get_config(:test, :client, OpenAPIClient)`
 
   """
+  @spec set_test(OpenAPIClient.TestRequestSchema.t()) ::
+          :ok | :error | {:error, OpenAPIClient.Error.t()}
   @spec set_test(OpenAPIClient.TestRequestSchema.t(), [
           {:string_header, String.t()}
           | {:x_config_strict_enum_header,

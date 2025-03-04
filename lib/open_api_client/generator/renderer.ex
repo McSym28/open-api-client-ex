@@ -676,10 +676,10 @@ if Mix.env() in [:dev, :test] do
           ]
         end
 
-      arguments_new =
+      opts_spec =
         case dynamic_params do
-          [] ->
-            arguments
+          [] when additional_params == [] ->
+            []
 
           _ ->
             dynamic_params
@@ -692,7 +692,6 @@ if Mix.env() in [:dev, :test] do
               {:|, [], [type, expression]}
             end)
             |> then(&[&1])
-            |> then(&List.replace_at(arguments, -1, &1))
         end
 
       attribute_atom =
@@ -702,17 +701,39 @@ if Mix.env() in [:dev, :test] do
           :spec
         end
 
-      {:@, attribute_metadata,
-       [
-         {attribute_atom, spec_metadata,
-          [
-            {:"::", return_type_delimiter_metadata,
+      if(opts_spec == [] or attribute_atom != :callback,
+        do: [
+          {:@, attribute_metadata,
+           [
+             {attribute_atom, spec_metadata,
+              [
+                {:"::", return_type_delimiter_metadata,
+                 [
+                   {function_name, arguments_metadata, List.delete_at(arguments, -1)},
+                   return_type_new
+                 ]}
+              ]}
+           ]}
+        ],
+        else: []
+      ) ++
+        if(opts_spec == [],
+          do: [],
+          else: [
+            {:@, attribute_metadata,
              [
-               {function_name, arguments_metadata, arguments_new},
-               return_type_new
+               {attribute_atom, spec_metadata,
+                [
+                  {:"::", return_type_delimiter_metadata,
+                   [
+                     {function_name, arguments_metadata,
+                      List.replace_at(arguments, -1, opts_spec)},
+                     return_type_new
+                   ]}
+                ]}
              ]}
-          ]}
-       ]}
+          ]
+        )
     end
 
     @impl OpenAPI.Renderer
